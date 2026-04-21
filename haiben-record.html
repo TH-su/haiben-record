@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>排泄ケア記録システム</title>
+<style>
+:root{
+  --pri:#1a73e8;--pri-l:#e8f0fe;--pri-d:#1557b0;
+  --ok:#2e7d32;--ok-l:#e8f5e9;
+  --warn-bg:#fff8e1;--warn-tx:#e65100;
+  --ng:#c62828;--ng-l:#ffebee;
+  --u:#0288d1;--u-bg:#e1f5fe;
+  --s:#6d4c41;--s-bg:#efebe9;
+  --g0:#f8f9fa;--g1:#f1f3f4;--g2:#e8eaed;--g3:#dadce0;
+  --g5:#9aa0a6;--g6:#80868b;--g7:#5f6368;--g9:#202124;
+  --r:12px;--sh:0 1px 6px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;
+  background:var(--g0);color:var(--g9);min-height:100vh;padding-bottom:72px}
+
+/* header */
+.hdr{background:linear-gradient(135deg,#1565c0,#1a73e8);color:#fff;padding:14px 18px;
+  position:sticky;top:0;z-index:100;box-shadow:0 3px 12px rgba(0,0,0,.15);
+  display:flex;align-items:center;justify-content:space-between}
+.hdr h1{font-size:17px;font-weight:700}.hdr-sub{font-size:12px;opacity:.85;margin-top:2px}
+
+/* bottom nav */
+.bnav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--g2);
+  display:flex;z-index:100;box-shadow:0 -2px 10px rgba(0,0,0,.1)}
+.bnav button{flex:1;display:flex;flex-direction:column;align-items:center;padding:7px 4px 5px;
+  cursor:pointer;border:none;background:none;color:var(--g5);font-size:10px;gap:2px;
+  transition:color .2s;font-family:inherit}
+.bnav button.on{color:var(--pri)}
+.bnav svg{width:22px;height:22px}
+.bnav button[data-sc="cfg"]{flex:0 0 44px;opacity:.55;font-size:9px}
+.bnav button[data-sc="cfg"] svg{width:16px;height:16px}
+.bnav button[data-sc="cfg"].on{opacity:1}
+
+/* screens */
+.scr{display:none;padding:14px;max-width:960px;margin:0 auto}
+.scr.on{display:block}
+
+/* card */
+.cd{background:#fff;border-radius:var(--r);padding:15px;margin-bottom:14px;box-shadow:var(--sh)}
+.cd-t{font-size:13px;font-weight:700;color:var(--g7);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+
+/* form */
+.fg{margin-bottom:14px}
+.fl{display:block;font-size:12px;font-weight:700;color:var(--g7);margin-bottom:7px}
+input[type="text"],input[type="datetime-local"],input[type="date"],
+input[type="number"],textarea{
+  width:100%;padding:9px 11px;border:2px solid var(--g2);border-radius:8px;
+  font-size:14px;font-family:inherit;color:var(--g9);background:#fff;
+  transition:border-color .2s;-webkit-appearance:none}
+select{width:100%;padding:10px 12px;border:2px solid var(--g2);border-radius:8px;
+  font-size:14px;font-family:inherit;color:var(--g9);background:#fff;
+  transition:border-color .2s;cursor:pointer;appearance:auto;-webkit-appearance:menulist}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--pri)}
+textarea{resize:vertical;min-height:76px}
+
+/* type selector */
+.type-sel{display:flex;gap:10px}
+.type-btn{flex:1;padding:13px 6px;border:2px solid var(--g2);border-radius:10px;
+  cursor:pointer;background:#fff;text-align:center;font-size:14px;font-weight:700;
+  transition:all .18s;font-family:inherit}
+.type-btn.su{background:var(--u-bg);border-color:var(--u);color:var(--u)}
+.type-btn.ss{background:var(--s-bg);border-color:var(--s);color:var(--s)}
+.type-btn.sb{background:#fce4ec;border-color:#e91e63;color:#e91e63}
+.type-btn.sn{background:#eceff1;border-color:#607d8b;color:#37474f}
+.ev-d.n{background:#607d8b}
+
+/* quick buttons */
+.qg{display:flex;gap:8px;flex-wrap:wrap}
+.qb{padding:7px 14px;border:2px solid var(--g2);border-radius:20px;cursor:pointer;
+  background:#fff;font-size:13px;transition:all .18s;font-family:inherit}
+.qb.on{background:var(--pri);border-color:var(--pri);color:#fff}
+
+/* color buttons */
+.cr{display:flex;gap:7px;flex-wrap:wrap}
+.cb{display:flex;align-items:center;gap:5px;padding:5px 11px;border:2px solid var(--g2);
+  border-radius:20px;cursor:pointer;background:#fff;font-size:12px;transition:all .18s;font-family:inherit}
+.cd-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.cb.on{border-color:var(--pri);background:var(--pri-l)}
+
+/* consistency buttons */
+.cons-g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cons-b{border:2px solid var(--g2);border-radius:10px;padding:10px 6px;cursor:pointer;
+  background:#fff;font-size:13px;font-weight:700;font-family:inherit;text-align:center;
+  line-height:1.4;transition:all .18s;display:flex;flex-direction:column;align-items:center;gap:3px}
+.cons-b small{font-size:10px;font-weight:400;color:var(--g6)}
+.cons-b[data-s="watery"]{border-color:#f9a825}
+.cons-b[data-s="loose"]{border-color:#ff8f00}
+.cons-b[data-s="soft"]{border-color:#8bc34a}
+.cons-b[data-s="normal"]{border-color:#4caf50}
+.cons-b[data-s="firm"]{border-color:#8d6e63}
+.cons-b[data-s="hard"]{border-color:#5d4037}
+.cons-b[data-s="watery"].on{background:#fff9c4;border-color:#f9a825}
+.cons-b[data-s="loose"].on{background:#fff3e0;border-color:#ff8f00}
+.cons-b[data-s="soft"].on{background:#f1f8e9;border-color:#7cb342}
+.cons-b[data-s="normal"].on{background:#e8f5e9;border-color:#4caf50}
+.cons-b[data-s="firm"].on{background:#efebe9;border-color:#8d6e63}
+.cons-b[data-s="hard"].on{background:#efebe9;border-color:#5d4037}
+@media(max-width:480px){.cons-g{grid-template-columns:repeat(2,1fr)}}
+
+/* submit */
+.btn-go{width:100%;padding:15px;background:var(--pri);color:#fff;border:none;
+  border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;
+  transition:background .2s;font-family:inherit}
+.btn-go:hover{background:var(--pri-d)}.btn-go:active{transform:scale(.98)}
+
+/* custom row */
+.cus-r{display:flex;gap:8px;align-items:center;margin-top:8px}
+.cus-r input{width:120px}
+
+/* board table */
+.bd-hdr{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.bd-hdr input[type="date"]{width:auto;min-height:44px;padding:6px 10px;font-size:14px;
+  border:1px solid var(--g2);border-radius:8px;touch-action:manipulation}
+.dn-grp{display:inline-flex;gap:4px;flex-wrap:wrap}
+.dn-grp button{padding:10px 10px;font-size:12px}
+.dn-grp button.on{background:#1565c0;color:#fff;border-color:#0d47a1;font-weight:700}
+.lax-tab.on{background:#7b1fa2;color:#fff;border-color:#4a148c;font-weight:700;box-shadow:0 0 0 2px #ce93d8 inset}
+.bd-hdr .rf-sp{margin-left:16px}
+.bd-w{overflow:auto;border-radius:var(--r);box-shadow:var(--sh);max-height:calc(100vh - 180px)}
+.bt{width:100%;border-collapse:separate;border-spacing:0;background:#fff;min-width:680px}
+.bt th{background:#1565c0;color:#fff;padding:9px 10px;text-align:center;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;top:0;z-index:3}
+.bt thead tr:nth-child(2) th{top:35px;z-index:3}
+.bt th.hu{background:#1976d2}.bt th.hs{background:#5d4037}
+.bt td{padding:9px 10px;border-bottom:1px solid var(--g1);font-size:12px;text-align:center;vertical-align:middle;background:#fff}
+.bt tr:last-child td{border-bottom:none}
+/* 排尿列(3-5)/排便列(6-9)の列別うすい色分け */
+.bt td:nth-child(3),.bt td:nth-child(4),.bt td:nth-child(5){background:#f0f8fc}
+.bt td:nth-child(6),.bt td:nth-child(7),.bt td:nth-child(8),.bt td:nth-child(9){background:#f9f4ef}
+.bt tr.ev td{background:#fafafa}
+.bt tr.ev td:nth-child(3),.bt tr.ev td:nth-child(4),.bt tr.ev td:nth-child(5){background:#e6f2f9}
+.bt tr.ev td:nth-child(6),.bt tr.ev td:nth-child(7),.bt tr.ev td:nth-child(8),.bt tr.ev td:nth-child(9){background:#f0e7da}
+/* 列の境目を視覚化 */
+.bt th:nth-child(3),.bt td:nth-child(3),
+.bt thead tr:nth-child(2) th.hu:first-of-type{border-left:2px solid #90caf9}
+.bt th:nth-child(4),.bt td:nth-child(6),
+.bt thead tr:nth-child(2) th.hs:first-of-type{border-left:2px solid #bcaaa4}
+.bt td:nth-child(10),.bt th:nth-child(6){border-left:2px solid #bcaaa4}
+/* 居室・氏名列の横スクロール固定 */
+.bt td:nth-child(1),.bt th:nth-child(1){position:sticky;left:0;z-index:2;background:#fff;min-width:50px}
+.bt th:nth-child(1){z-index:4;background:#1565c0}
+.bt td:nth-child(2),.bt th:nth-child(2){position:sticky;left:50px;z-index:2;background:#fff;border-right:2px solid var(--g2)}
+.bt th:nth-child(2){z-index:4;background:#1565c0}
+.bt tr.ev td:nth-child(1),.bt tr.ev td:nth-child(2){background:#fafafa}
+.bt tr.rd td:first-child{border-left:4px solid #c62828}
+.bt tr.rw td:first-child{border-left:4px solid #f9a825}
+
+.eb{display:inline-block;padding:2px 7px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.eb-ok{background:var(--ok-l);color:var(--ok)}
+.eb-w{background:var(--warn-bg);color:var(--warn-tx)}
+.eb-ng{background:var(--ng-l);color:var(--ng)}
+.nr{color:var(--g5);font-style:italic;font-size:11px}
+
+/* timeline */
+.tl-w{overflow:auto;max-height:calc(100vh - 200px);border-radius:var(--r);box-shadow:var(--sh);background:#fff}
+.tl-t{border-collapse:separate;border-spacing:0;width:max-content}
+.tl-t th,.tl-t td{border:1px solid var(--g2);font-size:10px}
+.tl-t th{background:var(--g1);text-align:center;padding:3px 1px;white-space:nowrap;position:sticky;top:0;z-index:3}
+.tl-t thead tr:nth-child(2) th{top:24px;z-index:3}
+.tl-t th.hr-top{font-weight:700;font-size:11px;border-bottom:none}
+.tl-t th.hr-sub{font-size:9px;color:var(--g6);border-top:none;padding:1px 2px}
+/* 氏名列ヘッダーは最上位 z-index */
+.tl-t thead th:first-child{left:0;z-index:5;background:#e8eaed}
+.tl-nm{white-space:nowrap;padding:4px 8px;font-size:11px;font-weight:700;
+  background:var(--g0);border-right:2px solid var(--g3);min-width:85px;position:sticky;left:0;z-index:2}
+.tl-c{width:26px;min-width:26px;height:32px;text-align:center;vertical-align:middle;padding:1px;background:#fff}
+.tl-t tbody tr:nth-child(even) td{background:#f7f7f7}
+.tl-t tbody tr:nth-child(even) .tl-nm{background:#ececec}
+.tl-c.has{background:#f0f4ff;cursor:pointer}
+.tl-t tbody tr:nth-child(even) .tl-c.has{background:#e1eaff}
+.ev-d{width:8px;height:8px;border-radius:50%;display:inline-block;margin:0 1px}
+.ev-d.u{background:var(--u)}.ev-d.s{background:#a1887f}.ev-d.b{background:#e91e63}
+.ev-d.l{background:#ffd600;border:1px solid #f9a825;box-sizing:border-box}
+.lax-mk{display:inline-block;font-size:10px;padding:1px 4px;border-radius:3px;background:#f3e5f5;color:#6a1b9a;font-weight:700;border:1px solid #ce93d8;white-space:nowrap}
+.bn.blax{background:#7b1fa2;color:#fff}
+.bn.blax:hover{background:#6a1b9a}
+.tl-info{font-size:8px;line-height:1.1;color:var(--g7);white-space:nowrap;display:block}
+.tl-leg{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+.tl-leg-i{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--g7)}
+
+/* settings */
+.rli{display:flex;align-items:center;justify-content:space-between;
+  padding:11px 12px;border:1px solid var(--g2);border-radius:8px;margin-bottom:7px;background:#fff}
+.ex-r{display:flex;gap:9px;flex-wrap:wrap}
+
+/* buttons */
+.bn{padding:9px 18px;border-radius:8px;border:none;cursor:pointer;
+  font-size:13px;font-weight:700;font-family:inherit;transition:background .15s,opacity .15s;
+  /* タッチ遅延（300ms）を除去し即時反応にする */
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:rgba(0,0,0,0.08);
+  user-select:none;-webkit-user-select:none}
+.bp{background:var(--pri);color:#fff}.bp:hover{background:var(--pri-d)}
+.bp:active{background:var(--pri-d);opacity:.85}
+.bg{background:#2e7d32;color:#fff}
+.bs{background:var(--g1);color:var(--g7)}
+.bs:active{background:var(--g2)}
+.br{background:var(--ng);color:#fff}
+.br:active{opacity:.8}
+/* bsm: タップ領域を最低44pxに拡大（見た目は変えず、内側だけ広げる） */
+.bsm{padding:10px 14px;font-size:12px;min-height:44px;min-width:44px}
+
+/* modal */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;
+  align-items:center;justify-content:center;padding:16px}
+.mo.on{display:flex}
+.md{background:#fff;border-radius:var(--r);padding:22px;width:100%;max-width:440px;
+  max-height:85vh;overflow-y:auto;box-shadow:0 3px 12px rgba(0,0,0,.15)}
+.md-t{font-size:16px;font-weight:700;margin-bottom:15px}
+.md-f{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+
+/* history */
+.hi{border-radius:8px;padding:10px 12px;margin-bottom:8px;border-left:3px solid var(--pri);background:var(--g0)}
+.hi.u{border-color:var(--u);background:var(--u-bg)}
+.hi.s{border-color:var(--s);background:var(--s-bg)}
+.hi.b{border-color:#e91e63;background:#fce4ec}
+.hi-t{font-weight:700;font-size:13px}
+.tgs{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.tg{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700}
+.tg-u{background:var(--u-bg);color:var(--u)}.tg-s{background:var(--s-bg);color:var(--s)}
+.tg-i{background:var(--g1);color:var(--g7)}
+
+/* history table */
+.ht-w{overflow-x:auto;margin-top:8px}
+.ht{width:100%;border-collapse:collapse;font-size:11px}
+.ht th{background:var(--g1);padding:6px 5px;font-size:10px;font-weight:700;white-space:nowrap;border:1px solid var(--g2);color:var(--g7)}
+.ht td{padding:5px 5px;border:1px solid var(--g2);text-align:center;vertical-align:middle;white-space:nowrap}
+.ht tr:nth-child(even){background:var(--g0)}
+.ht .tp-u{color:var(--u);font-weight:700}.ht .tp-s{color:var(--s);font-weight:700}.ht .tp-b{color:#e91e63;font-weight:700}.ht .tp-l{color:#7b1fa2;font-weight:700}.ht .tp-n{color:#455a64;font-weight:700}
+.tl-nm-link{cursor:pointer;color:var(--pri);text-decoration:underline}
+
+/* API sync status */
+.api-bd{display:flex;align-items:center;gap:4px;font-size:10px;padding:3px 8px;border-radius:10px;
+  font-weight:700;transition:all .3s;white-space:nowrap}
+.api-ok{background:rgba(46,125,50,.25);color:#a5d6a7}
+.api-er{background:rgba(198,40,40,.25);color:#ef9a9a}
+.api-sy{background:rgba(255,255,255,.2);color:#fff}
+.api-of{display:none!important}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin .8s linear infinite;line-height:1}
+
+/* loading overlay */
+.ld-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;
+  align-items:center;justify-content:center;flex-direction:column;gap:12px;cursor:pointer}
+.ld-ov.on{display:flex}
+.ld-ring{width:44px;height:44px;border:4px solid rgba(255,255,255,.3);
+  border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite}
+.ld-msg{color:#fff;font-size:14px;font-weight:700}
+.ld-hint{color:rgba(255,255,255,.6);font-size:11px;margin-top:8px}
+
+/* toast */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(16px);
+  background:rgba(0,0,0,.82);color:#fff;padding:9px 20px;border-radius:20px;font-size:13px;
+  opacity:0;transition:all .28s;z-index:400;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* select for resident */
+#resSel{font-size:16px;padding:12px 14px;border-radius:10px}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div><h1>🏥 排泄ケア記録</h1><div class="hdr-sub" id="hDate"></div></div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="api-bd api-of" id="apiBd">●</div>
+    <div style="font-size:12px;opacity:.85" id="hTime"></div>
+  </div>
+</header>
+
+<!-- ローディングオーバーレイ -->
+<div class="ld-ov" id="ldOv"><div class="ld-ring"></div><div class="ld-msg" id="ldMsg">同期中...</div><div class="ld-hint">タップで閉じる</div></div>
+
+<!-- ── 入力 ── -->
+<div id="sc-input" class="scr on">
+  <div class="cd">
+    <div class="cd-t">👤 入居者を選択</div>
+    <select id="resSel">
+      <option value="">― 入居者を選んでください ―</option>
+    </select>
+  </div>
+  <div class="cd">
+    <div class="cd-t">🕐 日時</div>
+    <input type="datetime-local" id="recDT">
+  </div>
+  <div class="cd">
+    <div class="cd-t">📋 排泄種別</div>
+    <div class="type-sel">
+      <button class="type-btn" data-t="urine">💧 排尿</button>
+      <button class="type-btn" data-t="stool">🟤 排便</button>
+      <button class="type-btn" data-t="both">両　方</button>
+      <button class="type-btn" data-t="none">✖️ 誘導<br><span style="font-size:10px;font-weight:400">排泄なし</span></button>
+    </div>
+  </div>
+
+  <!-- 排尿詳細 -->
+  <div class="cd" id="secU" style="display:none">
+    <div class="cd-t">💧 排尿の詳細</div>
+    <div class="fg">
+      <label class="fl">排尿量</label>
+      <div style="font-size:11px;color:var(--g6);font-weight:700;margin-bottom:6px">▸ 定性的</div>
+      <div class="qg" style="margin-bottom:10px">
+        <button class="qb ua" data-v="少量">少量</button>
+        <button class="qb ua" data-v="中等量">中等量</button>
+        <button class="qb ua" data-v="多量">多量</button>
+      </div>
+      <div style="font-size:11px;color:var(--g6);font-weight:700;margin-bottom:6px">▸ 定量的（ml）</div>
+      <div class="qg">
+        <button class="qb ua" data-v="50">50ml</button>
+        <button class="qb ua" data-v="100">100ml</button>
+        <button class="qb ua" data-v="150">150ml</button>
+        <button class="qb ua" data-v="200">200ml</button>
+        <button class="qb ua" data-v="300">300ml</button>
+        <button class="qb ua" data-v="400">400ml</button>
+        <button class="qb ua" data-v="500">500ml</button>
+        <button class="qb ua" data-v="custom">その他</button>
+      </div>
+      <div class="cus-r" id="cusU" style="display:none">
+        <input type="number" id="cusUV" placeholder="量を入力" min="0" max="3000">
+        <span style="font-size:14px">ml</span>
+      </div>
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="fl">尿の色・性状</label>
+      <div class="cr" id="ucRow">
+        <button class="cb" data-v="淡黄色"><span class="cd-dot" style="background:#fff59d;border:1px solid #ccc"></span>淡黄色</button>
+        <button class="cb" data-v="黄色"><span class="cd-dot" style="background:#fdd835"></span>黄色</button>
+        <button class="cb" data-v="濃黄色"><span class="cd-dot" style="background:#f57f17"></span>濃黄色</button>
+        <button class="cb" data-v="茶褐色"><span class="cd-dot" style="background:#795548"></span>茶褐色</button>
+        <button class="cb" data-v="血尿"><span class="cd-dot" style="background:#c62828"></span>血尿</button>
+        <button class="cb" data-v="混濁"><span class="cd-dot" style="background:#b0bec5;border:1px solid #ccc"></span>混濁</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 排便詳細 -->
+  <div class="cd" id="secS" style="display:none">
+    <div class="cd-t">🟤 排便の詳細</div>
+    <div class="fg">
+      <label class="fl">便の性状</label>
+      <div class="cons-g" id="consGrid">
+        <button class="cons-b" data-v="水様便" data-s="watery">💧 水様便<small>固形物なし・水状</small></button>
+        <button class="cons-b" data-v="下痢便" data-s="loose">💦 下痢便<small>泥状・不定形</small></button>
+        <button class="cons-b" data-v="柔らかめ" data-s="soft">🟡 柔らかめ<small>やや軟らかい</small></button>
+        <button class="cons-b" data-v="普通" data-s="normal">✅ 普通<small>理想的な形状</small></button>
+        <button class="cons-b" data-v="硬め" data-s="firm">🟠 硬め<small>やや硬い</small></button>
+        <button class="cons-b" data-v="硬便" data-s="hard">🟤 硬便<small>硬くてコロコロ</small></button>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fl">排便量</label>
+      <div class="qg" id="saGrid">
+        <button class="qb sa" data-v="少量">少量</button>
+        <button class="qb sa" data-v="中等量">中等量</button>
+        <button class="qb sa" data-v="多量">多量</button>
+      </div>
+    </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="fl">便の色</label>
+      <div class="cr" id="scRow">
+        <button class="cb" data-v="黄色"><span class="cd-dot" style="background:#fdd835"></span>黄色</button>
+        <button class="cb" data-v="黄褐色"><span class="cd-dot" style="background:#c49a6c"></span>黄褐色</button>
+        <button class="cb" data-v="褐色"><span class="cd-dot" style="background:#8d6e63"></span>褐色</button>
+        <button class="cb" data-v="黒色"><span class="cd-dot" style="background:#212121"></span>黒色</button>
+        <button class="cb" data-v="緑色"><span class="cd-dot" style="background:#388e3c"></span>緑色</button>
+        <button class="cb" data-v="血便"><span class="cd-dot" style="background:#c62828"></span>血便</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="cd">
+    <div class="cd-t">📝 備考・記録者</div>
+    <div class="fg"><label class="fl">備考</label>
+      <textarea id="recNote" placeholder="特記事項があれば入力してください…"></textarea></div>
+    <div class="fg" style="margin-bottom:0"><label class="fl">記録者</label>
+      <input type="text" id="recStaff" placeholder="スタッフ名を入力"></div>
+  </div>
+  <button class="btn-go" id="btnSubmit">💾 記　録　す　る</button>
+</div>
+
+<!-- ── 一覧表示 ── -->
+<div id="sc-board" class="scr">
+  <div class="bd-hdr">
+    <input type="date" id="bdDate">
+    <div class="dn-grp" id="bdDayNav">
+      <button class="bn bs bsm" data-off="-2">一昨日</button>
+      <button class="bn bs bsm" data-off="-1">昨日</button>
+      <button class="bn bs bsm" data-off="0">今日</button>
+    </div>
+    <button class="bn bs bsm rf-sp" id="bdRefresh">🔄 更新</button>
+    <button class="bn blax bsm" id="bdLax" style="margin-left:auto">💊 下剤</button>
+    <span style="font-size:11px;color:var(--g5);margin-left:12px">
+      <span style="display:inline-block;width:10px;height:10px;background:#c62828;border-radius:50%;margin-right:3px"></span>要注意
+      <span style="display:inline-block;width:10px;height:10px;background:#f9a825;border-radius:50%;margin-right:3px;margin-left:8px"></span>注意
+    </span>
+  </div>
+  <div class="bd-w">
+    <table class="bt">
+      <thead>
+        <tr>
+          <th rowspan="2">居室</th><th rowspan="2">氏名</th>
+          <th colspan="3" style="background:#1565c0">💧 排　尿</th>
+          <th colspan="4" style="background:#4e342e">🟤 排　便</th>
+          <th rowspan="2" style="background:#37474f">備考</th>
+          <th rowspan="2" style="background:#6a1b9a">💊 下剤使用法</th>
+          <th rowspan="2" style="background:#455a64">操作</th>
+        </tr>
+        <tr>
+          <th class="hu">最終日時</th><th class="hu">経過時間</th><th class="hu" id="bdHdrUCnt">本日回数</th>
+          <th class="hs">最終日時</th><th class="hs">経過時間</th><th class="hs" id="bdHdrSCnt">本日回数</th><th class="hs">最新性状</th>
+        </tr>
+      </thead>
+      <tbody id="bdBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── タイムライン ── -->
+<div id="sc-tl" class="scr">
+  <div class="bd-hdr">
+    <input type="date" id="tlDate">
+    <div class="dn-grp" id="tlDayNav">
+      <button class="bn bs bsm" data-off="-2">一昨日</button>
+      <button class="bn bs bsm" data-off="-1">昨日</button>
+      <button class="bn bs bsm" data-off="0">今日</button>
+    </div>
+    <button class="bn bs bsm rf-sp" id="tlRefresh">🔄 更新</button>
+    <button class="bn blax bsm" id="tlLax" style="margin-left:auto">💊 下剤</button>
+  </div>
+  <div class="cd">
+    <div class="tl-leg">
+      <div class="tl-leg-i"><span class="ev-d u"></span>排尿</div>
+      <div class="tl-leg-i"><span class="ev-d s"></span>排便</div>
+      <div class="tl-leg-i"><span class="ev-d b"></span>両方</div>
+      <div class="tl-leg-i"><span class="ev-d l"></span>下剤</div>
+      <div class="tl-leg-i"><span style="font-size:12px;color:#455a64">✖️</span>誘導・排泄なし</div>
+      <div style="font-size:11px;color:var(--g5);margin-left:auto">セルタップで詳細</div>
+    </div>
+    <div class="tl-w" id="tlBox"></div>
+  </div>
+</div>
+
+<!-- ── 設定 ── -->
+<div id="sc-cfg" class="scr">
+  <div class="cd">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h3 style="font-size:13px;font-weight:700;color:var(--g7)">👥 入居者管理</h3>
+      <button class="bn bp bsm" id="btnAddRes">＋ 追加</button>
+    </div>
+    <div style="margin-bottom:8px;font-size:12px;color:var(--g7)">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="cfgShowInactive"> 退去済の入居者を表示
+      </label>
+    </div>
+    <div id="resList"></div>
+  </div>
+  <div class="cd">
+    <div class="cd-t">⚠️ アラートしきい値</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="fg" style="margin:0"><label class="fl">排尿 警告（時間）</label><input type="number" id="cfgUW" min="1" max="24"></div>
+      <div class="fg" style="margin:0"><label class="fl">排尿 危険（時間）</label><input type="number" id="cfgUD" min="1" max="24"></div>
+      <div class="fg" style="margin:0"><label class="fl">排便 警告（日）</label><input type="number" id="cfgSW" min="1" max="7"></div>
+      <div class="fg" style="margin:0"><label class="fl">排便 危険（日）</label><input type="number" id="cfgSD" min="1" max="7"></div>
+    </div>
+    <button class="bn bp" style="margin-top:14px;width:100%" id="btnSaveCfg">設定を保存</button>
+  </div>
+  <div class="cd">
+    <div class="cd-t">💾 データ管理</div>
+    <div class="ex-r">
+      <button class="bn bg" id="btnCSV">📥 CSVエクスポート</button>
+      <button class="bn bs" id="btnJSON">📥 JSONバックアップ</button>
+      <button class="bn bs" id="btnImport">📤 データ復元</button>
+    </div>
+    <input type="file" id="impFile" accept=".json" style="display:none">
+    <div style="margin-top:10px;font-size:12px;color:var(--g5)">※データはブラウザのlocalStorageに保存されています。<br>定期的にバックアップを取ることを推奨します。</div>
+  </div>
+  <!-- Google Sheets 連携 -->
+  <div class="cd">
+    <div class="cd-t">🌐 Google Sheets 連携</div>
+    <div class="fg">
+      <label class="fl">GAS Web App URL</label>
+      <input type="text" id="cfgApi" placeholder="https://script.google.com/macros/s/〇〇〇/exec">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+      <button class="bn bp bsm" id="btnApiSave">💾 URLを保存・接続</button>
+      <button class="bn bs bsm" id="btnApiSync">🔄 手動同期</button>
+      <button class="bn br bsm" id="btnApiClear">🔌 連携解除</button>
+    </div>
+    <div id="apiStatus" style="margin-top:10px;font-size:12px;color:var(--g5)">
+      GASデプロイ後に取得したURLを入力して「URLを保存・接続」を押してください。
+    </div>
+  </div>
+
+  <div class="cd" style="margin-bottom:30px">
+    <div class="cd-t">🗑️ 危険操作</div>
+    <button class="bn br bsm" id="btnClear">全データを削除</button>
+  </div>
+</div>
+
+<!-- ── Bottom Nav ── -->
+<nav class="bnav">
+  <button class="on" data-sc="input">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>入力
+  </button>
+  <button data-sc="board">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>一覧表示
+  </button>
+  <button data-sc="tl">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>時系列
+  </button>
+  <button data-sc="cfg">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>設定
+  </button>
+</nav>
+
+<!-- ── Modals ── -->
+<div class="mo" id="mRes"><div class="md">
+  <div class="md-t" id="mResT">入居者を追加</div>
+  <div class="fg"><label class="fl">氏名</label><input type="text" id="mRN" placeholder="山田 花子"></div>
+  <div class="fg"><label class="fl">居室番号</label><input type="text" id="mRR" placeholder="101"></div>
+  <div class="fg"><label class="fl">性別</label>
+    <select id="mRG"><option value="女性">女性</option><option value="男性">男性</option></select></div>
+  <div class="fg"><label class="fl">ステータス</label>
+    <select id="mRS"><option value="active">在籍中</option><option value="inactive">退去済</option></select></div>
+  <div class="fg"><label class="fl">下剤の使用法（メモ）</label>
+    <textarea id="mRLax" rows="2" placeholder="例: 毎週月・木にプルゼニド1錠（夕食後）" style="width:100%;padding:8px;border:1px solid var(--g3);border-radius:6px;font-family:inherit;font-size:14px;resize:vertical"></textarea></div>
+  <details style="margin-bottom:12px;background:#f5f5f5;padding:8px 10px;border-radius:6px"><summary style="cursor:pointer;font-weight:600;font-size:13px">⚙️ この入居者のみアラートしきい値を変更（任意）</summary>
+    <div style="font-size:11px;color:var(--g5);margin:6px 0">空欄にすると全体設定（設定画面）の値が適用されます。</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="fl" style="font-size:12px">排尿 警告（時間）</label><input type="number" min="1" id="mRUW" placeholder=""></div>
+      <div><label class="fl" style="font-size:12px">排尿 危険（時間）</label><input type="number" min="1" id="mRUD" placeholder=""></div>
+      <div><label class="fl" style="font-size:12px">排便 警告（日）</label><input type="number" min="1" id="mRSW" placeholder=""></div>
+      <div><label class="fl" style="font-size:12px">排便 危険（日）</label><input type="number" min="1" id="mRSD" placeholder=""></div>
+    </div>
+  </details>
+  <div class="md-f"><button class="bn bs" id="mResCancel">キャンセル</button><button class="bn bp" id="mResSave">保　存</button></div>
+</div></div>
+
+<div class="mo" id="mDet"><div class="md">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:15px">
+    <div class="md-t" style="margin-bottom:0;flex:1">📋 記録の詳細</div>
+    <button class="bn bs bsm" id="mDetHist">📋 排泄履歴</button>
+  </div>
+  <div id="mDetC"></div>
+  <div class="md-f"><button class="bn bp bsm" id="mDetEdit">✏️ 修正</button><button class="bn br bsm" id="mDetDel">🗑️ 削除</button><button class="bn bs" id="mDetClose">閉じる</button></div>
+</div></div>
+
+<div class="mo" id="m5Day"><div class="md" style="max-width:1200px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <div class="md-t" id="m5DayT" style="margin-bottom:0;flex:1">📊 5日間の排泄パターン</div>
+    <button class="bn bs bsm" id="m5DayPrev">◀ 前5日</button>
+    <button class="bn bs bsm" id="m5DayToday">今日基準</button>
+    <button class="bn bs bsm" id="m5DayNext">次5日 ▶</button>
+  </div>
+  <div class="tl-leg" style="margin-bottom:8px">
+    <div class="tl-leg-i"><span class="ev-d u"></span>排尿</div>
+    <div class="tl-leg-i"><span class="ev-d s"></span>排便</div>
+    <div class="tl-leg-i"><span class="ev-d b"></span>両方</div>
+    <div class="tl-leg-i"><span class="ev-d l"></span>下剤</div>
+    <div class="tl-leg-i"><span style="font-size:12px;color:#455a64">✖️</span>誘導・排泄なし</div>
+  </div>
+  <div id="m5DayC" style="overflow:auto;max-height:70vh"></div>
+  <div class="md-f"><button class="bn bp bsm" id="m5DayHist">📋 排泄履歴</button><button class="bn bs" id="m5DayClose">閉じる</button></div>
+</div></div>
+
+<div class="mo" id="mHist"><div class="md" style="max-width:720px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:15px">
+    <div class="md-t" id="mHistT" style="margin-bottom:0;flex:1">個人記録履歴</div>
+    <button class="bn bs bsm" id="mHist5Day">📊 5日表示</button>
+    <button class="bn blax bsm" id="mHistLax">💊 下剤</button>
+  </div>
+  <div id="mHistC"></div>
+  <div class="md-f" style="justify-content:center;position:relative"><button class="bn bp" id="mHistInput">✏️ この入居者で入力</button><button class="bn bs" id="mHistClose" style="position:absolute;right:0">閉じる</button></div>
+</div></div>
+
+<div class="mo" id="mLax"><div class="md" style="max-width:460px">
+  <div class="md-t">💊 下剤の記録</div>
+  <div class="fg"><label class="fl">入居者</label>
+    <select id="mLaxRes"><option value="">― 入居者を選んでください ―</option></select></div>
+  <div class="fg"><label class="fl">使用日時</label>
+    <input type="datetime-local" id="mLaxDT"></div>
+  <div class="fg"><label class="fl">薬剤名</label>
+    <select id="mLaxMed">
+      <option value="">― 選択してください ―</option>
+      <option value="プルゼニド">プルゼニド</option>
+      <option value="ラキソベロン">ラキソベロン</option>
+      <option value="マグミット">マグミット</option>
+      <option value="センノシド">センノシド</option>
+      <option value="酸化マグネシウム">酸化マグネシウム</option>
+      <option value="__custom__">その他（手入力）</option>
+    </select>
+    <input type="text" id="mLaxMedCustom" placeholder="薬剤名を入力" style="display:none;margin-top:6px"></div>
+  <div class="fg"><label class="fl">錠数</label>
+    <div id="mLaxTabRow" style="display:flex;flex-wrap:wrap;gap:6px">
+      <button type="button" class="bn bs bsm lax-tab" data-v="0.5">0.5錠</button>
+      <button type="button" class="bn bs bsm lax-tab" data-v="1">1錠</button>
+      <button type="button" class="bn bs bsm lax-tab" data-v="1.5">1.5錠</button>
+      <button type="button" class="bn bs bsm lax-tab" data-v="2">2錠</button>
+      <button type="button" class="bn bs bsm lax-tab" data-v="3">3錠</button>
+    </div>
+    <input type="text" id="mLaxTabCustom" placeholder="その他の錠数（例: 5滴・10ml）" style="margin-top:6px"></div>
+  <div class="fg"><label class="fl">備考</label>
+    <textarea id="mLaxNote" rows="2" placeholder="服薬状況など"></textarea></div>
+  <div class="fg" style="margin-bottom:0"><label class="fl">記録者</label>
+    <input type="text" id="mLaxStaff" placeholder="スタッフ名"></div>
+  <div class="md-f">
+    <button class="bn br bsm" id="mLaxDel" style="margin-right:auto;display:none">🗑️ 削除</button>
+    <button class="bn bs" id="mLaxCancel">キャンセル</button>
+    <button class="bn bp" id="mLaxSave">💾 保存</button>
+  </div>
+</div></div>
+
+<div class="mo" id="mConf"><div class="md" style="max-width:360px">
+  <div class="md-t">⚠️ 確認</div>
+  <div id="mConfMsg" style="font-size:14px;line-height:1.6;margin-bottom:8px;white-space:pre-line"></div>
+  <div class="md-f"><button class="bn bs" id="mConfNo">キャンセル</button><button class="bn br" id="mConfYes">実行する</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════ DATA ═══════════ */
+let D={residents:[],records:[],cfg:{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3}};
+let ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null};
+let editResId=null,curRecId=null,curHistRid=null,editRecId=null,editLaxId=null,curDetRid=null;
+const BL={1:'硬球状',2:'硬塊状',3:'ひび割れ',4:'普通便',5:'軟便',6:'泥状便',7:'水様便'};
+
+/* ═══════════ CUSTOM CONFIRM（confirm()の代替）═══════════ */
+let _confResolve=null;
+function customConfirm(msg){
+  return new Promise(function(resolve){
+    _confResolve=resolve;
+    $('mConfMsg').textContent=msg;
+    $('mConf').classList.add('on')})}
+
+/* ═══════════ API ═══════════ */
+const API_KEY='hbcr_api_url';
+let apiUrl='';
+
+function apiSetStatus(st,msg){
+  var b=$('apiBd');if(!b)return;
+  b.className='api-bd';
+  if(st==='ok'){b.classList.add('api-ok');b.innerHTML='✅ API接続中'}
+  else if(st==='er'){b.classList.add('api-er');b.innerHTML='⚠️ 接続エラー'}
+  else if(st==='sy'){b.classList.add('api-sy');b.innerHTML='<span class="spin">🔄</span> 同期中'}
+  else{b.classList.add('api-of')}
+  var si=$('apiStatus');if(si&&msg)si.textContent=msg}
+
+function ldShow(msg){$('ldMsg').textContent=msg||'同期中...';$('ldOv').classList.add('on');
+  // 安全策: 15秒後に自動で閉じる
+  clearTimeout(ldShow._tid);
+  ldShow._tid=setTimeout(function(){ldHide()},15000)}
+function ldHide(){clearTimeout(ldShow._tid);$('ldOv').classList.remove('on')}
+
+// fetchにタイムアウト付与（デフォルト12秒）
+function fetchTO(url,opts,ms){
+  ms=ms||12000;
+  return new Promise(function(resolve,reject){
+    var timer=setTimeout(function(){reject(new Error('タイムアウト（'+Math.round(ms/1000)+'秒）'))},ms);
+    fetch(url,opts||{}).then(function(r){clearTimeout(timer);resolve(r)})
+                       .catch(function(e){clearTimeout(timer);reject(e)})})}
+
+async function apiGet(){
+  if(!apiUrl)return null;
+  var r=await fetchTO(apiUrl+'?action=getAll',{cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json()}
+
+async function apiPost(action,data){
+  if(!apiUrl)return null;
+  data=data||{};
+  var r=await fetchTO(apiUrl,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:action,record:data.record,id:data.id,resident:data.resident,cfg:data.cfg})});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json()}
+
+async function syncFromAPI(showLoader){
+  if(!apiUrl)return false;
+  if(showLoader)ldShow('APIからデータを取得中...');
+  apiSetStatus('sy');
+  try{
+    var json=await apiGet();
+    if(json.error)throw new Error(json.error);
+    if(json.residents===undefined)throw new Error('レスポンス形式が不正です');
+    var apiRes=Array.isArray(json.residents)?json.residents:[];
+    var apiRec=Array.isArray(json.records)?json.records:[];
+    // API側データの型を正規化（IDをnumberに、active等をboolに）
+    apiRes.forEach(function(r){if(r){
+      if(r.id!=null)r.id=toNum(r.id);
+      if(r.name!=null)r.name=String(r.name).trim();
+      if(r.room!=null)r.room=String(r.room).trim();
+      if(r.active===undefined||r.active===null||r.active==='TRUE'||r.active===true)r.active=true;else r.active=false}});
+    apiRec.forEach(function(r){if(r&&r.residentId!=null)r.residentId=toNum(r.residentId)});
+    // マージ: ローカル優先。API側のデータはローカルに存在しないIDのみ追加する（ローカル変更を絶対に失わない）
+    var localRes=Array.isArray(D.residents)?D.residents:[];
+    var localRec=Array.isArray(D.records)?D.records:[];
+    var seenResId={};
+    var mergedRes=[];
+    localRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
+    apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
+    var seenRecId={};
+    var mergedRec=[];
+    localRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){mergedRec.push(r);seenRecId[r.id]=true}}});
+    apiRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){mergedRec.push(r);seenRecId[r.id]=true}}});
+    D.residents=mergedRes;
+    D.records=mergedRec;
+    D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
+    cleanData();save();
+    apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
+    // 未送信キューを再送
+    flushPendingQueue();
+    return true}
+  catch(e){
+    apiSetStatus('er','接続エラー: '+e.message);
+    showToast('⚠️ API同期失敗: '+e.message);
+    return false}
+  finally{ldHide()}}
+
+// 未送信キュー（API書き込み失敗時、後で再送する）
+var PQ_KEY='hbcr_pq';
+function loadPendingQueue(){try{var s=localStorage.getItem(PQ_KEY);return s?JSON.parse(s):[]}catch(e){return[]}}
+function savePendingQueue(q){try{localStorage.setItem(PQ_KEY,JSON.stringify(q))}catch(e){}}
+function enqueuePending(action,data){
+  var q=loadPendingQueue();
+  q.push({action:action,data:data,at:Date.now()});
+  // 過大化防止（最大500件）
+  if(q.length>500)q=q.slice(-500);
+  savePendingQueue(q)}
+function flushPendingQueue(){
+  if(!apiUrl)return;
+  var q=loadPendingQueue();
+  if(!q.length)return;
+  // 順番に再送する
+  var remain=[];var i=0;
+  function next(){
+    if(i>=q.length){savePendingQueue(remain);if(remain.length===0&&q.length>0)showToast('✅ 未送信データを同期しました');return}
+    var item=q[i++];
+    apiPost(item.action,item.data||{})
+      .then(function(r){if(!(r&&r.ok!==false))remain.push(item);next()})
+      .catch(function(){remain.push(item);next()})}
+  next()}
+
+// 書き込み操作をAPIに反映（失敗してもローカルは保存済みのため継続。失敗時はキューに退避して後で再送）
+function apiPush(action,data){
+  if(!apiUrl)return;
+  data=data||{};
+  apiSetStatus('sy');
+  apiPost(action,data)
+    .then(function(r){
+      if(r&&r.ok!==false){
+        apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
+        // 成功したら溜まった未送信を送る
+        flushPendingQueue();
+      }else{
+        apiSetStatus('er','書き込みエラー');
+        enqueuePending(action,data);
+        showToast('⚠️ API書き込み失敗（ローカルに保存・後で再送）')}})
+    .catch(function(e){
+      apiSetStatus('er',e.message);
+      enqueuePending(action,data);
+      showToast('⚠️ API書き込み失敗（ローカルに保存・後で再送）')})}
+
+function fmtCons(r){if(r.consistency)return r.consistency;if(r.bristol)return'タイプ'+r.bristol+'('+( BL[r.bristol]||'')+')';return''}
+function fmtUA(v){if(v==null||v==='')return'';return typeof v==='number'?v+'ml':v}
+function toNum(v){if(typeof v==='number'&&!isNaN(v))return v;var n=Number(v);return isNaN(n)?null:n}
+function isValidRes(r){
+  if(!r)return false;
+  if(toNum(r.id)===null)return false;
+  if(!r.name||String(r.name)==='undefined'||String(r.name).trim()==='')return false;
+  if(!r.room||String(r.room)==='undefined'||String(r.room).trim()==='')return false;
+  return true}
+function normalizeData(){
+  // API/Sheetsから来たデータの型を正規化
+  if(D.residents)D.residents.forEach(function(r){
+    if(r.id!=null)r.id=toNum(r.id);
+    if(r.name!=null)r.name=String(r.name).trim();
+    if(r.room!=null)r.room=String(r.room).trim();
+    if(r.active===undefined||r.active===null||r.active==='TRUE'||r.active===true)r.active=true;
+    else r.active=false});
+  if(D.records)D.records.forEach(function(r){
+    if(r.residentId!=null)r.residentId=toNum(r.residentId);
+    if(r.urineAmt!=null&&r.urineAmt!==''){var n=toNum(r.urineAmt);if(n!==null)r.urineAmt=n;}
+    if(r.datetime&&typeof r.datetime==='object'&&r.datetime.toISOString){
+      // Date objectをstring化（Sheetsが返す場合がある）
+      var dt=r.datetime;r.datetime=dt.toISOString().slice(0,16);
+      r.date=r.datetime.split('T')[0];r.time=r.datetime.split('T')[1]}
+    if(r.date&&typeof r.date==='object'&&r.date.toISOString)r.date=r.date.toISOString().split('T')[0];
+    if(r.id==null)r.id=uid()})}
+function cleanData(){
+  normalizeData();
+  if(D.residents)D.residents=D.residents.filter(isValidRes);
+  if(D.records)D.records=D.records.filter(function(r){return r&&r.id&&r.residentId!=null&&toNum(r.residentId)!==null&&r.datetime})}
+function nextResId(){
+  var ids=D.residents.map(function(r){return toNum(r.id)}).filter(function(v){return v!==null});
+  return ids.length?Math.max.apply(null,ids)+1:1}
+function load(){
+  var s=null;
+  try{s=localStorage.getItem('hbcr_v2')}catch(e){console.error('[hbcr] localStorage読込失敗:',e)}
+  var isNew=false;
+  if(s){
+    try{D=JSON.parse(s)}
+    catch(e){
+      // 破損時はバックアップから復旧を試みる
+      console.error('[hbcr] JSON解析失敗、バックアップから復旧を試行:',e);
+      try{
+        var bak=localStorage.getItem('hbcr_v2_bak');
+        if(bak){D=JSON.parse(bak);setTimeout(function(){showToast('⚠️ データ破損を検出。バックアップから復元しました')},500)}
+        else{D={residents:[],records:[],cfg:null}}
+      }catch(e2){console.error('[hbcr] バックアップも破損:',e2);D={residents:[],records:[],cfg:null}}
+    }
+  }else{
+    isNew=true;
+    D={residents:[
+    {id:1,name:'山田 花子',room:'101',gender:'女性',active:true},
+    {id:2,name:'佐藤 次郎',room:'102',gender:'男性',active:true},
+    {id:3,name:'田中 幸子',room:'103',gender:'女性',active:true},
+    {id:4,name:'鈴木 一郎',room:'104',gender:'男性',active:true},
+    {id:5,name:'渡辺 節子',room:'105',gender:'女性',active:true}],records:[],cfg:null}
+  }
+  if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
+  if(!Array.isArray(D.residents))D.residents=[];
+  if(!Array.isArray(D.records))D.records=[];
+  var beforeR=D.residents.length,beforeC=D.records.length;
+  cleanData();
+  // データが変化した場合、または初回のみ保存（不要な上書きを防止）
+  if(isNew||D.residents.length!==beforeR||D.records.length!==beforeC)save()}
+// 保存（書き込み前にバックアップ、エラー時は通知）
+function save(){
+  try{
+    var json=JSON.stringify(D);
+    // 現状のデータを上書き前にバックアップとして保持
+    try{var prev=localStorage.getItem('hbcr_v2');if(prev)localStorage.setItem('hbcr_v2_bak',prev)}catch(e){}
+    localStorage.setItem('hbcr_v2',json);
+  }catch(e){
+    console.error('[hbcr] 保存失敗:',e);
+    // Quota超過やプライベートモード等。ユーザーへ通知（データは失われるので即対応）
+    try{showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'))}catch(e2){}
+  }
+}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function today(){return new Date().toISOString().split('T')[0]}
+function dateOff(n){var d=new Date();d.setDate(d.getDate()+(n||0));return d.toISOString().split('T')[0]}
+function fmtMD(dateStr){if(!dateStr)return'';var p=dateStr.split('-');if(p.length<3)return dateStr;return parseInt(p[1],10)+'/'+parseInt(p[2],10)}
+function fmtLast(rec,viewDate){if(!rec)return'';var d=rec.date||'';var t=rec.time||'';
+  // 「本日」ラベルは viewDate が今日かつ記録日も今日のときだけ
+  var isTodayView=(viewDate===today());
+  var lbl=(isTodayView&&d===today())?'本日':fmtMD(d);
+  return lbl+(t?' '+t:'')}
+function dayDiff(recDate,viewDate){if(!recDate||!viewDate)return 0;
+  var d1=new Date(recDate+'T00:00:00');var d2=new Date(viewDate+'T00:00:00');
+  return Math.round((d1.getTime()-d2.getTime())/86400000)}
+function fmtDayOff(diff){if(!diff||diff===0)return'';return diff>0?('+'+diff):String(diff)}
+function updateDayNavHi(groupId,dateVal){
+  var grp=document.getElementById(groupId);if(!grp)return;
+  var btns=grp.querySelectorAll('button');
+  btns.forEach(function(b){b.classList.remove('on')});
+  for(var i=-2;i<=2;i++){
+    if(dateOff(i)===dateVal){
+      var m=grp.querySelector('button[data-off="'+i+'"]');
+      if(m)m.classList.add('on');
+      break;
+    }
+  }
+}
+
+/* ═══════════ HELPERS ═══════════ */
+function $(id){return document.getElementById(id)}
+function $$(sel,ctx){return(ctx||document).querySelectorAll(sel)}
+function showToast(m){var e=$('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2600)}
+function elH(dt){if(!dt)return null;return(Date.now()-new Date(dt).getTime())/36e5}
+function fmtEl(h){if(h===null)return'未記録';if(h<1)return Math.round(h*60)+'分前';
+  const d=Math.floor(h/24),hr=Math.floor(h%24),mn=Math.round((h%1)*60);
+  if(d===0)return hr+'時間'+(mn>0?mn+'分':'')+'前';return d+'日'+(hr>0?hr+'時間':'')+'前'}
+function resCfg(rid){var r=rid?D.residents.find(function(x){return x.id===rid}):null;var c=(r&&r.cfg)?r.cfg:{};
+  return{urineWarnH:(c.urineWarnH!=null?c.urineWarnH:D.cfg.urineWarnH),urineDangerH:(c.urineDangerH!=null?c.urineDangerH:D.cfg.urineDangerH),
+    stoolWarnD:(c.stoolWarnD!=null?c.stoolWarnD:D.cfg.stoolWarnD),stoolDangerD:(c.stoolDangerD!=null?c.stoolDangerD:D.cfg.stoolDangerD)}}
+function badgeCls(h,t,rid){if(h===null)return'eb-ng';var cfg=resCfg(rid);
+  if(t==='u'){if(h>=cfg.urineDangerH)return'eb-ng';if(h>=cfg.urineWarnH)return'eb-w';return'eb-ok'}
+  const d=h/24;if(d>=cfg.stoolDangerD)return'eb-ng';if(d>=cfg.stoolWarnD)return'eb-w';return'eb-ok'}
+function lastR(rid,t){return D.records.filter(r=>{if(r.residentId!==rid)return false;
+  return t==='u'?r.type==='urine'||r.type==='both':r.type==='stool'||r.type==='both'})
+  .sort((a,b)=>b.datetime.localeCompare(a.datetime))[0]||null}
+function dayR(rid,d,t){return D.records.filter(r=>{if(r.residentId!==rid||r.date!==d)return false;
+  return t==='u'?r.type==='urine'||r.type==='both':r.type==='stool'||r.type==='both'})}
+
+/* ═══════════ SCREEN NAV ═══════════ */
+function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav button').forEach(b=>b.classList.remove('on'));
+  $('sc-'+name).classList.add('on');const nb=document.querySelector('.bnav button[data-sc="'+name+'"]');if(nb)nb.classList.add('on');
+  if(name==='input')setNow();
+  if(name==='board'){if($('bdDate')&&!$('bdDate').value)$('bdDate').value=today();updateDayNavHi('bdDayNav',$('bdDate').value);renderBoard()}
+  if(name==='tl'){if($('tlDate')&&!$('tlDate').value)$('tlDate').value=today();updateDayNavHi('tlDayNav',$('tlDate').value);renderTL()}
+  if(name==='cfg')renderCfg()}
+
+/* ═══════════ RESIDENT SELECT ═══════════ */
+function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name})
+  .sort(function(a,b){return(a.name||'').localeCompare(b.name||'','ja')});const cv=ci.rid;
+  sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
+    a.map(r=>'<option value="'+r.id+'"'+(cv===r.id?' selected':'')+'>'+r.name+'　'+r.room+'号室</option>').join('');
+  if(ci.rid)sel.value=ci.rid}
+
+/* ═══════════ INPUT ═══════════ */
+function setNow(){const n=new Date(),o=n.getTimezoneOffset()*6e4;$('recDT').value=new Date(n-o).toISOString().slice(0,16)}
+
+function submitRec(){
+  var sv=$('resSel').value;
+  ci.rid=sv?parseInt(sv):null;
+  if(!ci.rid||isNaN(ci.rid)){showToast('⚠️ 入居者を選択してください');ci.rid=null;return}
+  if(!ci.type){showToast('⚠️ 排泄種別を選択してください');return}
+  let ua=ci.urineAmt;
+  if((ci.type==='urine'||ci.type==='both')&&!ua){const cv=$('cusUV').value;if(cv)ua=parseInt(cv)}
+  const dt=$('recDT').value;if(!dt){showToast('⚠️ 日時を入力してください');return}
+  const[d,t]=dt.split('T');
+  if(editRecId){
+    // 修正モード: 既存レコードを更新
+    var existing=D.records.find(function(r){return r.id===editRecId});
+    if(!existing){showToast('⚠️ 記録が見つかりません');editRecId=null;resetForm();return}
+    existing.residentId=ci.rid;existing.date=d;existing.time=t;existing.datetime=dt;
+    existing.type=ci.type;existing.urineAmt=ua;existing.urineColor=ci.urineColor;
+    existing.stoolAmt=ci.stoolAmt;existing.consistency=ci.consistency;existing.stoolColor=ci.stoolColor;
+    existing.notes=$('recNote').value.trim();existing.staff=$('recStaff').value.trim();
+    existing.updatedAt=new Date().toISOString();
+    save();apiPush('saveRecord',{record:existing});
+    if(existing.staff)localStorage.setItem('hbcr_ls',existing.staff);
+    const res=D.residents.find(r=>r.id===ci.rid);
+    const tl={urine:'排尿',stool:'排便',both:'排尿＋排便',none:'誘導・排泄なし'}[ci.type];
+    showToast('✅ '+(res?res.name:'')+' — '+tl+'を修正しました');
+    editRecId=null;resetForm();
+    if(typeof renderBoard==='function')renderBoard();
+    if(typeof renderTL==='function')renderTL();
+    return;
+  }
+  const rec={id:uid(),residentId:ci.rid,date:d,time:t,datetime:dt,type:ci.type,
+    urineAmt:ua,urineColor:ci.urineColor,stoolAmt:ci.stoolAmt,consistency:ci.consistency,stoolColor:ci.stoolColor,
+    notes:$('recNote').value.trim(),staff:$('recStaff').value.trim(),createdAt:new Date().toISOString()};
+  D.records.push(rec);save();
+  apiPush('addRecord',{record:rec});
+  if(rec.staff)localStorage.setItem('hbcr_ls',rec.staff);
+  const res=D.residents.find(r=>r.id===ci.rid);
+  const tl={urine:'排尿',stool:'排便',both:'排尿＋排便'}[ci.type];
+  showToast('✅ '+(res?res.name:'')+' — '+tl+'を記録しました');resetForm()}
+
+// 記録の修正モードを開始
+function editRec(id){
+  var r=D.records.find(function(x){return x.id===id});
+  if(!r){showToast('⚠️ 記録が見つかりません');return}
+  // 下剤記録は専用モーダルを開く
+  if(r.type==='laxative'){
+    $('mDet').classList.remove('on');
+    openLaxModal(null,id);
+    return;
+  }
+  editRecId=id;
+  // 詳細モーダルを閉じる
+  $('mDet').classList.remove('on');
+  // 入力画面に移動
+  showSc('input');
+  // フォームに値を流し込む
+  ci.rid=toNum(r.residentId);
+  ci.type=r.type;
+  ci.urineAmt=r.urineAmt;
+  ci.urineColor=r.urineColor;
+  ci.stoolAmt=r.stoolAmt;
+  ci.consistency=r.consistency;
+  ci.stoolColor=r.stoolColor;
+  // 入居者プルダウン
+  buildResSel();
+  $('resSel').value=String(ci.rid);
+  // 日時
+  $('recDT').value=r.datetime||(r.date+'T'+r.time);
+  // 排泄種別ボタン
+  $$('.type-btn').forEach(function(b){b.classList.remove('su','ss','sb','sn');if(b.dataset.t===r.type)b.classList.add(r.type==='urine'?'su':r.type==='stool'?'ss':r.type==='none'?'sn':'sb')});
+  $('secU').style.display=(r.type==='urine'||r.type==='both')?'block':'none';
+  $('secS').style.display=(r.type==='stool'||r.type==='both')?'block':'none';
+  // 排尿量
+  $$('.ua').forEach(function(b){b.classList.remove('on')});
+  if(r.urineAmt!=null&&r.urineAmt!==''){
+    var matched=false;
+    $$('.ua').forEach(function(b){if(b.dataset.v==String(r.urineAmt)){b.classList.add('on');matched=true}});
+    if(!matched){
+      // カスタム値
+      $$('.ua').forEach(function(b){if(b.dataset.v==='custom')b.classList.add('on')});
+      $('cusU').style.display='flex';$('cusUV').value=r.urineAmt;
+    }else{$('cusU').style.display='none'}
+  }
+  // 尿の色
+  $$('#ucRow .cb').forEach(function(b){b.classList.remove('on');if(b.dataset.v===r.urineColor)b.classList.add('on')});
+  // 便の性状
+  $$('.cons-b').forEach(function(b){b.classList.remove('on');if(b.dataset.v===r.consistency)b.classList.add('on')});
+  // 排便量
+  $$('.sa').forEach(function(b){b.classList.remove('on');if(b.dataset.v===r.stoolAmt)b.classList.add('on')});
+  // 便の色
+  $$('#scRow .cb').forEach(function(b){b.classList.remove('on');if(b.dataset.v===r.stoolColor)b.classList.add('on')});
+  // 備考・記録者
+  $('recNote').value=r.notes||'';
+  $('recStaff').value=r.staff||'';
+  // 送信ボタンのラベルを変更
+  updateSubmitBtnLabel();
+  showToast('✏️ 修正モードに切り替えました');
+}
+
+// 修正モードかどうかで送信ボタンのラベルを更新
+function updateSubmitBtnLabel(){
+  var btn=$('btnSubmit');if(!btn)return;
+  if(editRecId){
+    btn.innerHTML='💾 修正を保存';
+    btn.style.background='#2e7d32';
+    // キャンセルボタンを表示（なければ作る）
+    if(!$('btnCancelEdit')){
+      var cancel=document.createElement('button');
+      cancel.id='btnCancelEdit';cancel.className='bn bs';cancel.style.marginTop='8px';cancel.style.width='100%';
+      cancel.textContent='✕ 修正をキャンセル';
+      cancel.addEventListener('click',function(){editRecId=null;resetForm();showToast('修正をキャンセルしました')});
+      btn.parentNode.insertBefore(cancel,btn.nextSibling);
+    }else{$('btnCancelEdit').style.display=''}
+  }else{
+    btn.innerHTML='💾 記　録　す　る';
+    btn.style.background='';
+    if($('btnCancelEdit'))$('btnCancelEdit').style.display='none';
+  }
+}
+
+function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null};
+  editRecId=null;
+  setNow();$('recNote').value='';$('resSel').value='';
+  $$('.type-btn').forEach(b=>b.classList.remove('su','ss','sb','sn'));
+  $$('.qb').forEach(b=>b.classList.remove('on'));
+  $$('.cb').forEach(b=>b.classList.remove('on'));
+  $$('.cons-b').forEach(b=>b.classList.remove('on'));
+  $('secU').style.display='none';$('secS').style.display='none';
+  $('cusU').style.display='none';$('cusUV').value='';
+  updateSubmitBtnLabel();}
+
+/* ═══════════ BOARD ═══════════ */
+// 更新ボタン: API接続中はサーバーから最新取得、未接続はローカル再描画
+async function refreshView(view){
+  var btnId=view==='board'?'bdRefresh':'tlRefresh';
+  var btn=$(btnId);
+  // ボタンを回転アニメーション＋無効化
+  if(btn){btn.disabled=true;btn.textContent='⏳ 更新中';btn.style.opacity='0.6'}
+  try{
+    if(apiUrl){
+      var ok=await syncFromAPI(false);
+      if(ok){buildResSel();showToast('✅ 最新データを取得しました')}
+      else{showToast('⚠️ API取得失敗 — ローカルデータを表示します')}
+    }
+    if(view==='board')renderBoard();else renderTL();
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🔄 更新';btn.style.opacity=''}
+  }
+}
+function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody');
+  // ヘッダーの「本日回数」/「当日回数」切り替え
+  var isTodayView=(date===today());
+  var cntLbl=isTodayView?'本日回数':'当日回数';
+  if($('bdHdrUCnt'))$('bdHdrUCnt').textContent=cntLbl;
+  if($('bdHdrSCnt'))$('bdHdrSCnt').textContent=cntLbl;
+  const res=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  tb.innerHTML=res.map((re,i)=>{
+    const lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
+    const uh=elH(lu?lu.datetime:null),sh=elH(ls?ls.datetime:null);
+    const ub=badgeCls(uh,'u',re.id),sb=badgeCls(sh,'s',re.id);
+    const du=dayR(re.id,date,'u'),ds=dayR(re.id,date,'s');
+    const tU=du.reduce((s,r)=>s+(typeof r.urineAmt==='number'?r.urineAmt:0),0);
+    const lCons=ls?fmtCons(ls):'';const lSA=ls?ls.stoolAmt:null;const lN=ls?ls.notes:'';
+    // 当日の全記録（排尿・排便・下剤を含む）— 操作ボタンで使用
+    const dAll=D.records.filter(function(r){return r.residentId===re.id&&r.date===date});
+    const hasRec=dAll.length>0;
+    // 当日の下剤記録
+    const dLax=D.records.filter(function(r){return r.residentId===re.id&&r.date===date&&r.type==='laxative'})
+      .sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
+    var laxHtml=dLax.length?'<div style="margin-top:4px">'+dLax.map(function(r){
+      return'<span class="lax-mk" title="'+(r.staff||'')+'">💊 '+r.time+' '+(r.medicine||'')+(r.tablets?' '+r.tablets+'錠':'')+'</span>'
+    }).join(' ')+'</div>':'';
+    // 経過時間下の日付差ラベル (例: -1, -2) ― 表示中日付と最終記録日の差
+    // プラス値（未来の記録）は表示しない
+    var uDiff=lu?dayDiff(lu.date,date):0;
+    var sDiff=ls?dayDiff(ls.date,date):0;
+    function offStyle(badge,t){
+      var base='display:inline-block;margin-top:3px;padding:1px 6px;border-radius:10px;font-weight:700;font-size:12px;';
+      if(badge==='eb-ng')return base+'background:var(--ng-l);color:var(--ng);border:1px solid var(--ng)';
+      if(badge==='eb-w')return base+'background:#fff59d;color:#8d6e00;border:1px solid #fbc02d';
+      if(t==='s')return base+'background:var(--s-bg);color:var(--s);border:1px solid #a1887f';
+      return base+'background:var(--u-bg);color:var(--u);border:1px solid #81d4fa';
+    }
+    var uOffHtml=(lu&&uDiff<0)?'<div><span style="'+offStyle(ub,'u')+'">'+fmtDayOff(uDiff)+'日</span></div>':'';
+    var sOffHtml=(ls&&sDiff<0)?'<div><span style="'+offStyle(sb,'s')+'">'+fmtDayOff(sDiff)+'日</span></div>':'';
+    let rc=i%2===1?'ev':'';if(ub==='eb-ng'||sb==='eb-ng')rc+=' rd';else if(ub==='eb-w'||sb==='eb-w')rc+=' rw';
+    return'<tr class="'+rc+'">'+
+      '<td><strong>'+re.room+'</strong></td>'+
+      '<td style="text-align:left;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+re.id+'">'+re.name+'</span></td>'+
+      '<td style="white-space:nowrap">'+(lu?'<b>'+fmtLast(lu,date)+'</b>':'<span class="nr">未記録</span>')+'</td>'+
+      '<td><span class="eb '+ub+'">'+fmtEl(uh)+'</span>'+uOffHtml+'</td>'+
+      '<td>'+du.length+'回'+(tU>0?'<div style="font-size:10px;color:var(--u)">'+tU+'ml</div>':'')+(tU===0&&du.some(r=>typeof r.urineAmt==='string'&&r.urineAmt)?'<div style="font-size:10px;color:var(--u)">'+du.filter(r=>typeof r.urineAmt==='string'&&r.urineAmt).map(r=>r.urineAmt).join('・')+'</div>':'')+'</td>'+
+      '<td style="white-space:nowrap">'+(ls?'<b>'+fmtLast(ls,date)+'</b>':'<span class="nr">未記録</span>')+'</td>'+
+      '<td><span class="eb '+sb+'">'+fmtEl(sh)+'</span>'+sOffHtml+'</td>'+
+      '<td>'+ds.length+'回</td>'+
+      '<td style="white-space:nowrap">'+(lCons?'<span class="tg tg-s">'+lCons+'</span>':'')+(lSA?' <span style="font-size:11px">'+lSA+'</span>':'')+'</td>'+
+      '<td style="font-size:11px;text-align:left;max-width:160px;word-break:break-all">'+(lN||'')+laxHtml+'</td>'+
+      '<td style="font-size:11px;text-align:left;max-width:180px;word-break:break-all;white-space:normal;color:#4a148c">'+(re.laxNote?re.laxNote.replace(/\n/g,'<br>'):'<span style="color:var(--g5)">—</span>')+'</td>'+
+      '<td style="white-space:nowrap">'+(hasRec
+        ?'<button class="bn bs bsm bd-ops" data-rid="'+re.id+'" style="padding:6px 10px;min-height:36px;font-size:11px">✏️ 修正・削除<div style="font-size:10px;color:var(--g5);margin-top:2px">('+dAll.length+'件)</div></button>'
+        :'<span style="font-size:11px;color:var(--g5)">—</span>')+'</td>'+
+      '</tr>'}).join('');
+  // 履歴リンク
+  $$('[data-hist]',tb).forEach(el=>el.addEventListener('click',function(){showHist(parseInt(this.dataset.hist))}));
+  // 操作ボタン（その日の全記録を表示 → 各記録を修正・削除）
+  $$('.bd-ops',tb).forEach(function(b){b.addEventListener('click',function(){
+    var rid=parseInt(this.dataset.rid);
+    var dAll=D.records.filter(function(r){return r.residentId===rid&&r.date===date})
+      .sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
+    if(dAll.length===0)return;
+    if(dAll.length===1)showDet(dAll[0].id);else showDetMulti(dAll);
+  })})}
+
+/* ═══════════ TIMELINE (30分) ═══════════ */
+function renderTL(){const date=$('tlDate').value||today();
+  const res=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  // ヘッダー行: 時刻（0〜23）を各2列（:00, :30）
+  let h1='<th rowspan="2" style="min-width:85px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
+  let h2='';
+  for(let h=0;h<24;h++){
+    h1+='<th colspan="2" class="hr-top" style="min-width:52px">'+h+'時</th>';
+    h2+='<th class="hr-sub">:00</th><th class="hr-sub">:30</th>'}
+  // データ行
+  const rows=res.map(re=>{
+    const dr=D.records.filter(r=>r.residentId===re.id&&r.date===date);
+    // 30分バケット(0..47)
+    const bk={};dr.forEach(r=>{const p=r.time.split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);
+      const slot=h*2+(m>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
+    let cells='';
+    for(let s=0;s<48;s++){const recs=bk[s]||[];
+      if(!recs.length){cells+='<td class="tl-c"></td>';continue}
+      let inner=recs.map(r=>{
+        const cls=(r.type==='urine'?'u':r.type==='stool'?'s':r.type==='laxative'?'l':r.type==='none'?'n':'b');
+        const dot=r.type==='none'?'<span style="font-size:13px;color:#455a64;font-weight:700">✖️</span>':'<span class="ev-d '+cls+'"></span>';
+        let info='';
+        if(r.type==='urine'||r.type==='both'){info+=fmtUA(r.urineAmt)}
+        if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c)}
+        if(r.type==='laxative'){info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'')}
+        if(r.type==='none'){info+='誘導'}
+        return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
+      cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'">'+inner+'</td>'}
+    // 最終排尿・排便の日付差 (表示中日付との差) ― マイナスのみ表示
+    var lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
+    var uDiff=lu?dayDiff(lu.date,date):null;
+    var sDiff=ls?dayDiff(ls.date,date):null;
+    var uh_tl=elH(lu?lu.datetime:null),sh_tl=elH(ls?ls.datetime:null);
+    var ub_tl=badgeCls(uh_tl,'u',re.id),sb_tl=badgeCls(sh_tl,'s',re.id);
+    function tlOffStyle(badge,def){
+      if(badge==='eb-ng')return'background:var(--ng-l);color:var(--ng);font-weight:700;border:1px solid var(--ng)';
+      if(badge==='eb-w')return'background:#fff59d;color:#8d6e00;font-weight:700;border:1px solid #fbc02d';
+      return def;
+    }
+    var pillBase='display:inline-block;font-size:10px;padding:1px 5px;border-radius:10px;white-space:nowrap;';
+    var uPill=(lu&&uDiff!==null&&uDiff<0)
+      ?'<span style="'+pillBase+tlOffStyle(ub_tl,'color:#1565c0;background:#e3f2fd;border:1px solid #90caf9')+'" title="最終排尿: '+fmtMD(lu.date)+' '+lu.time+'">尿'+fmtDayOff(uDiff)+'</span>'
+      :'';
+    var sPill=(ls&&sDiff!==null&&sDiff<0)
+      ?'<span style="'+pillBase+tlOffStyle(sb_tl,'color:#4e342e;background:#efebe9;border:1px solid #bcaaa4')+'" title="最終排便: '+fmtMD(ls.date)+' '+ls.time+'">便'+fmtDayOff(sDiff)+'</span>'
+      :'';
+    var offHtml=(uPill||sPill)
+      ?'<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+uPill+'<span style="margin-left:auto">'+sPill+'</span></div>'
+      :'';
+    var fdBtn='<button class="bn bs fd-btn" data-fd="'+re.id+'" title="5日間の排泄パターン" style="padding:2px 6px;margin-left:4px;font-size:10px;min-height:22px;min-width:0;vertical-align:middle">📊5日</button>';
+    return'<tr><td class="tl-nm"><span style="color:var(--g5)">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'">'+re.name+'</span>'+fdBtn+offHtml+'</td>'+cells+'</tr>'}).join('');
+  $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
+  // セルクリック→詳細
+  $$('.tl-c.has',$('tlBox')).forEach(td=>td.addEventListener('click',function(){
+    const[rid,slot]=this.dataset.slot.split('-').map(Number);
+    const dr=D.records.filter(r=>r.residentId===rid&&r.date===date);
+    const matching=dr.filter(r=>{const p=r.time.split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);return h*2+(m>=30?1:0)===slot});
+    if(matching.length===1)showDet(matching[0].id);
+    else if(matching.length>1)showDetMulti(matching)}));
+  // 名前クリック→履歴
+  $$('.tl-nm-link',$('tlBox')).forEach(el=>el.addEventListener('click',function(e){e.stopPropagation();showHist(parseInt(this.dataset.hist))}));
+  // 📊5日ボタン
+  $$('.fd-btn',$('tlBox')).forEach(el=>el.addEventListener('click',function(e){e.stopPropagation();showFiveDay(parseInt(this.dataset.fd))}));}
+
+/* ═══════════ 5-DAY PERSONAL TIMELINE ═══════════ */
+let cur5DayRid=null, cur5DayEnd=null; // end=表示範囲の最終日(最下段)
+function showFiveDay(rid,endDate){
+  var re=D.residents.find(function(x){return x.id===rid});
+  if(!re){showToast('⚠️ 入居者が見つかりません');return}
+  cur5DayRid=rid;
+  cur5DayEnd=endDate||today();
+  $('m5DayT').textContent='📊 '+re.name+'（'+re.room+'号室）— 5日間の排泄パターン';
+  // 5日分の日付(古い→新しい) ― UTC差を避けるためローカル年月日で構築
+  function pad(n){return(n<10?'0':'')+n}
+  function toYMD(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+  var dates=[];
+  for(var i=4;i>=0;i--){
+    var d=new Date(cur5DayEnd+'T00:00:00');d.setDate(d.getDate()-i);
+    dates.push(toYMD(d));
+  }
+  var tdy=today();
+  // ヘッダー
+  var h1='<th rowspan="2" style="min-width:80px;position:sticky;left:0;z-index:2;background:#e8eaed">日付</th>';
+  var h2='';
+  for(var h=0;h<24;h++){
+    h1+='<th colspan="2" class="hr-top" style="min-width:52px">'+h+'時</th>';
+    h2+='<th class="hr-sub">:00</th><th class="hr-sub">:30</th>';
+  }
+  h1+='<th rowspan="2" style="min-width:96px;position:sticky;right:0;z-index:2;background:#e8eaed">合計</th>';
+  // 各日行
+  var rows=dates.map(function(date){
+    var dr=D.records.filter(function(r){return r.residentId===rid&&r.date===date});
+    var bk={};dr.forEach(function(r){var p=r.time.split(':');var hh=parseInt(p[0]);var mm=parseInt(p[1]||0);var slot=hh*2+(mm>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
+    var cells='';
+    for(var s=0;s<48;s++){
+      var recs=bk[s]||[];
+      if(!recs.length){cells+='<td class="tl-c"></td>';continue}
+      var inner=recs.map(function(r){
+        var cls=(r.type==='urine'?'u':r.type==='stool'?'s':r.type==='laxative'?'l':r.type==='none'?'n':'b');
+        var dot=r.type==='none'?'<span style="font-size:13px;color:#455a64;font-weight:700">✖️</span>':'<span class="ev-d '+cls+'"></span>';
+        var info='';
+        if(r.type==='urine'||r.type==='both')info+=fmtUA(r.urineAmt);
+        if(r.type==='stool'||r.type==='both'){var c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c)}
+        if(r.type==='laxative')info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'');
+        if(r.type==='none')info+='誘導';
+        return dot+(info?'<span class="tl-info">'+info+'</span>':'');
+      }).join('');
+      cells+='<td class="tl-c has" data-fdslot="'+date+'-'+s+'">'+inner+'</td>';
+    }
+    // 件数集計
+    var nU=dr.filter(function(r){return r.type==='urine'||r.type==='both'}).length;
+    var nS=dr.filter(function(r){return r.type==='stool'||r.type==='both'}).length;
+    var nL=dr.filter(function(r){return r.type==='laxative'}).length;
+    var summary='<span style="color:var(--u)">尿'+nU+'</span>'
+      +' <span style="color:var(--s)">便'+nS+'</span>'
+      +(nL?' <span style="color:#b8860b">💊'+nL+'</span>':'');
+    // 日付ラベル
+    var dObj=new Date(date+'T00:00:00');
+    var wd=['日','月','火','水','木','金','土'][dObj.getDay()];
+    var wdCol=dObj.getDay()===0?'#c62828':(dObj.getDay()===6?'#1565c0':'var(--g5)');
+    var dLabel='<b>'+fmtMD(date)+'</b><br><span style="color:'+wdCol+';font-size:10px">('+wd+')</span>';
+    if(date===tdy)dLabel='<b style="color:var(--pri)">本日</b><br><span style="font-size:10px">'+fmtMD(date)+'('+wd+')</span>';
+    var rowBg=(date===tdy)?'background:#e3f2fd':'';
+    return'<tr style="'+rowBg+'"><td class="tl-nm" style="'+rowBg+';text-align:center">'+dLabel+'</td>'+cells
+      +'<td class="tl-nm" style="'+rowBg+';text-align:center;position:sticky;right:0;font-size:11px;white-space:nowrap">'+summary+'</td></tr>';
+  }).join('');
+  $('m5DayC').innerHTML='<table class="tl-t" style="min-width:680px"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
+  // セルクリック→詳細
+  $$('.tl-c.has',$('m5DayC')).forEach(function(td){td.addEventListener('click',function(){
+    var parts=this.dataset.fdslot.split('-');
+    var dt=parts.slice(0,3).join('-');var slot=parseInt(parts[3]);
+    var dr=D.records.filter(function(r){return r.residentId===cur5DayRid&&r.date===dt});
+    var matching=dr.filter(function(r){var p=r.time.split(':');var hh=parseInt(p[0]);var mm=parseInt(p[1]||0);return hh*2+(mm>=30?1:0)===slot});
+    if(matching.length===1)showDet(matching[0].id);
+    else if(matching.length>1)showDetMulti(matching);
+  })});
+  $('m5Day').classList.add('on');
+}
+function close5Day(){$('m5Day').classList.remove('on');cur5DayRid=null;cur5DayEnd=null}
+function shift5Day(days){
+  if(!cur5DayRid)return;
+  var d=new Date(cur5DayEnd+'T00:00:00');d.setDate(d.getDate()+days);
+  function pad(n){return(n<10?'0':'')+n}
+  showFiveDay(cur5DayRid,d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()));
+}
+
+/* ═══════════ DETAIL MODAL ═══════════ */
+function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=id;curDetRid=r.residentId;
+  // 複数モードで非表示にされた修正・削除ボタンを元に戻す
+  $('mDetDel').style.display='';
+  if($('mDetEdit'))$('mDetEdit').style.display='';
+  if($('mDetHist'))$('mDetHist').style.display='';
+  const res=D.residents.find(x=>x.id===r.residentId);
+  let h='<div style="margin-bottom:10px"><b>'+(res?res.name:'不明')+'</b> <span style="color:var(--g5)">'+(res?res.room+'号室':'')+'</span></div>';
+  h+='<div style="font-size:13px;margin-bottom:10px">📅 '+r.date+'　🕐 '+r.time+'</div>';
+  if(r.type==='laxative'){
+    h+='<div class="hi" style="margin-bottom:8px;background:#f3e5f5;border-left:4px solid #7b1fa2;padding:8px 12px;border-radius:6px"><b style="color:#6a1b9a">💊 下剤</b>'
+      +(r.medicine?'<div>薬剤: '+r.medicine+'</div>':'')
+      +(r.tablets?'<div>錠数: '+r.tablets+'錠</div>':'')
+      +'</div>';
+  }else{
+    if(r.type==='urine'||r.type==='both'){h+='<div class="hi u" style="margin-bottom:8px"><b style="color:var(--u)">💧 排尿</b>'+(r.urineAmt?'<div>量: '+fmtUA(r.urineAmt)+'</div>':'')+(r.urineColor?'<div>色: '+r.urineColor+'</div>':'')+'</div>'}
+    if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);h+='<div class="hi s" style="margin-bottom:8px"><b style="color:var(--s)">🟤 排便</b>'+(c?'<div>性状: '+c+'</div>':'')+(r.stoolAmt?'<div>量: '+r.stoolAmt+'</div>':'')+(r.stoolColor?'<div>色: '+r.stoolColor+'</div>':'')+'</div>'}
+  }
+  if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size:13px;margin-top:6px">📝 '+r.notes+'</div>';
+  if(r.staff)h+='<div style="margin-top:8px;font-size:12px;color:var(--g5)">記録者: '+r.staff+'</div>';
+  $('mDetC').innerHTML=h;$('mDet').classList.add('on')}
+
+/* ═══════════ MULTI DETAIL (同一時間帯の複数記録) ═══════════ */
+function showDetMulti(recs){
+  if(!recs||!recs.length)return;
+  if(recs.length===1){showDet(recs[0].id);return}
+  curRecId=null; // 複数モードでは単一IDを持たない
+  curDetRid=recs[0].residentId;
+  if($('mDetHist'))$('mDetHist').style.display='';
+  const res=D.residents.find(x=>x.id===recs[0].residentId);
+  const typeLbl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤'};
+  const typeColor={urine:'var(--u)',stool:'var(--s)',both:'#e91e63',laxative:'#7b1fa2'};
+
+  let h='<div style="margin-bottom:12px"><b>'+(res?res.name:'不明')+'</b>'
+    +'<span style="color:var(--g5);margin-left:8px">'+(res?res.room+'号室':'')+'</span>'
+    +'<span style="background:var(--pri);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px">'+recs.length+'件</span>'
+    +'</div>';
+
+  recs.forEach(function(r,i){
+    const tc=typeColor[r.type]||'var(--g5)';
+    const tl=typeLbl[r.type]||r.type;
+    h+='<div style="border:1px solid var(--g2);border-radius:8px;padding:10px 12px;margin-bottom:10px;position:relative">';
+    // 時刻・種別ヘッダー
+    h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">'
+      +'<span style="font-size:13px;font-weight:700">🕐 '+r.time+'</span>'
+      +'<span style="background:'+tc+';color:#fff;font-size:11px;padding:2px 8px;border-radius:10px">'+tl+'</span>'
+      +'<button class="bn bp bsm mdet-edit-each" data-id="'+r.id+'" style="margin-left:auto;padding:4px 10px;font-size:11px;min-height:32px;min-width:auto">✏️ 修正</button>'
+      +'<button class="bn br bsm mdet-del-each" data-id="'+r.id+'" style="padding:4px 10px;font-size:11px;min-height:32px;min-width:auto">🗑️ 削除</button>'
+      +'</div>';
+    // 排尿情報
+    if(r.type==='urine'||r.type==='both'){
+      h+='<div class="hi u" style="margin-bottom:6px"><b style="color:var(--u)">💧 排尿</b>'
+        +(r.urineAmt?'<div>量: '+fmtUA(r.urineAmt)+'</div>':'')
+        +(r.urineColor?'<div>色: '+r.urineColor+'</div>':'')
+        +'</div>'}
+    // 排便情報
+    if(r.type==='stool'||r.type==='both'){
+      const c=fmtCons(r);
+      h+='<div class="hi s" style="margin-bottom:6px"><b style="color:var(--s)">🟤 排便</b>'
+        +(c?'<div>性状: '+c+'</div>':'')
+        +(r.stoolAmt?'<div>量: '+r.stoolAmt+'</div>':'')
+        +(r.stoolColor?'<div>色: '+r.stoolColor+'</div>':'')
+        +'</div>'}
+    // 下剤情報
+    if(r.type==='laxative'){
+      h+='<div class="hi" style="margin-bottom:6px;background:#f3e5f5;border-left:4px solid #7b1fa2;padding:6px 10px;border-radius:6px"><b style="color:#6a1b9a">💊 下剤</b>'
+        +(r.medicine?'<div>薬剤: '+r.medicine+'</div>':'')
+        +(r.tablets?'<div>錠数: '+r.tablets+'錠</div>':'')
+        +'</div>'}
+    if(r.notes)h+='<div style="padding:6px 8px;background:var(--g0);border-radius:6px;font-size:12px">📝 '+r.notes+'</div>';
+    if(r.staff)h+='<div style="margin-top:6px;font-size:11px;color:var(--g5)">記録者: '+r.staff+'</div>';
+    h+='</div>';
+  });
+
+  $('mDetC').innerHTML=h;
+  // フッターの単一修正・削除ボタンは非表示（各カードにボタンあり）
+  $('mDetDel').style.display='none';
+  if($('mDetEdit'))$('mDetEdit').style.display='none';
+  $('mDet').classList.add('on');
+
+  // 各カードの修正ボタン
+  $$('.mdet-edit-each',$('mDetC')).forEach(function(btn){
+    btn.addEventListener('click',function(){editRec(this.dataset.id)});
+  });
+  // 各カードの削除ボタン
+  $$('.mdet-del-each',$('mDetC')).forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var delId=this.dataset.id;
+      customConfirm('この記録を削除しますか？').then(function(ok){
+        if(!ok)return;
+        D.records=D.records.filter(function(r){return r.id!==delId});
+        save();apiPush('delRecord',{id:delId});
+        // 残りの記録を再描画（0件になったら閉じる）
+        var remaining=recs.filter(function(r){return r.id!==delId});
+        if(remaining.length===0){$('mDet').classList.remove('on');}
+        else if(remaining.length===1){showDet(remaining[0].id);}
+        else{showDetMulti(remaining);}
+        renderBoard();renderTL();showToast('🗑️ 削除しました')});
+    });
+  });
+}
+
+/* ═══════════ HISTORY MODAL ═══════════ */
+function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
+  curHistRid=rid;
+  // 退去済の入居者は入力ボタンを非表示
+  if($('mHistInput'))$('mHistInput').style.display=(res.active===false)?'none':'';
+  if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
+  $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
+  const recs=D.records.filter(r=>r.residentId===rid).sort((a,b)=>b.datetime.localeCompare(a.datetime)).slice(0,100);
+  if(!recs.length){$('mHistC').innerHTML='<p style="color:var(--g5);font-size:13px">記録がありません</p>'}
+  else{
+    const tbl='<div class="ht-w"><table class="ht"><thead><tr>'+
+      '<th>日付</th><th>時刻</th><th>種別</th><th>排尿量</th><th>尿の色</th><th>便の性状</th><th>排便量</th><th>便の色</th><th>備考</th><th>記録者</th>'+
+      '</tr></thead><tbody>'+recs.map(r=>{
+        const tc=r.type==='urine'?'tp-u':r.type==='stool'?'tp-s':r.type==='laxative'?'tp-l':r.type==='none'?'tp-n':'tp-b';
+        const tl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導'}[r.type]||r.type;
+        var isLax=(r.type==='laxative');
+        var isNone=(r.type==='none');
+        var laxInfo=isLax?((r.medicine||'-')+' '+(r.tablets?r.tablets+'錠':'')):'';
+        return'<tr'+(isLax?' style="background:#f3e5f5"':isNone?' style="background:#eceff1"':'')+'><td>'+r.date+'</td><td>'+r.time+'</td><td class="'+tc+'">'+tl+'</td>'+
+          '<td>'+(isLax||isNone?'-':(r.urineAmt?fmtUA(r.urineAmt):'-'))+'</td>'+
+          '<td>'+(isLax||isNone?'-':(r.urineColor||'-'))+'</td>'+
+          '<td'+(isLax?' colspan="3" style="text-align:left"':isNone?' colspan="3" style="text-align:left;color:var(--g5)"':'')+'>'+(isLax?laxInfo:isNone?'排泄なし':(fmtCons(r)||'-'))+'</td>'+
+          (isLax||isNone?'':'<td>'+(r.stoolAmt||'-')+'</td><td>'+(r.stoolColor||'-')+'</td>')+
+          '<td style="text-align:left;white-space:normal;max-width:100px;word-break:break-all">'+(r.notes||'')+'</td>'+
+          '<td>'+(r.staff||'')+'</td></tr>'}).join('')+'</tbody></table></div>';
+    $('mHistC').innerHTML=tbl}
+  $('mHist').classList.add('on')}
+
+/* ═══════════ LAXATIVE ═══════════ */
+function openLaxModal(presetRid,editId){
+  editLaxId=editId||null;
+  // 入居者セレクタ組み立て
+  var sel=$('mLaxRes');
+  var a=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name})
+    .sort(function(a,b){return(a.name||'').localeCompare(b.name||'','ja')});
+  sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
+    a.map(function(r){return'<option value="'+r.id+'">'+r.name+'　'+r.room+'号室</option>'}).join('');
+  // 初期値
+  var nowISO=(function(){var n=new Date(),o=n.getTimezoneOffset()*6e4;return new Date(n-o).toISOString().slice(0,16)})();
+  if(editId){
+    var r=D.records.find(function(x){return x.id===editId});
+    if(!r){showToast('⚠️ 記録が見つかりません');return}
+    sel.value=String(r.residentId);
+    $('mLaxDT').value=r.datetime||(r.date+'T'+r.time);
+    // 薬剤
+    var preset=['プルゼニド','ラキソベロン','マグミット','センノシド','酸化マグネシウム'];
+    if(preset.indexOf(r.medicine)>=0){$('mLaxMed').value=r.medicine;$('mLaxMedCustom').style.display='none';$('mLaxMedCustom').value=''}
+    else{$('mLaxMed').value='__custom__';$('mLaxMedCustom').style.display='';$('mLaxMedCustom').value=r.medicine||''}
+    // 錠数
+    var tabs=r.tablets||'';
+    var preTabs=['0.5','1','1.5','2','3'];
+    document.querySelectorAll('.lax-tab').forEach(function(b){b.classList.remove('on')});
+    if(preTabs.indexOf(String(tabs))>=0){
+      var btn=document.querySelector('.lax-tab[data-v="'+tabs+'"]');if(btn)btn.classList.add('on');
+      $('mLaxTabCustom').value='';
+    }else{$('mLaxTabCustom').value=tabs}
+    $('mLaxNote').value=r.notes||'';
+    $('mLaxStaff').value=r.staff||'';
+    $('mLaxDel').style.display='';
+  }else{
+    sel.value=presetRid?String(presetRid):'';
+    $('mLaxDT').value=nowISO;
+    $('mLaxMed').value='';$('mLaxMedCustom').style.display='none';$('mLaxMedCustom').value='';
+    document.querySelectorAll('.lax-tab').forEach(function(b){b.classList.remove('on')});
+    $('mLaxTabCustom').value='';
+    $('mLaxNote').value='';
+    $('mLaxStaff').value=localStorage.getItem('hbcr_ls')||'';
+    $('mLaxDel').style.display='none';
+  }
+  // 入居者プリセット時はセレクタを固定表示扱い（変更可）
+  $('mLax').classList.add('on');
+}
+function closeLaxModal(){$('mLax').classList.remove('on');editLaxId=null}
+function saveLax(){
+  var rid=parseInt($('mLaxRes').value);
+  if(!rid){showToast('⚠️ 入居者を選んでください');return}
+  var dt=$('mLaxDT').value;if(!dt){showToast('⚠️ 使用日時を入力してください');return}
+  var med;var medSel=$('mLaxMed').value;
+  if(!medSel){showToast('⚠️ 薬剤名を選んでください');return}
+  if(medSel==='__custom__'){med=($('mLaxMedCustom').value||'').trim();if(!med){showToast('⚠️ 薬剤名を入力してください');return}}
+  else med=medSel;
+  // 錠数
+  var tabOn=document.querySelector('.lax-tab.on');
+  var tab=tabOn?tabOn.dataset.v:($('mLaxTabCustom').value||'').trim();
+  if(!tab){showToast('⚠️ 錠数を選んでください');return}
+  var d=dt.split('T')[0],t=dt.split('T')[1]||'';
+  var note=($('mLaxNote').value||'').trim();
+  var staff=($('mLaxStaff').value||'').trim();
+  if(staff)localStorage.setItem('hbcr_ls',staff);
+  if(editLaxId){
+    var ex=D.records.find(function(r){return r.id===editLaxId});
+    if(!ex){showToast('⚠️ 記録が見つかりません');editLaxId=null;closeLaxModal();return}
+    ex.residentId=rid;ex.date=d;ex.time=t;ex.datetime=dt;
+    ex.medicine=med;ex.tablets=tab;ex.notes=note;ex.staff=staff;
+    ex.updatedAt=new Date().toISOString();
+    save();apiPush('saveRecord',{record:ex});
+    showToast('✅ 下剤記録を更新しました');
+  }else{
+    var rec={id:'lx_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+      residentId:rid,date:d,time:t,datetime:dt,type:'laxative',
+      medicine:med,tablets:tab,notes:note,staff:staff,
+      createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    D.records.push(rec);save();
+    apiPush('addRecord',{record:rec});
+    showToast('✅ 下剤の記録を保存しました');
+  }
+  closeLaxModal();
+  if(typeof renderBoard==='function')renderBoard();
+  if(typeof renderTL==='function')renderTL();
+  if(curHistRid)showHist(curHistRid);
+}
+async function deleteLaxCur(){
+  if(!editLaxId)return;
+  var ok=await customConfirm('この下剤記録を削除します。よろしいですか？');
+  $('mConf').classList.remove('on');
+  if(!ok)return;
+  var delId=editLaxId;
+  D.records=D.records.filter(function(r){return r.id!==delId});
+  save();apiPush('delRecord',{id:delId});
+  showToast('✅ 下剤記録を削除しました');
+  closeLaxModal();
+  if(typeof renderBoard==='function')renderBoard();
+  if(typeof renderTL==='function')renderTL();
+  if(curHistRid)showHist(curHistRid);
+}
+
+/* ═══════════ SETTINGS ═══════════ */
+function renderCfg(){
+  var showInactive=$('cfgShowInactive')&&$('cfgShowInactive').checked;
+  const all=[...D.residents].filter(isValidRes).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  const actives=all.filter(function(r){return r.active!==false});
+  const inactives=all.filter(function(r){return r.active===false});
+  const list=showInactive?all:actives;
+  $('resList').innerHTML=!list.length?'<p style="color:var(--g5);font-size:13px">まだ登録されていません</p>':
+    list.map(function(r){
+      var isInactive=(r.active===false);
+      var isHidden=(r.hidden===true);
+      var badges='';
+      if(isInactive)badges+='<span style="background:#9e9e9e;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-right:4px">退去済</span>';
+      if(isHidden&&!isInactive)badges+='<span style="background:#fb8c00;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-right:4px">非表示</span>';
+      var histBtn=isInactive?'<button class="bn bs bsm res-hist" data-id="'+r.id+'">履歴</button>':'';
+      var toggleLabel=isInactive?'在籍へ戻す':'退去';
+      var toggleCls=isInactive?'res-restore':'res-leave';
+      var hideLabel=isHidden?'表示':'非表示';
+      var hideCls=isHidden?'res-unhide':'res-hide';
+      // 退去済には非表示ボタン不要（既に非表示扱い）
+      var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+r.id+'">'+hideLabel+'</button>';
+      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+r.name+'</b> <span style="font-size:12px;color:var(--g5)">'+r.room+'号室 / '+(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'">'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
+    '<div style="margin-top:8px;font-size:12px;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
+  // ボタンイベント
+  $$('.res-edit').forEach(b=>b.addEventListener('click',function(){editRes(parseInt(this.dataset.id))}));
+  $$('.res-del').forEach(b=>b.addEventListener('click',function(){delRes(parseInt(this.dataset.id))}));
+  $$('.res-leave').forEach(b=>b.addEventListener('click',function(){toggleResActive(parseInt(this.dataset.id),false)}));
+  $$('.res-restore').forEach(b=>b.addEventListener('click',function(){toggleResActive(parseInt(this.dataset.id),true)}));
+  $$('.res-hide').forEach(b=>b.addEventListener('click',function(){toggleResHidden(parseInt(this.dataset.id),true)}));
+  $$('.res-unhide').forEach(b=>b.addEventListener('click',function(){toggleResHidden(parseInt(this.dataset.id),false)}));
+  $$('.res-hist').forEach(b=>b.addEventListener('click',function(){showHist(parseInt(this.dataset.id))}));
+  $('cfgUW').value=D.cfg.urineWarnH;$('cfgUD').value=D.cfg.urineDangerH;
+  $('cfgSW').value=D.cfg.stoolWarnD;$('cfgSD').value=D.cfg.stoolDangerD;
+  if($('cfgApi'))$('cfgApi').value=apiUrl||'';
+  if($('apiStatus')&&apiUrl)$('apiStatus').textContent='接続URL: '+apiUrl.slice(0,60)+'...'}
+async function toggleResActive(id,makeActive){
+  var r=D.residents.find(function(x){return x.id===id});if(!r)return;
+  if(!makeActive){
+    var ok=await customConfirm(r.name+' を退去済にしますか？\n（過去の記録は保持され、履歴から閲覧できます）');
+    if(!ok)return;
+    r.active=false;
+  }else{
+    r.active=true;
+  }
+  save();
+  apiPush('saveRes',{resident:r});
+  renderCfg();buildResSel();
+  showToast(makeActive?'✅ 在籍へ戻しました':'✅ 退去処理しました');
+}
+function toggleResHidden(id,makeHidden){
+  var r=D.residents.find(function(x){return x.id===id});if(!r)return;
+  r.hidden=!!makeHidden;
+  save();
+  apiPush('saveRes',{resident:r});
+  renderCfg();buildResSel();
+  if(typeof renderBoard==='function'&&$('sc-board').classList.contains('on'))renderBoard();
+  if(typeof renderTL==='function'&&$('sc-tl').classList.contains('on'))renderTL();
+  showToast(makeHidden?'✅ 非表示にしました':'✅ 表示に戻しました');
+}
+
+function editRes(id){const r=D.residents.find(x=>x.id===id);if(!r)return;editResId=id;
+  $('mResT').textContent='入居者を編集';$('mRN').value=r.name;$('mRR').value=r.room;$('mRG').value=r.gender||'女性';
+  if($('mRS'))$('mRS').value=(r.active===false)?'inactive':'active';
+  if($('mRLax'))$('mRLax').value=r.laxNote||'';
+  var rc=r.cfg||{};
+  if($('mRUW')){$('mRUW').value=(rc.urineWarnH!=null?rc.urineWarnH:'');$('mRUW').placeholder='全体設定: '+D.cfg.urineWarnH}
+  if($('mRUD')){$('mRUD').value=(rc.urineDangerH!=null?rc.urineDangerH:'');$('mRUD').placeholder='全体設定: '+D.cfg.urineDangerH}
+  if($('mRSW')){$('mRSW').value=(rc.stoolWarnD!=null?rc.stoolWarnD:'');$('mRSW').placeholder='全体設定: '+D.cfg.stoolWarnD}
+  if($('mRSD')){$('mRSD').value=(rc.stoolDangerD!=null?rc.stoolDangerD:'');$('mRSD').placeholder='全体設定: '+D.cfg.stoolDangerD}
+  $('mRes').classList.add('on')}
+async function delRes(id){var r=D.residents.find(function(x){return x.id===id});if(!r)return;
+  var ok=await customConfirm(r.name+' を削除しますか？\n（記録データは保持されます）');
+  if(!ok)return;
+  D.residents=D.residents.filter(function(x){return x.id!==id});save();
+  apiPush('delRes',{id:id});
+  renderCfg();buildResSel();showToast('🗑️ 削除しました')}
+function saveRes(){const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$('mRG').value;
+  var st=$('mRS')?$('mRS').value:'active';
+  if(!nm||!rm){showToast('⚠️ 氏名と居室番号を入力してください');return}
+  var laxNote=$('mRLax')?$('mRLax').value.trim():'';
+  function pv(el){if(!el)return null;var v=el.value.trim();if(v==='')return null;var n=parseInt(v,10);return isNaN(n)?null:n}
+  var cfgOv={};var uw=pv($('mRUW')),ud=pv($('mRUD')),sw=pv($('mRSW')),sd=pv($('mRSD'));
+  if(uw!=null)cfgOv.urineWarnH=uw;if(ud!=null)cfgOv.urineDangerH=ud;
+  if(sw!=null)cfgOv.stoolWarnD=sw;if(sd!=null)cfgOv.stoolDangerD=sd;
+  var hasCfg=Object.keys(cfgOv).length>0;
+  let resObj;
+  if(editResId!==null){const r=D.residents.find(x=>x.id===editResId);if(r){r.name=nm;r.room=rm;r.gender=gn;r.active=(st!=='inactive');r.laxNote=laxNote;if(hasCfg)r.cfg=cfgOv;else delete r.cfg;resObj=r}}
+  else{var nid=nextResId();
+    resObj={id:nid,name:nm,room:rm,gender:gn,active:(st!=='inactive'),laxNote:laxNote};if(hasCfg)resObj.cfg=cfgOv;D.residents.push(resObj)}
+  save();
+  if(resObj)apiPush('saveRes',{resident:resObj});
+  $('mRes').classList.remove('on');editResId=null;renderCfg();buildResSel();showToast('✅ 保存しました')}
+
+/* ═══════════ EXPORT / IMPORT ═══════════ */
+function expCSV(){const BOM='\uFEFF';
+  const hdr=['日付','時刻','居室','氏名','種別','排尿量','尿の色','便の性状','排便量','便の色','備考','記録者'];
+  const rows=D.records.map(r=>{const res=D.residents.find(x=>x.id===r.residentId);
+    const tl={urine:'排尿',stool:'排便',both:'両方'}[r.type]||r.type;
+    return[r.date,r.time,res?res.room:'',res?res.name:'',tl,
+      r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',r.notes||'',r.staff||'']
+      .map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')});
+  dl(BOM+[hdr.join(','),...rows].join('\n'),'haiben_'+today()+'.csv','text/csv;charset=utf-8;')}
+function expJSON(){dl(JSON.stringify(D,null,2),'haiben_backup_'+today()+'.json','application/json')}
+function impJSON(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader();
+  rd.onload=function(ev){try{var imp=JSON.parse(ev.target.result);if(!imp.residents||!imp.records)throw 0;
+    customConfirm('データを復元しますか？\n現在のデータは上書きされます。').then(function(ok){
+      if(!ok)return;D=imp;
+      if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
+      save();buildResSel();renderCfg();showToast('✅ データを復元しました')})}catch(err){showToast('⚠️ ファイル形式が正しくありません')}};
+  rd.readAsText(f);e.target.value=''}
+function dl(c,n,t){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:t}));a.download=n;a.click()}
+
+/* ═══════════ INIT ═══════════ */
+function init(){
+  load();
+  // 時計
+  function tick(){const n=new Date();$('hDate').textContent=n.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+    $('hTime').textContent=n.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}
+  tick();setInterval(tick,1e4);
+  setNow();buildResSel();
+
+  const td=today();$('bdDate').value=td;$('tlDate').value=td;
+  updateDayNavHi('bdDayNav',td);updateDayNavHi('tlDayNav',td);
+  const ls=localStorage.getItem('hbcr_ls');if(ls)$('recStaff').value=ls;
+
+  // ── 全イベント登録（inline onclick 一切なし）──
+
+  // ナビ
+  $$('.bnav button').forEach(b=>b.addEventListener('click',function(){showSc(this.dataset.sc)}));
+
+  // 入居者プルダウン
+  $('resSel').addEventListener('change',function(){var v=this.value;ci.rid=v?parseInt(v):null;if(isNaN(ci.rid))ci.rid=null});
+
+  // 排泄種別
+  $$('.type-btn').forEach(b=>b.addEventListener('click',function(){
+    const t=this.dataset.t;ci.type=t;
+    $$('.type-btn').forEach(x=>x.classList.remove('su','ss','sb','sn'));
+    this.classList.add(t==='urine'?'su':t==='stool'?'ss':t==='none'?'sn':'sb');
+    $('secU').style.display=(t==='urine'||t==='both')?'block':'none';
+    $('secS').style.display=(t==='stool'||t==='both')?'block':'none'}));
+
+  // 排尿量
+  $$('.ua').forEach(b=>b.addEventListener('click',function(){
+    $$('.ua').forEach(x=>x.classList.remove('on'));this.classList.add('on');
+    const v=this.dataset.v;
+    if(v==='custom'){ci.urineAmt=null;$('cusU').style.display='flex'}
+    else{ci.urineAmt=isNaN(Number(v))?v:parseInt(v);$('cusU').style.display='none'}}));
+
+  // 尿の色
+  $$('#ucRow .cb').forEach(b=>b.addEventListener('click',function(){
+    $$('#ucRow .cb').forEach(x=>x.classList.remove('on'));this.classList.add('on');ci.urineColor=this.dataset.v}));
+
+  // 便の性状
+  $$('.cons-b').forEach(b=>b.addEventListener('click',function(){
+    $$('.cons-b').forEach(x=>x.classList.remove('on'));this.classList.add('on');ci.consistency=this.dataset.v}));
+
+  // 排便量
+  $$('.sa').forEach(b=>b.addEventListener('click',function(){
+    $$('.sa').forEach(x=>x.classList.remove('on'));this.classList.add('on');ci.stoolAmt=this.dataset.v}));
+
+  // 便の色
+  $$('#scRow .cb').forEach(b=>b.addEventListener('click',function(){
+    $$('#scRow .cb').forEach(x=>x.classList.remove('on'));this.classList.add('on');ci.stoolColor=this.dataset.v}));
+
+  // 記録ボタン
+  $('btnSubmit').addEventListener('click',submitRec);
+
+  // 一覧表示
+  $('bdDate').addEventListener('change',function(){renderBoard();updateDayNavHi('bdDayNav',$('bdDate').value)});
+  (function(){
+    var grp=document.getElementById('bdDayNav');
+    if(grp){
+      grp.querySelectorAll('button').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          var off=parseInt(this.dataset.off,10)||0;
+          $('bdDate').value=dateOff(off);
+          updateDayNavHi('bdDayNav',$('bdDate').value);
+          renderBoard();
+        });
+      });
+    }
+  })();
+  $('bdRefresh').addEventListener('click',function(){refreshView('board')});
+
+  // タイムライン
+  $('tlDate').addEventListener('change',function(){renderTL();updateDayNavHi('tlDayNav',$('tlDate').value)});
+  (function(){
+    var grp=document.getElementById('tlDayNav');
+    if(grp){
+      grp.querySelectorAll('button').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          var off=parseInt(this.dataset.off,10)||0;
+          $('tlDate').value=dateOff(off);
+          updateDayNavHi('tlDayNav',$('tlDate').value);
+          renderTL();
+        });
+      });
+    }
+  })();
+  $('tlRefresh').addEventListener('click',function(){refreshView('tl')});
+
+  // 下剤モーダル
+  if($('bdLax'))$('bdLax').addEventListener('click',function(){openLaxModal(null,null)});
+  if($('tlLax'))$('tlLax').addEventListener('click',function(){openLaxModal(null,null)});
+  if($('mHistLax'))$('mHistLax').addEventListener('click',function(){
+    if(!curHistRid)return;
+    $('mHist').classList.remove('on');
+    openLaxModal(curHistRid,null);
+  });
+  if($('mLaxCancel'))$('mLaxCancel').addEventListener('click',closeLaxModal);
+  if($('mLaxSave'))$('mLaxSave').addEventListener('click',saveLax);
+  if($('mLaxDel'))$('mLaxDel').addEventListener('click',deleteLaxCur);
+  if($('mLaxMed'))$('mLaxMed').addEventListener('change',function(){
+    var v=this.value;var cs=$('mLaxMedCustom');
+    if(v==='__custom__'){cs.style.display='';cs.focus()}else{cs.style.display='none';cs.value=''}});
+  document.querySelectorAll('.lax-tab').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('.lax-tab').forEach(function(b){b.classList.remove('on')});
+      this.classList.add('on');$('mLaxTabCustom').value='';
+    });
+  });
+  if($('mLaxTabCustom'))$('mLaxTabCustom').addEventListener('input',function(){
+    if(this.value)document.querySelectorAll('.lax-tab').forEach(function(b){b.classList.remove('on')});
+  });
+
+  // 設定
+  $('btnAddRes').addEventListener('click',function(){editResId=null;$('mResT').textContent='入居者を追加';
+    $('mRN').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
+    if($('mRLax'))$('mRLax').value='';
+    ['mRUW','mRUD','mRSW','mRSD'].forEach(function(id){if($(id)){$(id).value='';$(id).placeholder='全体設定: '+(id==='mRUW'?D.cfg.urineWarnH:id==='mRUD'?D.cfg.urineDangerH:id==='mRSW'?D.cfg.stoolWarnD:D.cfg.stoolDangerD)}});
+    $('mRes').classList.add('on')});
+  $('mResCancel').addEventListener('click',function(){$('mRes').classList.remove('on');editResId=null});
+  $('mResSave').addEventListener('click',saveRes);
+  if($('cfgShowInactive'))$('cfgShowInactive').addEventListener('change',renderCfg);
+  $('btnSaveCfg').addEventListener('click',function(){D.cfg={
+    urineWarnH:parseInt($('cfgUW').value)||6,urineDangerH:parseInt($('cfgUD').value)||8,
+    stoolWarnD:parseInt($('cfgSW').value)||2,stoolDangerD:parseInt($('cfgSD').value)||3};save();
+    apiPush('saveCfg',{cfg:D.cfg});showToast('✅ 設定を保存しました')});
+  $('btnCSV').addEventListener('click',expCSV);
+  $('btnJSON').addEventListener('click',expJSON);
+  $('btnImport').addEventListener('click',function(){$('impFile').click()});
+  $('impFile').addEventListener('change',impJSON);
+  $('btnClear').addEventListener('click',function(){
+    customConfirm('全データを削除しますか？\nこの操作は取り消せません。').then(function(ok){
+      if(!ok)return;
+      customConfirm('本当に削除してよいですか？（2回目の確認）').then(function(ok2){
+        if(!ok2)return;localStorage.removeItem('hbcr_v2');location.reload()})})});
+
+  // 詳細モーダル
+  $('mDetDel').addEventListener('click',function(){if(!curRecId)return;
+    customConfirm('この記録を削除しますか？').then(function(ok){
+      if(!ok)return;var delId=curRecId;
+      D.records=D.records.filter(function(r){return r.id!==delId});save();
+      apiPush('delRecord',{id:delId});
+      $('mDet').classList.remove('on');curRecId=null;renderBoard();renderTL();showToast('🗑️ 削除しました')})});
+  $('mDetClose').addEventListener('click',function(){$('mDet').classList.remove('on');curRecId=null;curDetRid=null});
+  if($('mDetHist'))$('mDetHist').addEventListener('click',function(){
+    if(!curDetRid)return;
+    var rid=curDetRid;
+    $('mDet').classList.remove('on');curRecId=null;curDetRid=null;
+    showHist(rid);
+  });
+  // 5日ビュー
+  if($('m5DayClose'))$('m5DayClose').addEventListener('click',close5Day);
+  if($('m5DayPrev'))$('m5DayPrev').addEventListener('click',function(){shift5Day(-5)});
+  if($('m5DayNext'))$('m5DayNext').addEventListener('click',function(){shift5Day(5)});
+  if($('m5DayToday'))$('m5DayToday').addEventListener('click',function(){if(cur5DayRid)showFiveDay(cur5DayRid,today())});
+  if($('m5DayHist'))$('m5DayHist').addEventListener('click',function(){
+    if(!cur5DayRid)return;var rid=cur5DayRid;close5Day();showHist(rid);
+  });
+  if($('mHist5Day'))$('mHist5Day').addEventListener('click',function(){
+    if(!curHistRid)return;var rid=curHistRid;$('mHist').classList.remove('on');showFiveDay(rid);
+  });
+  $('mDetEdit').addEventListener('click',function(){if(!curRecId)return;editRec(curRecId)});
+  $('mHistClose').addEventListener('click',function(){$('mHist').classList.remove('on')});
+  $('mHistInput').addEventListener('click',function(){
+    if(curHistRid==null)return;
+    var res=D.residents.find(function(r){return r.id===curHistRid});
+    if(!res||res.active===false){showToast('⚠️ 退去済の入居者には入力できません');return}
+    ci.rid=curHistRid;
+    $('mHist').classList.remove('on');
+    showSc('input');
+    buildResSel();
+    $('resSel').value=String(curHistRid);
+    showToast('✏️ '+res.name+' で入力を開始')});
+
+  // 確認モーダル
+  $('mConfYes').addEventListener('click',function(){$('mConf').classList.remove('on');if(_confResolve){_confResolve(true);_confResolve=null}});
+  $('mConfNo').addEventListener('click',function(){$('mConf').classList.remove('on');if(_confResolve){_confResolve(false);_confResolve=null}});
+
+  // ローディングオーバーレイ — タップで閉じる
+  $('ldOv').addEventListener('click',function(){ldHide()});
+
+  // ── Google Sheets API 連携 ──
+  apiUrl=localStorage.getItem(API_KEY)||'';
+  if($('cfgApi'))$('cfgApi').value=apiUrl;
+  if(apiUrl){
+    apiSetStatus('sy');
+    syncFromAPI(true).then(ok=>{
+      if(ok){buildResSel();renderCfg();showToast('✅ APIと同期しました')}
+    })}
+
+  $('btnApiSave').addEventListener('click',function(){
+    const url=$('cfgApi').value.trim();
+    if(!url){showToast('⚠️ URLを入力してください');return}
+    if(!url.startsWith('https://script.google.com/')){showToast('⚠️ GASのURLを確認してください');return}
+    apiUrl=url;localStorage.setItem(API_KEY,url);
+    apiSetStatus('sy');
+    syncFromAPI(true).then(ok=>{
+      if(ok){buildResSel();renderCfg();showToast('✅ 接続・同期しました')}
+      else showToast('⚠️ URL確認後、再度お試しください')})});
+
+  $('btnApiSync').addEventListener('click',async function(){
+    if(!apiUrl){showToast('⚠️ 先にURLを保存してください');return}
+    const ok=await syncFromAPI(true);
+    if(ok){
+      buildResSel();renderCfg();
+      const sc=document.querySelector('.scr.on');
+      if(sc&&sc.id==='sc-board')renderBoard();
+      if(sc&&sc.id==='sc-tl')renderTL();
+      showToast('✅ 同期完了')}});
+
+  $('btnApiClear').addEventListener('click',function(){
+    customConfirm('Google Sheets連携を解除しますか？\nローカルデータは保持されます。').then(function(ok){
+      if(!ok)return;
+      apiUrl='';localStorage.removeItem(API_KEY);
+      $('cfgApi').value='';
+      apiSetStatus('of');
+      $('apiStatus').textContent='GASデプロイ後に取得したURLを入力して「URLを保存・接続」を押してください。';
+      showToast('🔌 連携を解除しました')})});
+}
+
+document.addEventListener('DOMContentLoaded',init);
+
+// グローバルエラーハンドラ — 未処理エラーでフリーズしないよう保護
+window.onerror=function(msg){console.error('AppError:',msg);ldHide();return false};
+window.onunhandledrejection=function(ev){console.error('UnhandledRejection:',ev.reason);ldHide()};
+</script>
+</body>
+</html>
