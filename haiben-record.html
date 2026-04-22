@@ -829,6 +829,19 @@ function isValidRes(r){
   return true}
 function normalizeData(){
   // API/Sheetsから来たデータの型を正規化
+  // ローカルタイム基準のフォーマッタ（toISOString は UTC になるため使わない）
+  function _p2(n){return(n<10?'0':'')+n}
+  function fmtLocalYMD(d){return d.getFullYear()+'-'+_p2(d.getMonth()+1)+'-'+_p2(d.getDate())}
+  function fmtLocalHM(d){return _p2(d.getHours())+':'+_p2(d.getMinutes())}
+  // 日付Dateの判定: Sheetsの時刻セルは 1899-12-30 起点
+  function isTimeOnlyDate(d){return d.getFullYear()===1899&&d.getMonth()===11&&d.getDate()===30}
+  // "2026-04-21T15:30:00.000Z" や "1899-12-30T04:20:00.000Z" のような文字列を分解
+  function parseIsoLike(s){
+    if(typeof s!=='string')return null;
+    var m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if(!m)return null;
+    return{y:+m[1],mo:+m[2],da:+m[3],hh:+m[4],mi:+m[5]};
+  }
   if(D.residents)D.residents.forEach(function(r){
     if(r.id!=null)r.id=toNum(r.id);
     if(r.name!=null)r.name=String(r.name).trim();
@@ -838,11 +851,39 @@ function normalizeData(){
   if(D.records)D.records.forEach(function(r){
     if(r.residentId!=null)r.residentId=toNum(r.residentId);
     if(r.urineAmt!=null&&r.urineAmt!==''){var n=toNum(r.urineAmt);if(n!==null)r.urineAmt=n;}
+    // datetime: Dateオブジェクト → ローカル年月日時分に変換
     if(r.datetime&&typeof r.datetime==='object'&&r.datetime.toISOString){
-      // Date objectをstring化（Sheetsが返す場合がある）
-      var dt=r.datetime;r.datetime=dt.toISOString().slice(0,16);
-      r.date=r.datetime.split('T')[0];r.time=r.datetime.split('T')[1]}
-    if(r.date&&typeof r.date==='object'&&r.date.toISOString)r.date=r.date.toISOString().split('T')[0];
+      var dt=r.datetime;
+      r.datetime=fmtLocalYMD(dt)+'T'+fmtLocalHM(dt);
+    }
+    // datetime: 文字列でも 1899-12-30 起点になっているもの等を排除し、date+time から再構築
+    if(typeof r.datetime==='string'){
+      var p=parseIsoLike(r.datetime);
+      if(p&&p.y===1899&&p.mo===12&&p.da===30){r.datetime=''}  // 時刻のみの値は datetime として無効
+    }
+    // date: Date型 or 1899-12-30起点文字列を排除
+    if(r.date&&typeof r.date==='object'&&r.date.toISOString){
+      r.date=isTimeOnlyDate(r.date)?'':fmtLocalYMD(r.date);
+    }else if(typeof r.date==='string'){
+      var pd=parseIsoLike(r.date);
+      if(pd){r.date=(pd.y===1899&&pd.mo===12&&pd.da===30)?'':(pd.y+'-'+_p2(pd.mo)+'-'+_p2(pd.da))}
+    }
+    // time: Date型（1899-12-30起点）→ HH:MM のみに変換
+    if(r.time&&typeof r.time==='object'&&r.time.toISOString){
+      r.time=fmtLocalHM(r.time);
+    }else if(typeof r.time==='string'){
+      var pt=parseIsoLike(r.time);
+      if(pt)r.time=_p2(pt.hh)+':'+_p2(pt.mi);
+      else{
+        // "HH:MM:SS" → "HH:MM"
+        var mm=r.time.match(/^(\d{2}):(\d{2})/);if(mm)r.time=mm[1]+':'+mm[2];
+      }
+    }
+    // datetime が欠落/不正でも、date + time があれば再構築
+    if((!r.datetime||typeof r.datetime!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(r.datetime))
+       && r.date && r.time){
+      r.datetime=r.date+'T'+r.time;
+    }
     if(r.id==null)r.id=uid()})}
 function cleanData(){
   normalizeData();
