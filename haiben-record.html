@@ -177,6 +177,18 @@ textarea{resize:vertical;min-height:76px}
 .ev-d{width:8px;height:8px;border-radius:50%;display:inline-block;margin:0 1px}
 .ev-d.u{background:var(--u)}.ev-d.s{background:#a1887f}.ev-d.b{background:#e91e63}
 .ev-d.l{background:#ffd600;border:1px solid #f9a825;box-sizing:border-box}
+/* 排泄元マーカー（タイムライン用） */
+.ev-m{display:inline-block;font-size:13px;line-height:1;margin:0 1px;vertical-align:middle;font-weight:700}
+.ev-m.us{color:#0d47a1}   /* 自尿: 濃い青の○ */
+.ev-m.up{color:#4fc3f7}   /* パッド内排尿: 水色の● */
+.ev-m.st{color:#4e342e}   /* トイレ排便: 濃い茶の△ */
+.ev-m.sp{color:#c8a97e}   /* パッド内排便: ベージュの▲ */
+/* 排泄元トグル（入力画面用） */
+.src-g{display:flex;gap:8px;flex-wrap:wrap}
+.src-b{flex:1;min-width:110px;padding:10px 14px;border:2px solid var(--g2);border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:var(--g7);transition:all .15s}
+.src-b.on{background:#e3f2fd;border-color:#1565c0;color:#0d47a1}
+.src-b.on.pad{background:#e1f5fe;border-color:#4fc3f7;color:#01579b}
+.src-b.on.stp{background:#f5ecd9;border-color:#c8a97e;color:#5d4037}
 .lax-mk{display:inline-block;font-size:10px;padding:1px 4px;border-radius:3px;background:#f3e5f5;color:#6a1b9a;font-weight:700;border:1px solid #ce93d8;white-space:nowrap}
 .bn.blax{background:#7b1fa2;color:#fff}
 .bn.blax:hover{background:#6a1b9a}
@@ -303,6 +315,13 @@ textarea{resize:vertical;min-height:76px}
   <div class="cd" id="secU" style="display:none">
     <div class="cd-t">💧 排尿の詳細</div>
     <div class="fg">
+      <label class="fl">排尿元（複数選択可）</label>
+      <div class="src-g" id="uSrcRow">
+        <button class="src-b" data-v="self">💧 自尿</button>
+        <button class="src-b pad" data-v="pad">🩲 パッド内</button>
+      </div>
+    </div>
+    <div class="fg">
       <label class="fl">排尿量</label>
       <div style="font-size:11px;color:var(--g6);font-weight:700;margin-bottom:6px">▸ 定性的</div>
       <div class="qg" style="margin-bottom:10px">
@@ -342,6 +361,13 @@ textarea{resize:vertical;min-height:76px}
   <!-- 排便詳細 -->
   <div class="cd" id="secS" style="display:none">
     <div class="cd-t">🟤 排便の詳細</div>
+    <div class="fg">
+      <label class="fl">排便元（複数選択可）</label>
+      <div class="src-g" id="sSrcRow">
+        <button class="src-b" data-v="toilet">🚽 トイレ</button>
+        <button class="src-b stp" data-v="pad">🩲 パッド内</button>
+      </div>
+    </div>
     <div class="fg">
       <label class="fl">便の性状</label>
       <div class="cons-g" id="consGrid">
@@ -435,11 +461,12 @@ textarea{resize:vertical;min-height:76px}
   </div>
   <div class="cd">
     <div class="tl-leg">
-      <div class="tl-leg-i"><span class="ev-d u"></span>排尿</div>
-      <div class="tl-leg-i"><span class="ev-d s"></span>排便</div>
-      <div class="tl-leg-i"><span class="ev-d b"></span>両方</div>
+      <div class="tl-leg-i"><span class="ev-m us">◯</span>自尿</div>
+      <div class="tl-leg-i"><span class="ev-m up">●</span>パッド尿</div>
+      <div class="tl-leg-i"><span class="ev-m st">△</span>トイレ便</div>
+      <div class="tl-leg-i"><span class="ev-m sp">▲</span>パッド便</div>
       <div class="tl-leg-i"><span class="ev-d l"></span>下剤</div>
-      <div class="tl-leg-i"><span style="font-size:12px;color:#455a64">✖️</span>誘導・排泄なし</div>
+      <div class="tl-leg-i"><span style="font-size:12px;color:#455a64">✖️</span>誘導</div>
       <div style="font-size:11px;color:var(--g5);margin-left:auto">セルタップで詳細</div>
     </div>
     <div class="tl-w" id="tlBox"></div>
@@ -523,6 +550,7 @@ textarea{resize:vertical;min-height:76px}
 <div class="mo" id="mRes"><div class="md">
   <div class="md-t" id="mResT">入居者を追加</div>
   <div class="fg"><label class="fl">氏名</label><input type="text" id="mRN" placeholder="山田 花子"></div>
+  <div class="fg"><label class="fl">フリガナ（五十音順の並び替え用）</label><input type="text" id="mRY" placeholder="ヤマダ ハナコ"></div>
   <div class="fg"><label class="fl">居室番号</label><input type="text" id="mRR" placeholder="101"></div>
   <div class="fg"><label class="fl">性別</label>
     <select id="mRG"><option value="女性">女性</option><option value="男性">男性</option></select></div>
@@ -627,7 +655,27 @@ textarea{resize:vertical;min-height:76px}
 <script>
 /* ═══════════ DATA ═══════════ */
 let D={residents:[],records:[],cfg:{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3}};
-let ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null};
+let ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false};
+/* 排泄元マーカー（タイムライン／5日表示共通） */
+function tlMarks(r){
+  if(r.type==='none')return'<span style="font-size:13px;color:#455a64;font-weight:700">✖️</span>';
+  if(r.type==='laxative')return'<span class="ev-d l"></span>';
+  var h='';
+  if(r.type==='urine'||r.type==='both'){
+    var us=r.urineSrc||'self';
+    if(us==='self'||us==='both')h+='<span class="ev-m us" title="自尿">◯</span>';
+    if(us==='pad'||us==='both')h+='<span class="ev-m up" title="パッド内排尿">●</span>';
+  }
+  if(r.type==='stool'||r.type==='both'){
+    var ss=r.stoolSrc||'toilet';
+    if(ss==='toilet'||ss==='both')h+='<span class="ev-m st" title="トイレでの排便">△</span>';
+    if(ss==='pad'||ss==='both')h+='<span class="ev-m sp" title="パッド内排便">▲</span>';
+  }
+  return h||'<span class="ev-d b"></span>';
+}
+/* ci の bool を文字列へ */
+function uSrcStr(){return ci.uSelf&&ci.uPad?'both':ci.uSelf?'self':ci.uPad?'pad':null}
+function sSrcStr(){return ci.sToilet&&ci.sPad?'both':ci.sToilet?'toilet':ci.sPad?'pad':null}
 let editResId=null,curRecId=null,curHistRid=null,editRecId=null,editLaxId=null,curDetRid=null;
 const BL={1:'硬球状',2:'硬塊状',3:'ひび割れ',4:'普通便',5:'軟便',6:'泥状便',7:'水様便'};
 
@@ -900,8 +948,11 @@ function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav 
   if(name==='cfg')renderCfg()}
 
 /* ═══════════ RESIDENT SELECT ═══════════ */
+/* 五十音順：フリガナ優先、未設定なら氏名でフォールバック */
+function resSortKey(r){return String((r&&r.yomi)?r.yomi:(r&&r.name)?r.name:'').trim()}
+function resSortAiu(a,b){return resSortKey(a).localeCompare(resSortKey(b),'ja')}
 function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name})
-  .sort(function(a,b){return(a.name||'').localeCompare(b.name||'','ja')});const cv=ci.rid;
+  .sort(resSortAiu);const cv=ci.rid;
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
     a.map(r=>'<option value="'+r.id+'"'+(cv===r.id?' selected':'')+'>'+r.name+'　'+r.room+'号室</option>').join('');
   if(ci.rid)sel.value=ci.rid}
@@ -924,6 +975,7 @@ function submitRec(){
     if(!existing){showToast('⚠️ 記録が見つかりません');editRecId=null;resetForm();return}
     existing.residentId=ci.rid;existing.date=d;existing.time=t;existing.datetime=dt;
     existing.type=ci.type;existing.urineAmt=ua;existing.urineColor=ci.urineColor;
+    existing.urineSrc=uSrcStr();existing.stoolSrc=sSrcStr();
     existing.stoolAmt=ci.stoolAmt;existing.consistency=ci.consistency;existing.stoolColor=ci.stoolColor;
     existing.notes=$('recNote').value.trim();existing.staff=$('recStaff').value.trim();
     existing.updatedAt=new Date().toISOString();
@@ -938,7 +990,8 @@ function submitRec(){
     return;
   }
   const rec={id:uid(),residentId:ci.rid,date:d,time:t,datetime:dt,type:ci.type,
-    urineAmt:ua,urineColor:ci.urineColor,stoolAmt:ci.stoolAmt,consistency:ci.consistency,stoolColor:ci.stoolColor,
+    urineAmt:ua,urineColor:ci.urineColor,urineSrc:uSrcStr(),
+    stoolAmt:ci.stoolAmt,consistency:ci.consistency,stoolColor:ci.stoolColor,stoolSrc:sSrcStr(),
     notes:$('recNote').value.trim(),staff:$('recStaff').value.trim(),createdAt:new Date().toISOString()};
   D.records.push(rec);save();
   apiPush('addRecord',{record:rec});
@@ -970,6 +1023,10 @@ function editRec(id){
   ci.stoolAmt=r.stoolAmt;
   ci.consistency=r.consistency;
   ci.stoolColor=r.stoolColor;
+  var _us=r.urineSrc||(r.type==='urine'||r.type==='both'?'self':null);
+  var _ss=r.stoolSrc||(r.type==='stool'||r.type==='both'?'toilet':null);
+  ci.uSelf=(_us==='self'||_us==='both');ci.uPad=(_us==='pad'||_us==='both');
+  ci.sToilet=(_ss==='toilet'||_ss==='both');ci.sPad=(_ss==='pad'||_ss==='both');
   // 入居者プルダウン
   buildResSel();
   $('resSel').value=String(ci.rid);
@@ -998,6 +1055,9 @@ function editRec(id){
   $$('.sa').forEach(function(b){b.classList.remove('on');if(b.dataset.v===r.stoolAmt)b.classList.add('on')});
   // 便の色
   $$('#scRow .cb').forEach(function(b){b.classList.remove('on');if(b.dataset.v===r.stoolColor)b.classList.add('on')});
+  // 排尿元・排便元
+  $$('#uSrcRow .src-b').forEach(function(b){b.classList.toggle('on',(b.dataset.v==='self'&&ci.uSelf)||(b.dataset.v==='pad'&&ci.uPad))});
+  $$('#sSrcRow .src-b').forEach(function(b){b.classList.toggle('on',(b.dataset.v==='toilet'&&ci.sToilet)||(b.dataset.v==='pad'&&ci.sPad))});
   // 備考・記録者
   $('recNote').value=r.notes||'';
   $('recStaff').value=r.staff||'';
@@ -1027,13 +1087,14 @@ function updateSubmitBtnLabel(){
   }
 }
 
-function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null};
+function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false};
   editRecId=null;
   setNow();$('recNote').value='';$('resSel').value='';
   $$('.type-btn').forEach(b=>b.classList.remove('su','ss','sb','sn'));
   $$('.qb').forEach(b=>b.classList.remove('on'));
   $$('.cb').forEach(b=>b.classList.remove('on'));
   $$('.cons-b').forEach(b=>b.classList.remove('on'));
+  $$('.src-b').forEach(b=>b.classList.remove('on'));
   $('secU').style.display='none';$('secS').style.display='none';
   $('cusU').style.display='none';$('cusUV').value='';
   updateSubmitBtnLabel();}
@@ -1139,8 +1200,7 @@ function renderTL(){const date=$('tlDate').value||today();
     for(let s=0;s<48;s++){const recs=bk[s]||[];
       if(!recs.length){cells+='<td class="tl-c"></td>';continue}
       let inner=recs.map(r=>{
-        const cls=(r.type==='urine'?'u':r.type==='stool'?'s':r.type==='laxative'?'l':r.type==='none'?'n':'b');
-        const dot=r.type==='none'?'<span style="font-size:13px;color:#455a64;font-weight:700">✖️</span>':'<span class="ev-d '+cls+'"></span>';
+        const dot=tlMarks(r);
         let info='';
         if(r.type==='urine'||r.type==='both'){info+=fmtUA(r.urineAmt)}
         if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c)}
@@ -1218,8 +1278,7 @@ function showFiveDay(rid,endDate){
       var recs=bk[s]||[];
       if(!recs.length){cells+='<td class="tl-c"></td>';continue}
       var inner=recs.map(function(r){
-        var cls=(r.type==='urine'?'u':r.type==='stool'?'s':r.type==='laxative'?'l':r.type==='none'?'n':'b');
-        var dot=r.type==='none'?'<span style="font-size:13px;color:#455a64;font-weight:700">✖️</span>':'<span class="ev-d '+cls+'"></span>';
+        var dot=tlMarks(r);
         var info='';
         if(r.type==='urine'||r.type==='both')info+=fmtUA(r.urineAmt);
         if(r.type==='stool'||r.type==='both'){var c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c)}
@@ -1402,7 +1461,7 @@ function openLaxModal(presetRid,editId){
   // 入居者セレクタ組み立て
   var sel=$('mLaxRes');
   var a=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name})
-    .sort(function(a,b){return(a.name||'').localeCompare(b.name||'','ja')});
+    .sort(resSortAiu);
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
     a.map(function(r){return'<option value="'+r.id+'">'+r.name+'　'+r.room+'号室</option>'}).join('');
   // 初期値
@@ -1555,7 +1614,7 @@ function toggleResHidden(id,makeHidden){
 }
 
 function editRes(id){const r=D.residents.find(x=>x.id===id);if(!r)return;editResId=id;
-  $('mResT').textContent='入居者を編集';$('mRN').value=r.name;$('mRR').value=r.room;$('mRG').value=r.gender||'女性';
+  $('mResT').textContent='入居者を編集';$('mRN').value=r.name;if($('mRY'))$('mRY').value=r.yomi||'';$('mRR').value=r.room;$('mRG').value=r.gender||'女性';
   if($('mRS'))$('mRS').value=(r.active===false)?'inactive':'active';
   if($('mRLax'))$('mRLax').value=r.laxNote||'';
   var rc=r.cfg||{};
@@ -1571,6 +1630,7 @@ async function delRes(id){var r=D.residents.find(function(x){return x.id===id});
   apiPush('delRes',{id:id});
   renderCfg();buildResSel();showToast('🗑️ 削除しました')}
 function saveRes(){const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$('mRG').value;
+  var ym=$('mRY')?$('mRY').value.trim():'';
   var st=$('mRS')?$('mRS').value:'active';
   if(!nm||!rm){showToast('⚠️ 氏名と居室番号を入力してください');return}
   var laxNote=$('mRLax')?$('mRLax').value.trim():'';
@@ -1580,9 +1640,9 @@ function saveRes(){const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$(
   if(sw!=null)cfgOv.stoolWarnD=sw;if(sd!=null)cfgOv.stoolDangerD=sd;
   var hasCfg=Object.keys(cfgOv).length>0;
   let resObj;
-  if(editResId!==null){const r=D.residents.find(x=>x.id===editResId);if(r){r.name=nm;r.room=rm;r.gender=gn;r.active=(st!=='inactive');r.laxNote=laxNote;if(hasCfg)r.cfg=cfgOv;else delete r.cfg;resObj=r}}
+  if(editResId!==null){const r=D.residents.find(x=>x.id===editResId);if(r){r.name=nm;r.yomi=ym;r.room=rm;r.gender=gn;r.active=(st!=='inactive');r.laxNote=laxNote;if(hasCfg)r.cfg=cfgOv;else delete r.cfg;resObj=r}}
   else{var nid=nextResId();
-    resObj={id:nid,name:nm,room:rm,gender:gn,active:(st!=='inactive'),laxNote:laxNote};if(hasCfg)resObj.cfg=cfgOv;D.residents.push(resObj)}
+    resObj={id:nid,name:nm,yomi:ym,room:rm,gender:gn,active:(st!=='inactive'),laxNote:laxNote};if(hasCfg)resObj.cfg=cfgOv;D.residents.push(resObj)}
   save();
   if(resObj)apiPush('saveRes',{resident:resObj});
   $('mRes').classList.remove('on');editResId=null;renderCfg();buildResSel();showToast('✅ 保存しました')}
@@ -1633,7 +1693,29 @@ function init(){
     $$('.type-btn').forEach(x=>x.classList.remove('su','ss','sb','sn'));
     this.classList.add(t==='urine'?'su':t==='stool'?'ss':t==='none'?'sn':'sb');
     $('secU').style.display=(t==='urine'||t==='both')?'block':'none';
-    $('secS').style.display=(t==='stool'||t==='both')?'block':'none'}));
+    $('secS').style.display=(t==='stool'||t==='both')?'block':'none';
+    // 初期状態: 排尿=自尿、排便=トイレ
+    if((t==='urine'||t==='both')&&!ci.uSelf&&!ci.uPad){ci.uSelf=true;
+      $$('#uSrcRow .src-b').forEach(x=>x.classList.toggle('on',x.dataset.v==='self'))}
+    if((t==='stool'||t==='both')&&!ci.sToilet&&!ci.sPad){ci.sToilet=true;
+      $$('#sSrcRow .src-b').forEach(x=>x.classList.toggle('on',x.dataset.v==='toilet'))}
+    if(t==='urine'||t==='none'){ci.sToilet=false;ci.sPad=false;$$('#sSrcRow .src-b').forEach(x=>x.classList.remove('on'))}
+    if(t==='stool'||t==='none'){ci.uSelf=false;ci.uPad=false;$$('#uSrcRow .src-b').forEach(x=>x.classList.remove('on'))}
+  }));
+
+  // 排尿元・排便元（複数選択可）
+  $$('#uSrcRow .src-b').forEach(b=>b.addEventListener('click',function(){
+    this.classList.toggle('on');
+    var v=this.dataset.v;
+    if(v==='self')ci.uSelf=this.classList.contains('on');
+    if(v==='pad')ci.uPad=this.classList.contains('on');
+  }));
+  $$('#sSrcRow .src-b').forEach(b=>b.addEventListener('click',function(){
+    this.classList.toggle('on');
+    var v=this.dataset.v;
+    if(v==='toilet')ci.sToilet=this.classList.contains('on');
+    if(v==='pad')ci.sPad=this.classList.contains('on');
+  }));
 
   // 排尿量
   $$('.ua').forEach(b=>b.addEventListener('click',function(){
