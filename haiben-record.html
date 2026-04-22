@@ -1694,11 +1694,7 @@ function init(){
     this.classList.add(t==='urine'?'su':t==='stool'?'ss':t==='none'?'sn':'sb');
     $('secU').style.display=(t==='urine'||t==='both')?'block':'none';
     $('secS').style.display=(t==='stool'||t==='both')?'block':'none';
-    // 初期状態: 排尿=自尿、排便=トイレ
-    if((t==='urine'||t==='both')&&!ci.uSelf&&!ci.uPad){ci.uSelf=true;
-      $$('#uSrcRow .src-b').forEach(x=>x.classList.toggle('on',x.dataset.v==='self'))}
-    if((t==='stool'||t==='both')&&!ci.sToilet&&!ci.sPad){ci.sToilet=true;
-      $$('#sSrcRow .src-b').forEach(x=>x.classList.toggle('on',x.dataset.v==='toilet'))}
+    // 非表示側のソース選択はクリア（残留防止）
     if(t==='urine'||t==='none'){ci.sToilet=false;ci.sPad=false;$$('#sSrcRow .src-b').forEach(x=>x.classList.remove('on'))}
     if(t==='stool'||t==='none'){ci.uSelf=false;ci.uPad=false;$$('#uSrcRow .src-b').forEach(x=>x.classList.remove('on'))}
   }));
@@ -1803,7 +1799,7 @@ function init(){
 
   // 設定
   $('btnAddRes').addEventListener('click',function(){editResId=null;$('mResT').textContent='入居者を追加';
-    $('mRN').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
+    $('mRN').value='';if($('mRY'))$('mRY').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
     if($('mRLax'))$('mRLax').value='';
     ['mRUW','mRUD','mRSW','mRSD'].forEach(function(id){if($(id)){$(id).value='';$(id).placeholder='全体設定: '+(id==='mRUW'?D.cfg.urineWarnH:id==='mRUD'?D.cfg.urineDangerH:id==='mRSW'?D.cfg.stoolWarnD:D.cfg.stoolDangerD)}});
     $('mRes').classList.add('on')});
