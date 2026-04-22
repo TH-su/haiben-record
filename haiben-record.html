@@ -747,17 +747,19 @@ async function syncFromAPI(showLoader){
       if(r.room!=null)r.room=String(r.room).trim();
       if(r.active===undefined||r.active===null||r.active==='TRUE'||r.active===true)r.active=true;else r.active=false}});
     apiRec.forEach(function(r){if(r&&r.residentId!=null)r.residentId=toNum(r.residentId)});
-    // マージ: ローカル優先。API側のデータはローカルに存在しないIDのみ追加する（ローカル変更を絶対に失わない）
+    // マージ: API優先（サーバーが真実のソース）。同じIDはAPI側で上書き、ローカルのみのIDは保持（オフライン作成分）
     var localRes=Array.isArray(D.residents)?D.residents:[];
     var localRec=Array.isArray(D.records)?D.records:[];
     var seenResId={};
     var mergedRes=[];
-    localRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
+    // APIを先に入れる（勝者）
     apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
+    // ローカルのみのID（未送信・サンプルデータ以外）を追加
+    localRes.forEach(function(r){if(r&&r.id!=null&&!r._seed){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
     var seenRecId={};
     var mergedRec=[];
-    localRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){mergedRec.push(r);seenRecId[r.id]=true}}});
     apiRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){mergedRec.push(r);seenRecId[r.id]=true}}});
+    localRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){mergedRec.push(r);seenRecId[r.id]=true}}});
     D.residents=mergedRes;
     D.records=mergedRec;
     D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
@@ -867,11 +869,11 @@ function load(){
   }else{
     isNew=true;
     D={residents:[
-    {id:1,name:'山田 花子',room:'101',gender:'女性',active:true},
-    {id:2,name:'佐藤 次郎',room:'102',gender:'男性',active:true},
-    {id:3,name:'田中 幸子',room:'103',gender:'女性',active:true},
-    {id:4,name:'鈴木 一郎',room:'104',gender:'男性',active:true},
-    {id:5,name:'渡辺 節子',room:'105',gender:'女性',active:true}],records:[],cfg:null}
+    {id:1,name:'山田 花子',room:'101',gender:'女性',active:true,_seed:true},
+    {id:2,name:'佐藤 次郎',room:'102',gender:'男性',active:true,_seed:true},
+    {id:3,name:'田中 幸子',room:'103',gender:'女性',active:true,_seed:true},
+    {id:4,name:'鈴木 一郎',room:'104',gender:'男性',active:true,_seed:true},
+    {id:5,name:'渡辺 節子',room:'105',gender:'女性',active:true,_seed:true}],records:[],cfg:null}
   }
   if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
   if(!Array.isArray(D.residents))D.residents=[];
@@ -1871,7 +1873,13 @@ function init(){
   if(apiUrl){
     apiSetStatus('sy');
     syncFromAPI(true).then(ok=>{
-      if(ok){buildResSel();renderCfg();showToast('✅ APIと同期しました')}
+      if(ok){
+        buildResSel();renderCfg();
+        var sc=document.querySelector('.scr.on');
+        if(sc&&sc.id==='sc-board')renderBoard();
+        if(sc&&sc.id==='sc-tl')renderTL();
+        showToast('✅ APIと同期しました')
+      }
     })}
 
   $('btnApiSave').addEventListener('click',function(){
@@ -1879,9 +1887,17 @@ function init(){
     if(!url){showToast('⚠️ URLを入力してください');return}
     if(!url.startsWith('https://script.google.com/')){showToast('⚠️ GASのURLを確認してください');return}
     apiUrl=url;localStorage.setItem(API_KEY,url);
+    // API接続初回: サンプル入居者（_seed）を削除してサーバーデータをクリーンに取り込む
+    if(Array.isArray(D.residents)){D.residents=D.residents.filter(function(r){return !r._seed});save()}
     apiSetStatus('sy');
     syncFromAPI(true).then(ok=>{
-      if(ok){buildResSel();renderCfg();showToast('✅ 接続・同期しました')}
+      if(ok){
+        buildResSel();renderCfg();
+        var sc=document.querySelector('.scr.on');
+        if(sc&&sc.id==='sc-board')renderBoard();
+        if(sc&&sc.id==='sc-tl')renderTL();
+        showToast('✅ 接続・同期しました')
+      }
       else showToast('⚠️ URL確認後、再度お試しください')})});
 
   $('btnApiSync').addEventListener('click',async function(){
