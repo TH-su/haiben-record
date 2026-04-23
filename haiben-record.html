@@ -222,6 +222,8 @@ textarea{resize:vertical;min-height:76px}
 .mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;
   align-items:center;justify-content:center;padding:16px}
 .mo.on{display:flex}
+/* 記録詳細モーダルは他のモーダル（5日表示・履歴など）の上に重ねる */
+#mDet{z-index:320}
 .md{background:#fff;border-radius:var(--r);padding:22px;width:100%;max-width:440px;
   max-height:85vh;overflow-y:auto;box-shadow:0 3px 12px rgba(0,0,0,.15)}
 .md-t{font-size:16px;font-weight:700;margin-bottom:15px}
