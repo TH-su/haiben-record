@@ -224,6 +224,8 @@ textarea{resize:vertical;min-height:76px}
 .mo.on{display:flex}
 /* 記録詳細モーダルは他のモーダル（5日表示・履歴など）の上に重ねる */
 #mDet{z-index:320}
+/* 確認ダイアログは全モーダルの最前面 */
+#mConf{z-index:340}
 .md{background:#fff;border-radius:var(--r);padding:22px;width:100%;max-width:440px;
   max-height:85vh;overflow-y:auto;box-shadow:0 3px 12px rgba(0,0,0,.15)}
 .md-t{font-size:16px;font-weight:700;margin-bottom:15px}
@@ -1049,15 +1051,20 @@ function submitRec(){
 function editRec(id){
   var r=D.records.find(function(x){return x.id===id});
   if(!r){showToast('⚠️ 記録が見つかりません');return}
+  // 背後に重なっているモーダルも閉じる（5日表示・履歴・詳細）
+  function _closeStackedModals(){
+    $('mDet').classList.remove('on');
+    if($('m5Day'))$('m5Day').classList.remove('on');
+    if($('mHist'))$('mHist').classList.remove('on');
+  }
   // 下剤記録は専用モーダルを開く
   if(r.type==='laxative'){
-    $('mDet').classList.remove('on');
+    _closeStackedModals();
     openLaxModal(null,id);
     return;
   }
   editRecId=id;
-  // 詳細モーダルを閉じる
-  $('mDet').classList.remove('on');
+  _closeStackedModals();
   // 入力画面に移動
   showSc('input');
   // フォームに値を流し込む
