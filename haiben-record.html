@@ -115,7 +115,11 @@ textarea{resize:vertical;min-height:76px}
 .cus-r input{width:120px}
 
 /* board table */
-.bd-hdr{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+/* タブレット横などでも上部の日付操作が青ヘッダーに隠れないよう常時表示 */
+.bd-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;
+  position:sticky;top:52px;background:var(--g0);z-index:50;padding:8px 0;
+  border-bottom:1px solid var(--g2)}
+@media(max-height:640px){.bd-hdr{top:48px;padding:6px 0}}
 .bd-hdr input[type="date"]{width:auto;min-height:44px;padding:6px 10px;font-size:14px;
   border:1px solid var(--g2);border-radius:8px;touch-action:manipulation}
 .dn-grp{display:inline-flex;gap:4px;flex-wrap:wrap}
@@ -840,10 +844,18 @@ function normalizeData(){
   // 日付Dateの判定: Sheetsの時刻セルは 1899-12-30 起点
   function isTimeOnlyDate(d){return d.getFullYear()===1899&&d.getMonth()===11&&d.getDate()===30}
   // "2026-04-21T15:30:00.000Z" や "1899-12-30T04:20:00.000Z" のような文字列を分解
+  // Zや±hh:mm等のTZ指定がある場合はローカル時刻に変換してから分解（JSTずれ防止）
   function parseIsoLike(s){
     if(typeof s!=='string')return null;
-    var m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    var m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+\-]\d{2}:?\d{2})?/);
     if(!m)return null;
+    // TZ付きはローカルへ変換（ただし 1899-12-30 の Sheets 時刻セルはそのまま返す：後段で無効判定）
+    if(m[7]&&!(+m[1]===1899&&+m[2]===12&&+m[3]===30)){
+      var d=new Date(s);
+      if(!isNaN(d.getTime())){
+        return{y:d.getFullYear(),mo:d.getMonth()+1,da:d.getDate(),hh:d.getHours(),mi:d.getMinutes()};
+      }
+    }
     return{y:+m[1],mo:+m[2],da:+m[3],hh:+m[4],mi:+m[5]};
   }
   if(D.residents)D.residents.forEach(function(r){
@@ -861,9 +873,15 @@ function normalizeData(){
       r.datetime=fmtLocalYMD(dt)+'T'+fmtLocalHM(dt);
     }
     // datetime: 文字列でも 1899-12-30 起点になっているもの等を排除し、date+time から再構築
+    // Z付き(UTC)文字列はローカル時刻ベースの "YYYY-MM-DDTHH:MM" に書き換え（JSTずれによる日付変動防止）
     if(typeof r.datetime==='string'){
       var p=parseIsoLike(r.datetime);
-      if(p&&p.y===1899&&p.mo===12&&p.da===30){r.datetime=''}  // 時刻のみの値は datetime として無効
+      if(p){
+        if(p.y===1899&&p.mo===12&&p.da===30){r.datetime=''}  // 時刻のみの値は datetime として無効
+        else if(/[Zz]|[+\-]\d{2}:?\d{2}$/.test(r.datetime)){
+          r.datetime=p.y+'-'+_p2(p.mo)+'-'+_p2(p.da)+'T'+_p2(p.hh)+':'+_p2(p.mi);
+        }
+      }
     }
     // date: Date型 or 1899-12-30起点文字列を排除
     if(r.date&&typeof r.date==='object'&&r.date.toISOString){
@@ -1005,7 +1023,10 @@ function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function
   if(ci.rid)sel.value=ci.rid}
 
 /* ═══════════ INPUT ═══════════ */
-function setNow(){const n=new Date(),o=n.getTimezoneOffset()*6e4;$('recDT').value=new Date(n-o).toISOString().slice(0,16)}
+function nowLocalDTStr(){const n=new Date(),o=n.getTimezoneOffset()*6e4;return new Date(n-o).toISOString().slice(0,16)}
+function setNow(){const v=nowLocalDTStr();const el=$('recDT');if(el){el.value=v;el.max=v;el.setAttribute('max',v)}}
+// 未来の時刻入力を防ぐためのバリデーション（許容誤差：1分）
+function isFutureDT(s){if(!s)return false;var t=new Date(s).getTime();if(isNaN(t))return false;return t>Date.now()+60000}
 
 function submitRec(){
   var sv=$('resSel').value;
@@ -1015,6 +1036,7 @@ function submitRec(){
   let ua=ci.urineAmt;
   if((ci.type==='urine'||ci.type==='both')&&!ua){const cv=$('cusUV').value;if(cv)ua=parseInt(cv)}
   const dt=$('recDT').value;if(!dt){showToast('⚠️ 日時を入力してください');return}
+  if(isFutureDT(dt)){showToast('⚠️ 未来の時刻は入力できません');return}
   const[d,t]=dt.split('T');
   if(editRecId){
     // 修正モード: 既存レコードを更新
@@ -1517,7 +1539,9 @@ function openLaxModal(presetRid,editId){
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
     a.map(function(r){return'<option value="'+r.id+'">'+r.name+'　'+r.room+'号室</option>'}).join('');
   // 初期値
-  var nowISO=(function(){var n=new Date(),o=n.getTimezoneOffset()*6e4;return new Date(n-o).toISOString().slice(0,16)})();
+  var nowISO=nowLocalDTStr();
+  // 未来時刻を入力できないように max をセット
+  if($('mLaxDT')){$('mLaxDT').max=nowISO;$('mLaxDT').setAttribute('max',nowISO)}
   if(editId){
     var r=D.records.find(function(x){return x.id===editId});
     if(!r){showToast('⚠️ 記録が見つかりません');return}
@@ -1556,6 +1580,7 @@ function saveLax(){
   var rid=parseInt($('mLaxRes').value);
   if(!rid){showToast('⚠️ 入居者を選んでください');return}
   var dt=$('mLaxDT').value;if(!dt){showToast('⚠️ 使用日時を入力してください');return}
+  if(isFutureDT(dt)){showToast('⚠️ 未来の時刻は入力できません');return}
   var med;var medSel=$('mLaxMed').value;
   if(!medSel){showToast('⚠️ 薬剤名を選んでください');return}
   if(medSel==='__custom__'){med=($('mLaxMedCustom').value||'').trim();if(!med){showToast('⚠️ 薬剤名を入力してください');return}}
@@ -1726,6 +1751,9 @@ function init(){
     $('hTime').textContent=n.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}
   tick();setInterval(tick,1e4);
   setNow();buildResSel();
+  // 入力日時欄: フォーカス時に max を現在時刻に更新（未来入力防止）
+  if($('recDT'))$('recDT').addEventListener('focus',function(){var v=nowLocalDTStr();this.max=v;this.setAttribute('max',v)});
+  if($('mLaxDT'))$('mLaxDT').addEventListener('focus',function(){var v=nowLocalDTStr();this.max=v;this.setAttribute('max',v)});
 
   const td=today();$('bdDate').value=td;$('tlDate').value=td;
   updateDayNavHi('bdDayNav',td);updateDayNavHi('tlDayNav',td);
