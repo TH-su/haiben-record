@@ -844,20 +844,23 @@ function normalizeData(){
   // 日付Dateの判定: Sheetsの時刻セルは 1899-12-30 起点
   function isTimeOnlyDate(d){return d.getFullYear()===1899&&d.getMonth()===11&&d.getDate()===30}
   // "2026-04-21T15:30:00.000Z" や "1899-12-30T04:20:00.000Z" のような文字列を分解
-  // Zや±hh:mm等のTZ指定がある場合はローカル時刻に変換してから分解（JSTずれ防止）
+  // Zや±hh:mm等のTZ指定がある場合は必ずローカル時刻に変換してから分解（JSTずれ防止）
+  // ※Sheetsの時刻セル(1899-12-30起点)も例外なくローカル変換する — 以前の実装では
+  //   時刻のみ値で UTC の hh をそのまま採用してしまい 9時間ズレが発生していた。
   function parseIsoLike(s){
     if(typeof s!=='string')return null;
     var m=s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+\-]\d{2}:?\d{2})?/);
     if(!m)return null;
-    // TZ付きはローカルへ変換（ただし 1899-12-30 の Sheets 時刻セルはそのまま返す：後段で無効判定）
-    if(m[7]&&!(+m[1]===1899&&+m[2]===12&&+m[3]===30)){
+    if(m[7]){
       var d=new Date(s);
       if(!isNaN(d.getTime())){
-        return{y:d.getFullYear(),mo:d.getMonth()+1,da:d.getDate(),hh:d.getHours(),mi:d.getMinutes()};
+        return{y:d.getFullYear(),mo:d.getMonth()+1,da:d.getDate(),hh:d.getHours(),mi:d.getMinutes(),_tz:true};
       }
     }
     return{y:+m[1],mo:+m[2],da:+m[3],hh:+m[4],mi:+m[5]};
   }
+  // Sheetsの時刻セル判定（1899年12月は確実に時刻セル。TZ変換で日付が隣接日に動くケースも含めて広めに）
+  function isSheetsTimeOnly(p){return p && p.y===1899 && p.mo===12}
   if(D.residents)D.residents.forEach(function(r){
     if(r.id!=null)r.id=toNum(r.id);
     if(r.name!=null)r.name=String(r.name).trim();
@@ -877,8 +880,9 @@ function normalizeData(){
     if(typeof r.datetime==='string'){
       var p=parseIsoLike(r.datetime);
       if(p){
-        if(p.y===1899&&p.mo===12&&p.da===30){r.datetime=''}  // 時刻のみの値は datetime として無効
-        else if(/[Zz]|[+\-]\d{2}:?\d{2}$/.test(r.datetime)){
+        if(isSheetsTimeOnly(p)){r.datetime=''}  // 時刻のみの値は datetime として無効
+        else if(p._tz){
+          // TZ付きはローカル時刻に書き換え
           r.datetime=p.y+'-'+_p2(p.mo)+'-'+_p2(p.da)+'T'+_p2(p.hh)+':'+_p2(p.mi);
         }
       }
@@ -888,7 +892,7 @@ function normalizeData(){
       r.date=isTimeOnlyDate(r.date)?'':fmtLocalYMD(r.date);
     }else if(typeof r.date==='string'){
       var pd=parseIsoLike(r.date);
-      if(pd){r.date=(pd.y===1899&&pd.mo===12&&pd.da===30)?'':(pd.y+'-'+_p2(pd.mo)+'-'+_p2(pd.da))}
+      if(pd){r.date=isSheetsTimeOnly(pd)?'':(pd.y+'-'+_p2(pd.mo)+'-'+_p2(pd.da))}
     }
     // time: Date型（1899-12-30起点）→ HH:MM のみに変換
     if(r.time&&typeof r.time==='object'&&r.time.toISOString){
@@ -905,6 +909,17 @@ function normalizeData(){
     if((!r.datetime||typeof r.datetime!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(r.datetime))
        && r.date && r.time){
       r.datetime=r.date+'T'+r.time;
+    }
+    // tsUTC: 未設定なら（またはレガシー記録なら）ローカル datetime から UTC ms を算出
+    // これにより将来表示文字列が揺らいでも経過時間が壊れない
+    if(typeof r.tsUTC!=='number'||isNaN(r.tsUTC)){
+      if(typeof r.datetime==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(r.datetime)){
+        var _t=new Date(r.datetime).getTime();
+        if(!isNaN(_t))r.tsUTC=_t;
+      }
+    }else{
+      // Sheets経由で文字列で帰ってきた数値を数値化
+      r.tsUTC=Number(r.tsUTC);
     }
     if(r.id==null)r.id=uid()})}
 function cleanData(){
@@ -988,7 +1003,17 @@ function updateDayNavHi(groupId,dateVal){
 function $(id){return document.getElementById(id)}
 function $$(sel,ctx){return(ctx||document).querySelectorAll(sel)}
 function showToast(m){var e=$('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2600)}
-function elH(dt){if(!dt)return null;return(Date.now()-new Date(dt).getTime())/36e5}
+function elH(dt){
+  if(!dt)return null;
+  // recordオブジェクトが渡された場合は tsUTC を最優先（格納済みなら絶対値で比較できTZ事故に強い）
+  if(typeof dt==='object'&&dt!==null){
+    if(typeof dt.tsUTC==='number'&&!isNaN(dt.tsUTC))return(Date.now()-dt.tsUTC)/36e5;
+    dt=dt.datetime||(dt.date&&dt.time?(dt.date+'T'+dt.time):'');
+    if(!dt)return null;
+  }
+  var t=new Date(dt).getTime();
+  if(isNaN(t))return null;
+  return(Date.now()-t)/36e5}
 function fmtEl(h){if(h===null)return'未記録';if(h<1)return Math.round(h*60)+'分前';
   const d=Math.floor(h/24),hr=Math.floor(h%24),mn=Math.round((h%1)*60);
   if(d===0)return hr+'時間'+(mn>0?mn+'分':'')+'前';return d+'日'+(hr>0?hr+'時間':'')+'前'}
@@ -1024,6 +1049,24 @@ function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function
 
 /* ═══════════ INPUT ═══════════ */
 function nowLocalDTStr(){const n=new Date(),o=n.getTimezoneOffset()*6e4;return new Date(n-o).toISOString().slice(0,16)}
+// 任意の datetime 文字列/Dateを <input type="datetime-local"> 用の "YYYY-MM-DDTHH:MM" に整形
+// TZ付き(Z/±hh:mm)はローカルに変換、ローカル表記はそのまま、不正値は空文字。
+function toLocalDTInput(v){
+  if(!v)return'';
+  var _p=function(n){return(n<10?'0':'')+n};
+  if(typeof v==='object'&&v&&typeof v.getTime==='function'){
+    if(isNaN(v.getTime()))return'';
+    return v.getFullYear()+'-'+_p(v.getMonth()+1)+'-'+_p(v.getDate())+'T'+_p(v.getHours())+':'+_p(v.getMinutes());
+  }
+  if(typeof v!=='string')return'';
+  var m=v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?(?:\.\d+)?(Z|[+\-]\d{2}:?\d{2})?/);
+  if(!m)return'';
+  if(m[6]){
+    var d=new Date(v);
+    if(!isNaN(d.getTime()))return d.getFullYear()+'-'+_p(d.getMonth()+1)+'-'+_p(d.getDate())+'T'+_p(d.getHours())+':'+_p(d.getMinutes());
+  }
+  return m[1]+'-'+m[2]+'-'+m[3]+'T'+m[4]+':'+m[5];
+}
 function setNow(){const v=nowLocalDTStr();const el=$('recDT');if(el){el.value=v;el.max=v;el.setAttribute('max',v)}}
 // 未来の時刻入力を防ぐためのバリデーション（許容誤差：1分）
 function isFutureDT(s){if(!s)return false;var t=new Date(s).getTime();if(isNaN(t))return false;return t>Date.now()+60000}
@@ -1043,6 +1086,8 @@ function submitRec(){
     var existing=D.records.find(function(r){return r.id===editRecId});
     if(!existing){showToast('⚠️ 記録が見つかりません');editRecId=null;resetForm();return}
     existing.residentId=ci.rid;existing.date=d;existing.time=t;existing.datetime=dt;
+    // TZに依存しない絶対時刻(UTC ms)。経過時間計算や表示後の再取得でズレても復旧できる
+    existing.tsUTC=new Date(dt).getTime();
     existing.type=ci.type;existing.urineAmt=ua;existing.urineColor=ci.urineColor;
     existing.urineSrc=uSrcStr();existing.stoolSrc=sSrcStr();
     existing.stoolAmt=ci.stoolAmt;existing.consistency=ci.consistency;existing.stoolColor=ci.stoolColor;
@@ -1058,7 +1103,9 @@ function submitRec(){
     if(typeof renderTL==='function')renderTL();
     return;
   }
-  const rec={id:uid(),residentId:ci.rid,date:d,time:t,datetime:dt,type:ci.type,
+  const rec={id:uid(),residentId:ci.rid,date:d,time:t,datetime:dt,
+    tsUTC:new Date(dt).getTime(),
+    type:ci.type,
     urineAmt:ua,urineColor:ci.urineColor,urineSrc:uSrcStr(),
     stoolAmt:ci.stoolAmt,consistency:ci.consistency,stoolColor:ci.stoolColor,stoolSrc:sSrcStr(),
     notes:$('recNote').value.trim(),staff:$('recStaff').value.trim(),createdAt:new Date().toISOString()};
@@ -1104,8 +1151,8 @@ function editRec(id){
   // 入居者プルダウン
   buildResSel();
   $('resSel').value=String(ci.rid);
-  // 日時
-  $('recDT').value=r.datetime||(r.date+'T'+r.time);
+  // 日時（TZ付きで帰ってきた場合はローカル表記に整形してから流し込む）
+  $('recDT').value=toLocalDTInput(r.datetime)||(r.date+'T'+(r.time||'').slice(0,5));
   // 排泄種別ボタン
   $$('.type-btn').forEach(function(b){b.classList.remove('su','ss','sb','sn');if(b.dataset.t===r.type)b.classList.add(r.type==='urine'?'su':r.type==='stool'?'ss':r.type==='none'?'sn':'sb')});
   $('secU').style.display=(r.type==='urine'||r.type==='both')?'block':'none';
@@ -1200,7 +1247,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
   const res=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   tb.innerHTML=res.map((re,i)=>{
     const lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
-    const uh=elH(lu?lu.datetime:null),sh=elH(ls?ls.datetime:null);
+    const uh=elH(lu||null),sh=elH(ls||null);
     const ub=badgeCls(uh,'u',re.id),sb=badgeCls(sh,'s',re.id);
     const du=dayR(re.id,date,'u'),ds=dayR(re.id,date,'s');
     const tU=du.reduce((s,r)=>s+(typeof r.urineAmt==='number'?r.urineAmt:0),0);
@@ -1286,7 +1333,7 @@ function renderTL(){const date=$('tlDate').value||today();
     var lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
     var uDiff=lu?dayDiff(lu.date,date):null;
     var sDiff=ls?dayDiff(ls.date,date):null;
-    var uh_tl=elH(lu?lu.datetime:null),sh_tl=elH(ls?ls.datetime:null);
+    var uh_tl=elH(lu||null),sh_tl=elH(ls||null);
     var ub_tl=badgeCls(uh_tl,'u',re.id),sb_tl=badgeCls(sh_tl,'s',re.id);
     function tlOffStyle(badge,def){
       if(badge==='eb-ng')return'background:var(--ng-l);color:var(--ng);font-weight:700;border:1px solid var(--ng)';
@@ -1546,7 +1593,7 @@ function openLaxModal(presetRid,editId){
     var r=D.records.find(function(x){return x.id===editId});
     if(!r){showToast('⚠️ 記録が見つかりません');return}
     sel.value=String(r.residentId);
-    $('mLaxDT').value=r.datetime||(r.date+'T'+r.time);
+    $('mLaxDT').value=toLocalDTInput(r.datetime)||(r.date+'T'+(r.time||'').slice(0,5));
     // 薬剤
     var preset=['プルゼニド','ラキソベロン','マグミット','センノシド','酸化マグネシウム'];
     if(preset.indexOf(r.medicine)>=0){$('mLaxMed').value=r.medicine;$('mLaxMedCustom').style.display='none';$('mLaxMedCustom').value=''}
@@ -1597,13 +1644,14 @@ function saveLax(){
     var ex=D.records.find(function(r){return r.id===editLaxId});
     if(!ex){showToast('⚠️ 記録が見つかりません');editLaxId=null;closeLaxModal();return}
     ex.residentId=rid;ex.date=d;ex.time=t;ex.datetime=dt;
+    ex.tsUTC=new Date(dt).getTime();
     ex.medicine=med;ex.tablets=tab;ex.notes=note;ex.staff=staff;
     ex.updatedAt=new Date().toISOString();
     save();apiPush('saveRecord',{record:ex});
     showToast('✅ 下剤記録を更新しました');
   }else{
     var rec={id:'lx_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
-      residentId:rid,date:d,time:t,datetime:dt,type:'laxative',
+      residentId:rid,date:d,time:t,datetime:dt,tsUTC:new Date(dt).getTime(),type:'laxative',
       medicine:med,tablets:tab,notes:note,staff:staff,
       createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     D.records.push(rec);save();
