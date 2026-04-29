@@ -164,25 +164,25 @@ textarea{resize:vertical;min-height:76px}
 /* timeline */
 .tl-w{overflow:auto;max-height:calc(100vh - 200px);border-radius:var(--r);box-shadow:var(--sh);background:#fff}
 .tl-t{border-collapse:separate;border-spacing:0;width:max-content}
-.tl-t th,.tl-t td{border:1px solid var(--g2);font-size:10px}
-.tl-t th{background:var(--g1);text-align:center;padding:3px 1px;white-space:nowrap;position:sticky;top:0;z-index:3}
-.tl-t thead tr:nth-child(2) th{top:24px;z-index:3}
-.tl-t th.hr-top{font-weight:700;font-size:11px;border-bottom:none}
-.tl-t th.hr-sub{font-size:9px;color:var(--g6);border-top:none;padding:1px 2px}
+.tl-t th,.tl-t td{border:1px solid var(--g2);font-size:12px}
+.tl-t th{background:var(--g1);text-align:center;padding:4px 2px;white-space:nowrap;position:sticky;top:0;z-index:3}
+.tl-t thead tr:nth-child(2) th{top:28px;z-index:3}
+.tl-t th.hr-top{font-weight:700;font-size:13px;border-bottom:none}
+.tl-t th.hr-sub{font-size:11px;color:var(--g6);border-top:none;padding:1px 2px}
 /* 氏名列ヘッダーは最上位 z-index */
 .tl-t thead th:first-child{left:0;z-index:5;background:#e8eaed}
-.tl-nm{white-space:nowrap;padding:4px 8px;font-size:11px;font-weight:700;
-  background:var(--g0);border-right:2px solid var(--g3);min-width:85px;position:sticky;left:0;z-index:2}
-.tl-c{width:26px;min-width:26px;height:32px;text-align:center;vertical-align:middle;padding:1px;background:#fff}
+.tl-nm{white-space:nowrap;padding:5px 10px;font-size:13px;font-weight:700;
+  background:var(--g0);border-right:2px solid var(--g3);min-width:96px;position:sticky;left:0;z-index:2}
+.tl-c{width:32px;min-width:32px;height:38px;text-align:center;vertical-align:middle;padding:2px;background:#fff}
 .tl-t tbody tr:nth-child(even) td{background:#f7f7f7}
 .tl-t tbody tr:nth-child(even) .tl-nm{background:#ececec}
 .tl-c.has{background:#f0f4ff;cursor:pointer}
 .tl-t tbody tr:nth-child(even) .tl-c.has{background:#e1eaff}
-.ev-d{width:8px;height:8px;border-radius:50%;display:inline-block;margin:0 1px}
+.ev-d{width:10px;height:10px;border-radius:50%;display:inline-block;margin:0 1px}
 .ev-d.u{background:var(--u)}.ev-d.s{background:#a1887f}.ev-d.b{background:#e91e63}
 .ev-d.l{background:#ffd600;border:1px solid #f9a825;box-sizing:border-box}
 /* 排泄元マーカー（タイムライン用） */
-.ev-m{display:inline-block;font-size:13px;line-height:1;margin:0 1px;vertical-align:middle;font-weight:700}
+.ev-m{display:inline-block;font-size:15px;line-height:1;margin:0 1px;vertical-align:middle;font-weight:700}
 .ev-m.us{color:#0d47a1}   /* 自尿: 濃い青の○ */
 .ev-m.up{color:#4fc3f7}   /* パッド内排尿: 水色の● */
 .ev-m.st{color:#4e342e}   /* トイレ排便: 濃い茶の△ */
@@ -196,9 +196,9 @@ textarea{resize:vertical;min-height:76px}
 .lax-mk{display:inline-block;font-size:10px;padding:1px 4px;border-radius:3px;background:#f3e5f5;color:#6a1b9a;font-weight:700;border:1px solid #ce93d8;white-space:nowrap}
 .bn.blax{background:#7b1fa2;color:#fff}
 .bn.blax:hover{background:#6a1b9a}
-.tl-info{font-size:8px;line-height:1.1;color:var(--g7);white-space:nowrap;display:block}
+.tl-info{font-size:10px;line-height:1.15;color:var(--g7);white-space:nowrap;display:block}
 .tl-leg{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}
-.tl-leg-i{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--g7)}
+.tl-leg-i{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--g7)}
 
 /* settings */
 .rli{display:flex;align-items:center;justify-content:space-between;
@@ -1306,10 +1306,10 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
 function renderTL(){const date=$('tlDate').value||today();
   const res=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   // ヘッダー行: 時刻（0〜23）を各2列（:00, :30）
-  let h1='<th rowspan="2" style="min-width:85px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
+  let h1='<th rowspan="2" style="min-width:96px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
   let h2='';
   for(let h=0;h<24;h++){
-    h1+='<th colspan="2" class="hr-top" style="min-width:52px">'+h+'時</th>';
+    h1+='<th colspan="2" class="hr-top" style="min-width:64px">'+h+'時</th>';
     h2+='<th class="hr-sub">:00</th><th class="hr-sub">:30</th>'}
   // データ行
   const rows=res.map(re=>{
@@ -1386,7 +1386,7 @@ function showFiveDay(rid,endDate){
   var h1='<th rowspan="2" style="min-width:80px;position:sticky;left:0;z-index:2;background:#e8eaed">日付</th>';
   var h2='';
   for(var h=0;h<24;h++){
-    h1+='<th colspan="2" class="hr-top" style="min-width:52px">'+h+'時</th>';
+    h1+='<th colspan="2" class="hr-top" style="min-width:64px">'+h+'時</th>';
     h2+='<th class="hr-sub">:00</th><th class="hr-sub">:30</th>';
   }
   h1+='<th rowspan="2" style="min-width:96px;position:sticky;right:0;z-index:2;background:#e8eaed">合計</th>';
