@@ -1259,7 +1259,11 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     }).sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
     var notesHtml=dayNotes.length?dayNotes.map(function(r){
       var ic=r.type==='urine'?'💧':r.type==='stool'?'🟤':r.type==='both'?'💧🟤':r.type==='none'?'✖️':'📝';
-      return'<div style="margin-bottom:2px;line-height:1.35"><span style="color:var(--g6)">'+(r.time||'')+'</span> '+ic+' '+_esc(r.notes).replace(/\n/g,'<br>')+'</div>';
+      return'<div style="margin-bottom:4px;display:flex;gap:6px;align-items:flex-start">'+
+        '<span style="color:var(--g6);font-variant-numeric:tabular-nums;flex-shrink:0;font-weight:600">'+(r.time||'')+'</span>'+
+        '<span style="flex-shrink:0">'+ic+'</span>'+
+        '<span style="flex:1">'+_esc(r.notes).replace(/\n/g,'<br>')+'</span>'+
+      '</div>';
     }).join(''):'';
     // 当日の全記録（排尿・排便・下剤を含む）— 操作ボタンで使用
     const dAll=D.records.filter(function(r){return r.residentId===re.id&&r.date===date});
@@ -1294,7 +1298,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       '<td><span class="eb '+sb+'">'+fmtEl(sh)+'</span>'+sOffHtml+'</td>'+
       '<td>'+ds.length+'回</td>'+
       '<td style="white-space:nowrap">'+(lCons?'<span class="tg tg-s">'+lCons+'</span>':'')+(lSA?' <span style="font-size:11px">'+lSA+'</span>':'')+'</td>'+
-      '<td style="font-size:12px;text-align:left;max-width:200px;word-break:break-word;white-space:normal">'+(notesHtml||'<span style="color:var(--g5)">—</span>')+laxHtml+'</td>'+
+      '<td style="font-size:13px;text-align:left;min-width:300px;max-width:360px;word-break:break-word;white-space:normal;line-height:1.45;padding:8px 10px">'+(notesHtml||'<span style="color:var(--g5)">—</span>')+laxHtml+'</td>'+
       '<td style="font-size:11px;text-align:left;max-width:180px;word-break:break-all;white-space:normal;color:#4a148c">'+(re.laxNote?re.laxNote.replace(/\n/g,'<br>'):'<span style="color:var(--g5)">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+(hasRec
         ?'<button class="bn bs bsm bd-ops" data-rid="'+re.id+'" style="padding:6px 10px;min-height:36px;font-size:11px">✏️ 修正・削除<div style="font-size:10px;color:var(--g5);margin-top:2px">('+dAll.length+'件)</div></button>'
