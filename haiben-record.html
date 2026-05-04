@@ -765,6 +765,46 @@ function customConfirm(msg){
 
 /* ═══════════ API ═══════════ */
 const API_KEY='hbcr_api_url';
+const API_KEY_BAK='hbcr_api_url_bak'; // 二重保存
+const API_COOKIE='hbcr_api_url'; // Cookie バックアップ
+/* GAS Web App URL の堅牢な保存／読み出し
+   - localStorage（主） + localStorage バックアップ + Cookie（1年）の3重化
+   - 起動時に「いずれか」から復元、見つかったら他にも書き戻し（ITP/容量逼迫対策）
+   - URL ハッシュ #api=... での明示復元にも対応 */
+function _setCookie(name,val,days){
+  try{var d=new Date();d.setTime(d.getTime()+days*864e5);
+    document.cookie=name+'='+encodeURIComponent(val)+'; expires='+d.toUTCString()+'; path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'');}catch(e){}
+}
+function _getCookie(name){
+  try{var m=document.cookie.match(new RegExp('(?:^|; )'+name.replace(/[.$?*|{}()[\]\\\/+^]/g,'\\$&')+'=([^;]*)'));return m?decodeURIComponent(m[1]):'';}catch(e){return''}
+}
+function _delCookie(name){try{document.cookie=name+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';}catch(e){}}
+function saveApiUrl(url){
+  if(!url)return;
+  try{localStorage.setItem(API_KEY,url)}catch(e){console.warn('[hbcr] localStorage失敗:',e)}
+  try{localStorage.setItem(API_KEY_BAK,url)}catch(e){}
+  try{sessionStorage.setItem(API_KEY,url)}catch(e){}
+  _setCookie(API_COOKIE,url,365);
+  // 永続ストレージを要求（Safari/Chromeで容量逼迫時の eviction 防止）
+  if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().catch(function(){})}
+}
+function loadApiUrl(){
+  var u='';
+  try{u=localStorage.getItem(API_KEY)||''}catch(e){}
+  if(!u){try{u=localStorage.getItem(API_KEY_BAK)||''}catch(e){}}
+  if(!u){try{u=sessionStorage.getItem(API_KEY)||''}catch(e){}}
+  if(!u){u=_getCookie(API_COOKIE)||''}
+  if(!u){var m=(location.hash||'').match(/[#&]api=([^&]+)/);if(m){try{u=decodeURIComponent(m[1])}catch(e){u=m[1]}}}
+  // どこかから復元できたら他にも書き戻して再発防止
+  if(u)saveApiUrl(u);
+  return u;
+}
+function clearApiUrl(){
+  try{localStorage.removeItem(API_KEY)}catch(e){}
+  try{localStorage.removeItem(API_KEY_BAK)}catch(e){}
+  try{sessionStorage.removeItem(API_KEY)}catch(e){}
+  _delCookie(API_COOKIE);
+}
 let apiUrl='';
 
 function apiSetStatus(st,msg){
@@ -846,6 +886,8 @@ async function syncFromAPI(showLoader){
     D.records=mergedRec;
     D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
     cleanData();save();
+    // 同期成功時に URL の保存を refresh（cookie 1年延長・バックアップ層も再書込）
+    if(apiUrl)saveApiUrl(apiUrl);
     apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
     // 未送信キューを再送
     flushPendingQueue();
@@ -2313,7 +2355,7 @@ function init(){
   $('ldOv').addEventListener('click',function(){ldHide()});
 
   // ── Google Sheets API 連携 ──
-  apiUrl=localStorage.getItem(API_KEY)||'';
+  apiUrl=loadApiUrl();
   if($('cfgApi'))$('cfgApi').value=apiUrl;
   if(apiUrl){
     apiSetStatus('sy');
@@ -2331,7 +2373,7 @@ function init(){
     const url=$('cfgApi').value.trim();
     if(!url){showToast('⚠️ URLを入力してください');return}
     if(!url.startsWith('https://script.google.com/')){showToast('⚠️ GASのURLを確認してください');return}
-    apiUrl=url;localStorage.setItem(API_KEY,url);
+    apiUrl=url;saveApiUrl(url);
     // API接続初回: サンプル入居者（_seed）を削除してサーバーデータをクリーンに取り込む
     if(Array.isArray(D.residents)){D.residents=D.residents.filter(function(r){return !r._seed});save()}
     apiSetStatus('sy');
@@ -2358,7 +2400,7 @@ function init(){
   $('btnApiClear').addEventListener('click',function(){
     customConfirm('Google Sheets連携を解除しますか？\nローカルデータは保持されます。').then(function(ok){
       if(!ok)return;
-      apiUrl='';localStorage.removeItem(API_KEY);
+      apiUrl='';clearApiUrl();
       $('cfgApi').value='';
       apiSetStatus('of');
       $('apiStatus').textContent='GASデプロイ後に取得したURLを入力して「URLを保存・接続」を押してください。';
