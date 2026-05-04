@@ -178,6 +178,10 @@ textarea{resize:vertical;min-height:76px}
 .tl-t tbody tr:nth-child(even) .tl-nm{background:#ececec}
 .tl-c.has{background:#f0f4ff;cursor:pointer}
 .tl-t tbody tr:nth-child(even) .tl-c.has{background:#e1eaff}
+.tl-c{position:relative;cursor:pointer}
+.tl-c.sched::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;border-radius:50%;border:3px solid #9e9e9e;pointer-events:none;z-index:0;box-sizing:border-box;background:rgba(255,255,255,0.6)}
+.tl-c.sched > *{position:relative;z-index:1}
+.tl-c.sched .sch-lbl{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:10px;font-weight:700;color:#424242;white-space:nowrap;pointer-events:none;z-index:1;line-height:1;text-shadow:0 0 2px #fff,0 0 2px #fff}
 .ev-d{width:10px;height:10px;border-radius:50%;display:inline-block;margin:0 1px}
 .ev-d.u{background:var(--u)}.ev-d.s{background:#a1887f}.ev-d.b{background:#e91e63}
 .ev-d.l{background:#ffd600;border:1px solid #f9a825;box-sizing:border-box}
@@ -416,7 +420,63 @@ textarea{resize:vertical;min-height:76px}
       <input type="text" id="recStaff" placeholder="スタッフ名を入力"></div>
   </div>
   <button class="btn-go" id="btnSubmit">💾 記　録　す　る</button>
+  <button class="bn bs" id="btnSched" style="margin-top:10px;width:100%;background:#fff8e1;color:#8d6e00;border:1px solid #fbc02d;font-weight:700">⏰ 予定入力（排泄確認時間を設定）</button>
 </div>
+
+<!-- ── 予定セル個別編集モーダル ── -->
+<div class="mo" id="mSchCell"><div class="md" style="max-width:420px">
+  <div class="md-t" id="mSchCellTitle">⏰ 予定時刻の設定</div>
+  <div id="mSchCellInfo" style="font-size:13px;color:var(--g6);margin-bottom:10px"></div>
+  <div class="fg" style="margin-bottom:8px">
+    <label class="fl" id="mSchCellTimeLbl">時刻（5分単位）</label>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="bn bs" id="mSchCellM5" style="min-width:48px;padding:8px;font-weight:700">−5</button>
+      <input type="time" id="mSchCellTime" step="300" style="flex:1;padding:10px;border:1px solid var(--g3);border-radius:6px;font-size:18px;font-weight:700;text-align:center">
+      <button class="bn bs" id="mSchCellP5" style="min-width:48px;padding:8px;font-weight:700">+5</button>
+    </div>
+  </div>
+  <!-- 予定保存セクション（未来の空きスロット用）-->
+  <div id="mSchSection">
+    <div class="md-f">
+      <button class="bn br bsm" id="mSchCellDel" style="margin-right:auto">🗑️ 予定削除</button>
+      <button class="bn bs" id="mSchCellCancel">キャンセル</button>
+      <button class="bn bp" id="mSchCellSave">💾 予定保存</button>
+    </div>
+  </div>
+  <!-- 排泄記録セクション（過去の時刻 / 既に記録があるセル用）-->
+  <div id="mRecSection" style="display:none">
+    <div style="font-size:12px;color:var(--g6);margin-bottom:6px;font-weight:700">📝 上記の時刻で排泄記録を入力</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+      <button class="bn bsm sch-rec" data-t="urine" style="background:#1976d2;color:#fff">💧 排尿</button>
+      <button class="bn bsm sch-rec" data-t="stool" style="background:#5d4037;color:#fff">🟤 排便</button>
+      <button class="bn bsm sch-rec" data-t="both" style="background:#7b1fa2;color:#fff">💧🟤 両方</button>
+      <button class="bn bsm sch-rec" data-t="none" style="background:#607d8b;color:#fff">✖️ 誘導 排泄なし</button>
+    </div>
+    <div class="md-f">
+      <button class="bn bs" id="mSchCellCancel2">キャンセル</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ── 予定入力モーダル ── -->
+<div class="mo" id="mSched"><div class="md" style="max-width:520px">
+  <div class="md-t">⏰ 排泄確認 予定時間の設定</div>
+  <div class="fg"><label class="fl">入居者</label>
+    <select id="mSchRes"><option value="">― 入居者を選んでください ―</option></select></div>
+  <div class="fg" style="margin-bottom:8px"><label class="fl">時刻を追加</label>
+    <div style="font-size:11px;color:var(--g6);margin-bottom:6px">時刻を入力して「追加」を押してください。5分単位で指定できます。</div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <button class="bn bs bsm" id="mSchTimeM5" style="min-width:44px;padding:6px;font-weight:700">−5</button>
+      <input type="time" id="mSchTime" step="300" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--g3);border-radius:6px;font-size:14px">
+      <button class="bn bs bsm" id="mSchTimeP5" style="min-width:44px;padding:6px;font-weight:700">+5</button>
+      <button class="bn bp bsm" id="mSchAdd">＋ 追加</button>
+    </div>
+  </div>
+  <div class="fg"><label class="fl">設定済みの予定時間</label>
+    <div id="mSchList" style="display:flex;flex-wrap:wrap;gap:6px;min-height:40px;padding:8px;background:#fafafa;border-radius:6px;border:1px solid var(--g2)"></div>
+  </div>
+  <div class="md-f"><button class="bn bs" id="mSchClear" style="margin-right:auto">全解除</button><button class="bn bs" id="mSchCancel">キャンセル</button><button class="bn bp" id="mSchSave">💾 保存</button></div>
+</div></div>
 
 <!-- ── 一覧表示 ── -->
 <div id="sc-board" class="scr">
@@ -579,8 +639,9 @@ textarea{resize:vertical;min-height:76px}
 </div></div>
 
 <div class="mo" id="mDet"><div class="md">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:15px">
-    <div class="md-t" style="margin-bottom:0;flex:1">📋 記録の詳細</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:15px;flex-wrap:wrap">
+    <div class="md-t" style="margin-bottom:0;flex:1;min-width:180px">📋 記録の詳細</div>
+    <button class="bn bs bsm" id="mDetAddRec">📝 同じ時刻で追加記録</button>
     <button class="bn bs bsm" id="mDetHist">📋 排泄履歴</button>
   </div>
   <div id="mDetC"></div>
@@ -606,13 +667,14 @@ textarea{resize:vertical;min-height:76px}
 </div></div>
 
 <div class="mo" id="mHist"><div class="md" style="max-width:720px">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:15px">
-    <div class="md-t" id="mHistT" style="margin-bottom:0;flex:1">個人記録履歴</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <div class="md-t" id="mHistT" style="margin-bottom:0;flex:1;min-width:200px">個人記録履歴</div>
+    <button class="bn bp bsm" id="mHistInput">✏️ この入居者で入力</button>
     <button class="bn bs bsm" id="mHist5Day">📊 5日表示</button>
     <button class="bn blax bsm" id="mHistLax">💊 下剤</button>
   </div>
   <div id="mHistC"></div>
-  <div class="md-f" style="justify-content:center;position:relative"><button class="bn bp" id="mHistInput">✏️ この入居者で入力</button><button class="bn bs" id="mHistClose" style="position:absolute;right:0">閉じる</button></div>
+  <div class="md-f"><button class="bn bs" id="mHistClose">閉じる</button></div>
 </div></div>
 
 <div class="mo" id="mLax"><div class="md" style="max-width:460px">
@@ -684,7 +746,7 @@ function tlMarks(r){
 /* ci の bool を文字列へ */
 function uSrcStr(){return ci.uSelf&&ci.uPad?'both':ci.uSelf?'self':ci.uPad?'pad':null}
 function sSrcStr(){return ci.sToilet&&ci.sPad?'both':ci.sToilet?'toilet':ci.sPad?'pad':null}
-let editResId=null,curRecId=null,curHistRid=null,editRecId=null,editLaxId=null,curDetRid=null;
+let editResId=null,curRecId=null,curHistRid=null,editRecId=null,editLaxId=null,curDetRid=null,curDetSlot=null,curDetDate=null;
 const BL={1:'硬球状',2:'硬塊状',3:'ひび割れ',4:'普通便',5:'軟便',6:'泥状便',7:'水様便'};
 
 /* ═══════════ CUSTOM CONFIRM（confirm()の代替）═══════════ */
@@ -760,8 +822,14 @@ async function syncFromAPI(showLoader){
     var localRec=Array.isArray(D.records)?D.records:[];
     var seenResId={};
     var mergedRes=[];
+    // クライアント側のみで保持するフィールド（サーバーが返さない）はローカル値を保持
+    var localResById={};localRes.forEach(function(r){if(r&&r.id!=null)localResById[toNum(r.id)]=r});
+    var clientOnly=['schedule','cfg','laxNote'];
     // APIを先に入れる（勝者）
-    apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
+    apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){
+      var lr=localResById[k];
+      if(lr){clientOnly.forEach(function(f){if(r[f]==null&&lr[f]!=null)r[f]=lr[f]})}
+      mergedRes.push(r);seenResId[k]=true}}});
     // ローカルのみのID（未送信・サンプルデータ以外）を追加
     localRes.forEach(function(r){if(r&&r.id!=null&&!r._seed){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
     var seenRecId={};
@@ -1023,11 +1091,162 @@ function resCfg(rid){var r=rid?D.residents.find(function(x){return x.id===rid}):
 function badgeCls(h,t,rid){if(h===null)return'eb-ng';var cfg=resCfg(rid);
   if(t==='u'){if(h>=cfg.urineDangerH)return'eb-ng';if(h>=cfg.urineWarnH)return'eb-w';return'eb-ok'}
   const d=h/24;if(d>=cfg.stoolDangerD)return'eb-ng';if(d>=cfg.stoolWarnD)return'eb-w';return'eb-ok'}
-function lastR(rid,t){return D.records.filter(r=>{if(r.residentId!==rid)return false;
-  return t==='u'?r.type==='urine'||r.type==='both':r.type==='stool'||r.type==='both'})
-  .sort((a,b)=>b.datetime.localeCompare(a.datetime))[0]||null}
+function lastR(rid,t){
+  var arr=D.records.filter(function(r){if(r.residentId!==rid)return false;
+    return t==='u'?(r.type==='urine'||r.type==='both'):(r.type==='stool'||r.type==='both')});
+  if(t==='u')return arr.sort(function(a,b){return(b.datetime||'').localeCompare(a.datetime||'')})[0]||null;
+  // 排便: 「少量」のみの記録は間隔リセットしない。最初の少量から24時間以内に4回連続で少量が
+  // 続いた場合、その4回目を排便1回分（リセット）として扱う。中等量・多量は従来どおり1件で
+  // リセット扱い。stoolAmtが空欄の場合も従来どおりリセット扱い。
+  arr.sort(function(a,b){return(a.datetime||'').localeCompare(b.datetime||'')});
+  var lastReset=null,chainStart=null,chainCount=0;
+  for(var i=0;i<arr.length;i++){
+    var r=arr[i];
+    if(r.stoolAmt==='少量'){
+      if(!chainStart){chainStart=r;chainCount=1}
+      else{
+        var dt=r.datetime?(new Date(r.datetime)-new Date(chainStart.datetime))/3600000:0;
+        if(dt>24){chainStart=r;chainCount=1}
+        else{chainCount++;if(chainCount>=4){lastReset=r;chainStart=null;chainCount=0}}
+      }
+    }else{
+      lastReset=r;chainStart=null;chainCount=0;
+    }
+  }
+  return lastReset;
+}
 function dayR(rid,d,t){return D.records.filter(r=>{if(r.residentId!==rid||r.date!==d)return false;
   return t==='u'?r.type==='urine'||r.type==='both':r.type==='stool'||r.type==='both'})}
+
+/* ── 予定（30分スロット）── */
+function slotToHM(s){var h=Math.floor(s/2),m=(s%2)*30;return(h<10?'0':'')+h+':'+(m<10?'0':'')+m}
+function hmToSlot(hm){var p=(hm||'').split(':');var h=parseInt(p[0],10),m=parseInt(p[1]||'0',10);if(isNaN(h))return-1;return h*2+(m>=30?1:0)}
+function schedSet(re){var o={};if(!re||!Array.isArray(re.schedule))return o;
+  re.schedule.forEach(function(hm){var s=hmToSlot(hm);if(s>=0&&s<48){o[s]=o[s]?(o[s]+'/'+hm):hm}});return o}
+function toggleSchedule(rid,slot){var r=D.residents.find(function(x){return x.id===rid});if(!r)return;
+  if(!Array.isArray(r.schedule))r.schedule=[];
+  var hm=slotToHM(slot);
+  // 同じスロットに既に予定があれば全て解除、なければそのスロットの :00/:30 のいずれかとして追加
+  var sameSlot=r.schedule.filter(function(t){return hmToSlot(t)===slot});
+  if(sameSlot.length){r.schedule=r.schedule.filter(function(t){return hmToSlot(t)!==slot});showToast('⏰ '+sameSlot.join(',')+' の予定を解除')}
+  else{r.schedule.push(hm);r.schedule.sort();showToast('⏰ '+hm+' に予定を設定')}
+  save();apiPush('saveRes',{resident:r})}
+var schedDraft=[]; // モーダル内の編集中リスト
+function renderSchedList(){
+  var box=$('mSchList');if(!box)return;
+  if(!schedDraft.length){box.innerHTML='<span style="color:var(--g5);font-size:12px;padding:4px 8px">（未設定）</span>';return}
+  box.innerHTML=schedDraft.slice().sort().map(function(t){
+    return'<span class="sch-chip" data-t="'+t+'" style="display:inline-flex;align-items:center;gap:4px;background:#fff8e1;border:1px solid #fbc02d;color:#8d6e00;padding:4px 4px 4px 10px;border-radius:14px;font-weight:700;font-size:12px">'+t+'<button class="sch-rm" data-t="'+t+'" style="border:none;background:#fbc02d;color:#fff;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:12px;font-weight:700;line-height:1">×</button></span>'
+  }).join('');
+  $$('.sch-rm',box).forEach(function(b){b.addEventListener('click',function(){
+    var t=this.dataset.t;schedDraft=schedDraft.filter(function(x){return x!==t});renderSchedList()})});
+}
+function openSchedModal(){
+  var sel=$('mSchRes');var act=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name})
+    .sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
+    act.map(function(r){return'<option value="'+r.id+'">'+r.room+'　'+r.name+'</option>'}).join('');
+  // 入力中の入居者をデフォルト選択
+  var preset=$('resSel')?$('resSel').value:'';if(preset)sel.value=preset;
+  $('mSchTime').value='';
+  loadSchedGridFor(parseInt(sel.value,10));
+  $('mSched').classList.add('on');
+}
+function loadSchedGridFor(rid){
+  var r=rid?D.residents.find(function(x){return x.id===rid}):null;
+  schedDraft=(r&&Array.isArray(r.schedule))?r.schedule.slice():[];
+  renderSchedList();
+}
+function addSchedTime(){
+  var v=$('mSchTime').value;if(!v||!/^\d{1,2}:\d{2}$/.test(v)){showToast('⚠️ 時刻を入力してください');return}
+  var p=v.split(':'),hh=parseInt(p[0],10),mm=parseInt(p[1],10);
+  if(isNaN(hh)||isNaN(mm)||hh<0||hh>23||mm<0||mm>59){showToast('⚠️ 時刻が不正です');return}
+  // 5分単位に丸め
+  mm=Math.round(mm/5)*5;
+  if(mm===60){mm=0;hh=(hh+1)%24}
+  var hm=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
+  if(schedDraft.indexOf(hm)>=0){showToast('⚠️ 既に追加されています（'+hm+'）');return}
+  schedDraft.push(hm);renderSchedList();$('mSchTime').value='';
+  showToast('✅ '+hm+' を追加しました');
+}
+/* 個別セル予定編集モーダル */
+var schCellCtx=null;
+function isSlotInFuture(dateStr,slot){
+  var t=new Date(dateStr+'T'+slotToHM(slot)+':00').getTime();
+  return !isNaN(t)&&t>Date.now();
+}
+function openSchedCellModal(rid,slot,opts){
+  opts=opts||{};
+  var r=D.residents.find(function(x){return x.id===rid});if(!r)return;
+  if(!Array.isArray(r.schedule))r.schedule=[];
+  var dateStr=opts.date||($('tlDate')&&$('tlDate').value)||today();
+  // モード決定:'schedule'(未来空きスロット)/'record'(過去 or 強制)
+  var mode=opts.mode;
+  if(!mode)mode=isSlotInFuture(dateStr,slot)?'schedule':'record';
+  // このスロットに既にある予定（5分粒度）を取得
+  var existing=r.schedule.filter(function(t){return hmToSlot(t)===slot});
+  var defT=existing[0]||slotToHM(slot);
+  schCellCtx={rid:rid,slot:slot,date:dateStr,mode:mode,prev:existing[0]||null,after:opts.after||null};
+  $('mSchCellInfo').textContent=r.name+'（'+r.room+'号室）　'+fmtMD(dateStr)+' '+slotToHM(slot)+'〜'+slotToHM(slot+1);
+  $('mSchCellTime').value=defT;
+  // セクションの表示切替
+  $('mSchCellTitle').textContent=mode==='schedule'?'⏰ 予定時刻の設定（未来）':'📝 排泄記録の入力（過去 / 既存セル）';
+  $('mSchCellTimeLbl').textContent=mode==='schedule'?'予定時刻（5分単位）':'記録する時刻（5分単位）';
+  $('mSchSection').style.display=mode==='schedule'?'block':'none';
+  $('mRecSection').style.display=mode==='record'?'block':'none';
+  $('mSchCellDel').style.display=(mode==='schedule'&&existing.length)?'':'none';
+  $('mSchCell').classList.add('on');
+}
+function closeSchedCellModal(){$('mSchCell').classList.remove('on');schCellCtx=null}
+function saveSchedCell(){
+  if(!schCellCtx)return;
+  var r=D.residents.find(function(x){return x.id===schCellCtx.rid});if(!r)return;
+  var v=$('mSchCellTime').value;if(!v||!/^\d{1,2}:\d{2}$/.test(v)){showToast('⚠️ 時刻が不正です');return}
+  var p=v.split(':'),hh=parseInt(p[0],10),mm=parseInt(p[1],10);
+  if(isNaN(hh)||isNaN(mm)||hh<0||hh>23||mm<0||mm>59){showToast('⚠️ 時刻が不正です');return}
+  mm=Math.round(mm/5)*5;if(mm===60){mm=0;hh=(hh+1)%24}
+  var hm=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;
+  if(!Array.isArray(r.schedule))r.schedule=[];
+  // 同スロットの既存予定を削除して新時刻を挿入
+  r.schedule=r.schedule.filter(function(t){return hmToSlot(t)!==schCellCtx.slot});
+  if(r.schedule.indexOf(hm)<0)r.schedule.push(hm);
+  r.schedule.sort();
+  save();apiPush('saveRes',{resident:r});
+  showToast('⏰ '+hm+' に予定を設定');
+  var after=schCellCtx.after;closeSchedCellModal();
+  if(after)after();else if(typeof renderTL==='function')renderTL();
+}
+function jumpToInputForRecord(rid,dateStr,hm,type){
+  // 入力画面へ遷移し、入居者・日時・種別を pre-fill
+  showSc('input');
+  resetForm();
+  ci.rid=rid;
+  if($('resSel'))$('resSel').value=String(rid);
+  if($('recDT'))$('recDT').value=dateStr+'T'+(hm||'00:00');
+  // 種別ボタンを擬似クリックして関連セクションを展開
+  var btn=document.querySelector('.type-btn[data-t="'+type+'"]');
+  if(btn)btn.click();
+  showToast('📝 排泄記録の入力画面に切り替えました');
+}
+function deleteSchedCell(){
+  if(!schCellCtx)return;
+  var r=D.residents.find(function(x){return x.id===schCellCtx.rid});if(!r||!Array.isArray(r.schedule))return;
+  var removed=r.schedule.filter(function(t){return hmToSlot(t)===schCellCtx.slot});
+  r.schedule=r.schedule.filter(function(t){return hmToSlot(t)!==schCellCtx.slot});
+  save();apiPush('saveRes',{resident:r});
+  showToast('🗑️ '+removed.join(',')+' の予定を削除');
+  var after=schCellCtx.after;closeSchedCellModal();
+  if(after)after();else if(typeof renderTL==='function')renderTL();
+}
+function saveSchedFromModal(){
+  var rid=parseInt($('mSchRes').value,10);
+  if(!rid){showToast('⚠️ 入居者を選択してください');return}
+  var r=D.residents.find(function(x){return x.id===rid});if(!r)return;
+  r.schedule=schedDraft.slice().sort();save();apiPush('saveRes',{resident:r});
+  $('mSched').classList.remove('on');
+  if(typeof renderTL==='function')renderTL();
+  showToast('✅ '+r.schedule.length+'件の予定を保存しました');
+}
 
 /* ═══════════ SCREEN NAV ═══════════ */
 function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav button').forEach(b=>b.classList.remove('on'));
@@ -1330,18 +1549,25 @@ function renderTL(){const date=$('tlDate').value||today();
     // 30分バケット(0..47)
     const bk={};dr.forEach(r=>{const p=r.time.split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);
       const slot=h*2+(m>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
+    var schSet=schedSet(re);
     let cells='';
     for(let s=0;s<48;s++){const recs=bk[s]||[];
-      if(!recs.length){cells+='<td class="tl-c"></td>';continue}
+      var schCls=schSet[s]?' sched':'';
+      var schLbl=schSet[s]?'<span class="sch-lbl">'+schSet[s]+'</span>':'';
+      if(!recs.length){cells+='<td class="tl-c'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+'</td>';continue}
       let inner=recs.map(r=>{
         const dot=tlMarks(r);
         let info='';
         if(r.type==='urine'||r.type==='both'){info+=fmtUA(r.urineAmt)}
-        if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c)}
+        if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c);
+          if(r.stoolAmt==='少量')info+=(info?' ':'')+'<span style="color:#000;font-weight:400">少</span>';
+          else if(r.stoolAmt==='中等量')info+=(info?' ':'')+'<span style="color:#000;font-weight:700">中</span>';
+          else if(r.stoolAmt==='多量')info+=(info?' ':'')+'<span style="color:#c62828;font-weight:700">多</span>';
+        }
         if(r.type==='laxative'){info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'')}
         if(r.type==='none'){info+='誘導'}
         return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
-      cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'">'+inner+'</td>'}
+      cells+='<td class="tl-c has'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+inner+'</td>'}
     // 最終排尿・排便の日付差 (表示中日付との差) ― マイナスのみ表示
     var lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
     var uDiff=lu?dayDiff(lu.date,date):null;
@@ -1366,13 +1592,19 @@ function renderTL(){const date=$('tlDate').value||today();
     var fdBtn='<button class="bn bs fd-btn" data-fd="'+re.id+'" title="5日間の排泄パターン" style="padding:2px 6px;margin-left:4px;font-size:10px;min-height:22px;min-width:0;vertical-align:middle">📊5日</button>';
     return'<tr><td class="tl-nm"><span style="color:var(--g5)">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'">'+re.name+'</span>'+fdBtn+offHtml+'</td>'+cells+'</tr>'}).join('');
   $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
-  // セルクリック→詳細
-  $$('.tl-c.has',$('tlBox')).forEach(td=>td.addEventListener('click',function(){
-    const[rid,slot]=this.dataset.slot.split('-').map(Number);
-    const dr=D.records.filter(r=>r.residentId===rid&&r.date===date);
-    const matching=dr.filter(r=>{const p=r.time.split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);return h*2+(m>=30?1:0)===slot});
-    if(matching.length===1)showDet(matching[0].id);
-    else if(matching.length>1)showDetMulti(matching)}));
+  // セルクリック→詳細（記録あり） / 予定編集モーダル（記録なし）
+  $$('.tl-c',$('tlBox')).forEach(function(td){td.addEventListener('click',function(){
+    if(!this.dataset.slot)return;
+    var parts=this.dataset.slot.split('-');var rid=parseInt(parts[0]);var slot=parseInt(parts[1]);
+    if(this.classList.contains('has')){
+      var dr=D.records.filter(function(r){return r.residentId===rid&&r.date===date});
+      var matching=dr.filter(function(r){var p=r.time.split(':');var h=parseInt(p[0]);var m=parseInt(p[1]||0);return h*2+(m>=30?1:0)===slot});
+      if(matching.length===1)showDet(matching[0].id);
+      else if(matching.length>1)showDetMulti(matching);
+    }else{
+      openSchedCellModal(rid,slot);
+    }
+  })});
   // 名前クリック→履歴
   $$('.tl-nm-link',$('tlBox')).forEach(el=>el.addEventListener('click',function(e){e.stopPropagation();showHist(parseInt(this.dataset.hist))}));
   // 📊5日ボタン
@@ -1407,20 +1639,27 @@ function showFiveDay(rid,endDate){
   var rows=dates.map(function(date){
     var dr=D.records.filter(function(r){return r.residentId===rid&&r.date===date});
     var bk={};dr.forEach(function(r){var p=r.time.split(':');var hh=parseInt(p[0]);var mm=parseInt(p[1]||0);var slot=hh*2+(mm>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
+    var schSet5=schedSet(re);
     var cells='';
     for(var s=0;s<48;s++){
       var recs=bk[s]||[];
-      if(!recs.length){cells+='<td class="tl-c"></td>';continue}
+      var schCls=schSet5[s]?' sched':'';
+      var schLbl5=schSet5[s]?'<span class="sch-lbl">'+schSet5[s]+'</span>':'';
+      if(!recs.length){cells+='<td class="tl-c'+schCls+'" data-fdslot="'+date+'-'+s+'">'+schLbl5+'</td>';continue}
       var inner=recs.map(function(r){
         var dot=tlMarks(r);
         var info='';
         if(r.type==='urine'||r.type==='both')info+=fmtUA(r.urineAmt);
-        if(r.type==='stool'||r.type==='both'){var c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c)}
+        if(r.type==='stool'||r.type==='both'){var c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c);
+          if(r.stoolAmt==='少量')info+=(info?' ':'')+'<span style="color:#000;font-weight:400">少</span>';
+          else if(r.stoolAmt==='中等量')info+=(info?' ':'')+'<span style="color:#000;font-weight:700">中</span>';
+          else if(r.stoolAmt==='多量')info+=(info?' ':'')+'<span style="color:#c62828;font-weight:700">多</span>';
+        }
         if(r.type==='laxative')info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'');
         if(r.type==='none')info+='誘導';
         return dot+(info?'<span class="tl-info">'+info+'</span>':'');
       }).join('');
-      cells+='<td class="tl-c has" data-fdslot="'+date+'-'+s+'">'+inner+'</td>';
+      cells+='<td class="tl-c has'+schCls+'" data-fdslot="'+date+'-'+s+'">'+schLbl5+inner+'</td>';
     }
     // 件数集計
     var nU=dr.filter(function(r){return r.type==='urine'||r.type==='both'}).length;
@@ -1440,14 +1679,19 @@ function showFiveDay(rid,endDate){
       +'<td class="tl-nm" style="'+rowBg+';text-align:center;position:sticky;right:0;font-size:11px;white-space:nowrap">'+summary+'</td></tr>';
   }).join('');
   $('m5DayC').innerHTML='<table class="tl-t" style="min-width:680px"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
-  // セルクリック→詳細
-  $$('.tl-c.has',$('m5DayC')).forEach(function(td){td.addEventListener('click',function(){
+  // セルクリック→詳細（記録あり） / 予定編集モーダル（記録なし）
+  $$('.tl-c',$('m5DayC')).forEach(function(td){td.addEventListener('click',function(){
+    if(!this.dataset.fdslot)return;
     var parts=this.dataset.fdslot.split('-');
     var dt=parts.slice(0,3).join('-');var slot=parseInt(parts[3]);
-    var dr=D.records.filter(function(r){return r.residentId===cur5DayRid&&r.date===dt});
-    var matching=dr.filter(function(r){var p=r.time.split(':');var hh=parseInt(p[0]);var mm=parseInt(p[1]||0);return hh*2+(mm>=30?1:0)===slot});
-    if(matching.length===1)showDet(matching[0].id);
-    else if(matching.length>1)showDetMulti(matching);
+    if(this.classList.contains('has')){
+      var dr=D.records.filter(function(r){return r.residentId===cur5DayRid&&r.date===dt});
+      var matching=dr.filter(function(r){var p=r.time.split(':');var hh=parseInt(p[0]);var mm=parseInt(p[1]||0);return hh*2+(mm>=30?1:0)===slot});
+      if(matching.length===1)showDet(matching[0].id);
+      else if(matching.length>1)showDetMulti(matching);
+    }else{
+      openSchedCellModal(cur5DayRid,slot,{date:dt,after:function(){showFiveDay(cur5DayRid,cur5DayEnd)}});
+    }
   })});
   $('m5Day').classList.add('on');
 }
@@ -1461,6 +1705,7 @@ function shift5Day(days){
 
 /* ═══════════ DETAIL MODAL ═══════════ */
 function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=id;curDetRid=r.residentId;
+  curDetDate=r.date;curDetSlot=hmToSlot(r.time);
   // 複数モードで非表示にされた修正・削除ボタンを元に戻す
   $('mDetDel').style.display='';
   if($('mDetEdit'))$('mDetEdit').style.display='';
@@ -1487,6 +1732,7 @@ function showDetMulti(recs){
   if(recs.length===1){showDet(recs[0].id);return}
   curRecId=null; // 複数モードでは単一IDを持たない
   curDetRid=recs[0].residentId;
+  curDetDate=recs[0].date;curDetSlot=hmToSlot(recs[0].time);
   if($('mDetHist'))$('mDetHist').style.display='';
   const res=D.residents.find(x=>x.id===recs[0].residentId);
   const typeLbl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤'};
@@ -1549,10 +1795,10 @@ function showDetMulti(recs){
       var delId=this.dataset.id;
       customConfirm('この記録を削除しますか？').then(function(ok){
         if(!ok)return;
-        D.records=D.records.filter(function(r){return r.id!==delId});
+        D.records=D.records.filter(function(r){return String(r.id)!==String(delId)});
         save();apiPush('delRecord',{id:delId});
         // 残りの記録を再描画（0件になったら閉じる）
-        var remaining=recs.filter(function(r){return r.id!==delId});
+        var remaining=recs.filter(function(r){return String(r.id)!==String(delId)});
         if(remaining.length===0){$('mDet').classList.remove('on');}
         else if(remaining.length===1){showDet(remaining[0].id);}
         else{showDetMulti(remaining);}
@@ -1682,7 +1928,7 @@ async function deleteLaxCur(){
   $('mConf').classList.remove('on');
   if(!ok)return;
   var delId=editLaxId;
-  D.records=D.records.filter(function(r){return r.id!==delId});
+  D.records=D.records.filter(function(r){return String(r.id)!==String(delId)});
   save();apiPush('delRecord',{id:delId});
   showToast('✅ 下剤記録を削除しました');
   closeLaxModal();
@@ -1938,6 +2184,36 @@ function init(){
     if(this.value)document.querySelectorAll('.lax-tab').forEach(function(b){b.classList.remove('on')});
   });
 
+  // 予定入力モーダル
+  if($('btnSched'))$('btnSched').addEventListener('click',openSchedModal);
+  if($('mSchCancel'))$('mSchCancel').addEventListener('click',function(){$('mSched').classList.remove('on')});
+  if($('mSchSave'))$('mSchSave').addEventListener('click',saveSchedFromModal);
+  if($('mSchClear'))$('mSchClear').addEventListener('click',function(){schedDraft=[];renderSchedList()});
+  if($('mSchAdd'))$('mSchAdd').addEventListener('click',addSchedTime);
+  if($('mSchTime'))$('mSchTime').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addSchedTime()}});
+  if($('mSchRes'))$('mSchRes').addEventListener('change',function(){loadSchedGridFor(parseInt(this.value,10))});
+  // 個別セル編集モーダル
+  if($('mSchCellCancel'))$('mSchCellCancel').addEventListener('click',closeSchedCellModal);
+  if($('mSchCellCancel2'))$('mSchCellCancel2').addEventListener('click',closeSchedCellModal);
+  if($('mSchCellSave'))$('mSchCellSave').addEventListener('click',saveSchedCell);
+  if($('mSchCellDel'))$('mSchCellDel').addEventListener('click',deleteSchedCell);
+  // ±5分ボタン
+  function bumpTime(inputId,delta){var el=$(inputId);if(!el)return;var v=el.value||'00:00';var p=v.split(':');var hh=parseInt(p[0],10)||0;var mm=parseInt(p[1],10)||0;var total=hh*60+mm+delta;total=((total%1440)+1440)%1440;hh=Math.floor(total/60);mm=total%60;mm=Math.round(mm/5)*5;if(mm===60){mm=0;hh=(hh+1)%24}el.value=(hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm;el.dispatchEvent(new Event('input'))}
+  if($('mSchCellM5'))$('mSchCellM5').addEventListener('click',function(){bumpTime('mSchCellTime',-5)});
+  if($('mSchCellP5'))$('mSchCellP5').addEventListener('click',function(){bumpTime('mSchCellTime',+5)});
+  if($('mSchTimeM5'))$('mSchTimeM5').addEventListener('click',function(){bumpTime('mSchTime',-5)});
+  if($('mSchTimeP5'))$('mSchTimeP5').addEventListener('click',function(){bumpTime('mSchTime',+5)});
+  // 排泄記録の即時入力ボタン
+  $$('.sch-rec').forEach(function(b){b.addEventListener('click',function(){
+    if(!schCellCtx)return;
+    var t=this.dataset.t;
+    var rid=schCellCtx.rid;
+    var dateStr=$('tlDate')&&$('tlDate').value?$('tlDate').value:today();
+    var hm=$('mSchCellTime').value||slotToHM(schCellCtx.slot);
+    closeSchedCellModal();
+    jumpToInputForRecord(rid,dateStr,hm,t);
+  })});
+
   // 設定
   $('btnAddRes').addEventListener('click',function(){editResId=null;$('mResT').textContent='入居者を追加';
     $('mRN').value='';if($('mRY'))$('mRY').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
@@ -1965,7 +2241,7 @@ function init(){
   $('mDetDel').addEventListener('click',function(){if(!curRecId)return;
     customConfirm('この記録を削除しますか？').then(function(ok){
       if(!ok)return;var delId=curRecId;
-      D.records=D.records.filter(function(r){return r.id!==delId});save();
+      D.records=D.records.filter(function(r){return String(r.id)!==String(delId)});save();
       apiPush('delRecord',{id:delId});
       $('mDet').classList.remove('on');curRecId=null;renderBoard();renderTL();showToast('🗑️ 削除しました')})});
   $('mDetClose').addEventListener('click',function(){$('mDet').classList.remove('on');curRecId=null;curDetRid=null});
@@ -1974,6 +2250,12 @@ function init(){
     var rid=curDetRid;
     $('mDet').classList.remove('on');curRecId=null;curDetRid=null;
     showHist(rid);
+  });
+  if($('mDetAddRec'))$('mDetAddRec').addEventListener('click',function(){
+    if(!curDetRid||curDetSlot==null)return;
+    var rid=curDetRid;var slot=curDetSlot;var dt=curDetDate||today();
+    $('mDet').classList.remove('on');curRecId=null;curDetRid=null;
+    openSchedCellModal(rid,slot,{mode:'record',date:dt});
   });
   // 5日ビュー
   if($('m5DayClose'))$('m5DayClose').addEventListener('click',close5Day);
