@@ -1088,7 +1088,31 @@ function save(){
     // Quota超過やプライベートモード等。ユーザーへ通知（データは失われるので即対応）
     try{showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'))}catch(e2){}
   }
+  // インデックスを失効（次回読み出し時に再構築）— A: パフォーマンス最適化
+  _recIdx=null;
 }
+
+/* ════════ 記録のインデックス（A: パフォーマンス最適化） ════════
+   D.records をスキャンするコスト（filter/sort）を削減するため、入居者別 / 入居者×日別の
+   メモリ内インデックスを保持。データそのものは変更せず、参照を共有するだけのため
+   既存データの破損リスクは無い。save() の度に失効させ、次回 _idx() 呼び出し時に再構築。 */
+var _recIdx=null;
+function _idxBuild(){
+  var byRes={},byResDate={};
+  if(!Array.isArray(D.records)){_recIdx={byRes:byRes,byResDate:byResDate};return}
+  for(var i=0;i<D.records.length;i++){
+    var r=D.records[i];if(!r||r.residentId==null)continue;
+    var rid=r.residentId;
+    (byRes[rid]=byRes[rid]||[]).push(r);
+    if(r.date){var k=rid+'|'+r.date;(byResDate[k]=byResDate[k]||[]).push(r)}
+  }
+  // 入居者別を datetime 昇順にソート（lastR の高速化に必須）
+  Object.keys(byRes).forEach(function(k){byRes[k].sort(function(a,b){return(a.datetime||'').localeCompare(b.datetime||'')})});
+  _recIdx={byRes:byRes,byResDate:byResDate};
+}
+function _idx(){if(!_recIdx)_idxBuild();return _recIdx}
+function recsByRes(rid){return _idx().byRes[rid]||[]}
+function recsByResDate(rid,d){return _idx().byResDate[rid+'|'+d]||[]}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 function today(){return new Date().toISOString().split('T')[0]}
 function dateOff(n){var d=new Date();d.setDate(d.getDate()+(n||0));return d.toISOString().split('T')[0]}
@@ -1140,9 +1164,10 @@ function badgeCls(h,t,rid){if(h===null)return'eb-ng';var cfg=resCfg(rid);
   if(t==='u'){if(h>=cfg.urineDangerH)return'eb-ng';if(h>=cfg.urineWarnH)return'eb-w';return'eb-ok'}
   const d=h/24;if(d>=cfg.stoolDangerD)return'eb-ng';if(d>=cfg.stoolWarnD)return'eb-w';return'eb-ok'}
 function lastR(rid,t){
-  var arr=D.records.filter(function(r){if(r.residentId!==rid)return false;
-    return t==='u'?(r.type==='urine'||r.type==='both'):(r.type==='stool'||r.type==='both')});
-  if(t==='u')return arr.sort(function(a,b){return(b.datetime||'').localeCompare(a.datetime||'')})[0]||null;
+  // インデックス（昇順済み）から該当タイプのみを抽出
+  var pool=recsByRes(rid);
+  var arr=[];for(var k=0;k<pool.length;k++){var rr=pool[k];if(t==='u'?(rr.type==='urine'||rr.type==='both'):(rr.type==='stool'||rr.type==='both'))arr.push(rr)}
+  if(t==='u')return arr.length?arr[arr.length-1]:null;
   // 排便: 「少量」のみの記録は間隔リセットしない。最初の少量から24時間以内に4回連続で少量が
   // 続いた場合、その4回目を排便1回分（リセット）として扱う。中等量・多量は従来どおり1件で
   // リセット扱い。stoolAmtが空欄の場合も従来どおりリセット扱い。
@@ -1163,8 +1188,12 @@ function lastR(rid,t){
   }
   return lastReset;
 }
-function dayR(rid,d,t){return D.records.filter(r=>{if(r.residentId!==rid||r.date!==d)return false;
-  return t==='u'?r.type==='urine'||r.type==='both':r.type==='stool'||r.type==='both'})}
+function dayR(rid,d,t){
+  var pool=recsByResDate(rid,d);var out=[];
+  for(var k=0;k<pool.length;k++){var r=pool[k];
+    if(t==='u'?(r.type==='urine'||r.type==='both'):(r.type==='stool'||r.type==='both'))out.push(r)}
+  return out;
+}
 
 /* ── 予定（30分スロット）── */
 function slotToHM(s){var h=Math.floor(s/2),m=(s%2)*30;return(h<10?'0':'')+h+':'+(m<10?'0':'')+m}
@@ -1521,8 +1550,8 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     const lCons=ls?fmtCons(ls):'';const lSA=ls?ls.stoolAmt:null;
     // 備考: 当日の排尿・排便記録のうち notes が入っているものを時刻順で列挙
     var _esc=function(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')};
-    var dayNotes=D.records.filter(function(r){
-      return r.residentId===re.id && r.date===date && r.type!=='laxative' && r.notes && String(r.notes).trim()
+    var dayNotes=recsByResDate(re.id,date).filter(function(r){
+      return r.type!=='laxative' && r.notes && String(r.notes).trim()
     }).sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
     var notesHtml=dayNotes.length?dayNotes.map(function(r){
       var ic=r.type==='urine'?'💧':r.type==='stool'?'🟤':r.type==='both'?'💧🟤':r.type==='none'?'✖️':'📝';
@@ -1533,10 +1562,10 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       '</div>';
     }).join(''):'';
     // 当日の全記録（排尿・排便・下剤を含む）— 操作ボタンで使用
-    const dAll=D.records.filter(function(r){return r.residentId===re.id&&r.date===date});
+    const dAll=recsByResDate(re.id,date);
     const hasRec=dAll.length>0;
     // 当日の下剤記録
-    const dLax=D.records.filter(function(r){return r.residentId===re.id&&r.date===date&&r.type==='laxative'})
+    const dLax=dAll.filter(function(r){return r.type==='laxative'})
       .sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
     var laxHtml=dLax.length?'<div style="margin-top:4px">'+dLax.map(function(r){
       return'<span class="lax-mk" title="'+(r.staff||'')+'">💊 '+r.time+' '+(r.medicine||'')+(r.tablets?' '+r.tablets+'錠':'')+'</span>'
@@ -1576,7 +1605,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
   // 操作ボタン（その日の全記録を表示 → 各記録を修正・削除）
   $$('.bd-ops',tb).forEach(function(b){b.addEventListener('click',function(){
     var rid=parseInt(this.dataset.rid);
-    var dAll=D.records.filter(function(r){return r.residentId===rid&&r.date===date})
+    var dAll=recsByResDate(rid,date).slice()
       .sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
     if(dAll.length===0)return;
     if(dAll.length===1)showDet(dAll[0].id);else showDetMulti(dAll);
@@ -1610,7 +1639,7 @@ function renderTL(){const date=$('tlDate').value||today();
     h2+='<th class="hr-sub">:00</th><th class="hr-sub">:30</th>'}
   // データ行
   const rows=res.map(re=>{
-    const dr=D.records.filter(r=>r.residentId===re.id&&r.date===date);
+    const dr=recsByResDate(re.id,date);
     // 30分バケット(0..47)
     const bk={};dr.forEach(r=>{const p=r.time.split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);
       const slot=h*2+(m>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
@@ -1663,7 +1692,7 @@ function renderTL(){const date=$('tlDate').value||today();
     if(!this.dataset.slot)return;
     var parts=this.dataset.slot.split('-');var rid=parseInt(parts[0]);var slot=parseInt(parts[1]);
     if(this.classList.contains('has')){
-      var dr=D.records.filter(function(r){return r.residentId===rid&&r.date===date});
+      var dr=recsByResDate(rid,date);
       var matching=dr.filter(function(r){var p=r.time.split(':');var h=parseInt(p[0]);var m=parseInt(p[1]||0);return h*2+(m>=30?1:0)===slot});
       if(matching.length===1)showDet(matching[0].id);
       else if(matching.length>1)showDetMulti(matching);
@@ -1703,7 +1732,7 @@ function showFiveDay(rid,endDate){
   h1+='<th rowspan="2" style="min-width:96px;position:sticky;right:0;z-index:2;background:#e8eaed">合計</th>';
   // 各日行
   var rows=dates.map(function(date){
-    var dr=D.records.filter(function(r){return r.residentId===rid&&r.date===date});
+    var dr=recsByResDate(rid,date);
     var bk={};dr.forEach(function(r){var p=r.time.split(':');var hh=parseInt(p[0]);var mm=parseInt(p[1]||0);var slot=hh*2+(mm>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
     var schSet5=schedSet(re);
     var cells='';
@@ -1751,7 +1780,7 @@ function showFiveDay(rid,endDate){
     var parts=this.dataset.fdslot.split('-');
     var dt=parts.slice(0,3).join('-');var slot=parseInt(parts[3]);
     if(this.classList.contains('has')){
-      var dr=D.records.filter(function(r){return r.residentId===cur5DayRid&&r.date===dt});
+      var dr=recsByResDate(cur5DayRid,dt);
       var matching=dr.filter(function(r){var p=r.time.split(':');var hh=parseInt(p[0]);var mm=parseInt(p[1]||0);return hh*2+(mm>=30?1:0)===slot});
       if(matching.length===1)showDet(matching[0].id);
       else if(matching.length>1)showDetMulti(matching);
@@ -1880,7 +1909,7 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   if($('mHistInput'))$('mHistInput').style.display=(res.active===false)?'none':'';
   if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
   $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
-  const recs=D.records.filter(r=>r.residentId===rid).sort((a,b)=>b.datetime.localeCompare(a.datetime)).slice(0,100);
+  const recs=recsByRes(rid).slice().sort((a,b)=>b.datetime.localeCompare(a.datetime)).slice(0,100);
   if(!recs.length){$('mHistC').innerHTML='<p style="color:var(--g5);font-size:13px">記録がありません</p>'}
   else{
     const tbl='<div class="ht-w"><table class="ht"><thead><tr>'+
