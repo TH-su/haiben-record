@@ -686,7 +686,7 @@ textarea{resize:vertical;min-height:76px}
     </div>
     <div style="font-size:12px;color:var(--g6);line-height:1.55;margin-bottom:10px">
       入力画面の「記録者」欄をタップすると、ここで登録した職員名から選んで入力できます。<br>
-      苗字のみで十分です（例：山田）。最大 24 名まで登録できます。
+      苗字のみで十分です（例：山田）。人数制限はありません。
     </div>
     <div id="staffList2" class="staff-grid"></div>
   </div>
@@ -720,7 +720,7 @@ textarea{resize:vertical;min-height:76px}
     </div>
     <div style="font-size:11px;color:var(--g6);line-height:1.55;margin-bottom:8px">
       入力画面の「記録者」欄をタップすると、ここで登録した職員名から選んで入力できます。<br>
-      苗字のみで十分です（例：山田）。最大 24 名まで登録できます。
+      苗字のみで十分です（例：山田）。人数制限はありません。
     </div>
     <div id="staffList" class="staff-grid"></div>
   </div>
@@ -1295,7 +1295,7 @@ function load(){
       var nm=s.trim(); return nm?{name:nm,active:true}:null;
     }
     if(s && typeof s==='object' && typeof s.name==='string' && s.name.trim()){
-      return {name:s.name.trim(), active:(s.active!==false)};
+      return {name:s.name.trim(), active:(s.active!==false), _sysId:(s._sysId!=null?toNum(s._sysId):undefined)};
     }
     return null;
   }).filter(Boolean);
@@ -2408,7 +2408,7 @@ function renderCfg(){
    - 設定画面で 追加・編集・退職（非表示）・復帰 を管理
    - 入力画面の記録者欄をタップ → 4×N グリッドピッカー（active のみ表示）
    ======================================================== */
-var STAFF_MAX=32;
+var STAFF_MAX=999;  // 実質無制限（GASのIDレンジ上限のみ）
 
 /* 全件（退職含む） / アクティブのみ の取得 */
 function getStaffAll(){ return Array.isArray(D.staffs)?D.staffs:[]; }
@@ -2447,39 +2447,56 @@ function _getStaffResidents(){
 }
 function pushStaffsSync(){
   if(!Array.isArray(D.residents))D.residents=[];
-  var sysResByName={};
-  _getStaffResidents().forEach(function(r){if(r.name)sysResByName[r.name]=r});
-  var localStaffByName={};
-  (D.staffs||[]).forEach(function(s){if(s&&s.name)localStaffByName[s.name]=s});
+  // ID索引：_sysId で紐付け → リネーム時の競合状態を排除（in-place update のみ）
+  var sysResById={};
+  _getStaffResidents().forEach(function(r){var id=toNum(r.id);if(id!==null)sysResById[id]=r});
 
   var toAdd=[],toUpdate=[],toDelete=[];
+  var usedSysIds={};
 
-  // 1. ローカル各職員 → 既存sys-resを更新 or 新規作成
+  // 1. ローカル各職員 → _sysId で既存sys-resを特定 or name フォールバック or 新規作成
   (D.staffs||[]).forEach(function(s){
     if(!s||!s.name)return;
-    var existing=sysResByName[s.name];
-    if(existing){
+    var sysRes=null;
+    // 1次: _sysId で直接特定（リネーム時もズレない）
+    if(s._sysId!=null){
+      var sid=toNum(s._sysId);
+      if(sid!==null&&sysResById[sid]&&!usedSysIds[sid])sysRes=sysResById[sid];
+    }
+    // 2次: 同名のsys-resを再利用（_sysId 未設定の旧データ救済）
+    if(!sysRes){
+      Object.keys(sysResById).forEach(function(k){
+        if(sysRes||usedSysIds[k])return;
+        if(sysResById[k].name===s.name)sysRes=sysResById[k];
+      });
+    }
+    if(sysRes){
+      var sid2=toNum(sysRes.id);
+      usedSysIds[sid2]=true;s._sysId=sid2; // ローカルにIDを記録
       var newActive=(s.active!==false);
-      // active や hidden が違っていれば更新
-      if(existing.active!==newActive||existing.hidden!==true||existing.room!==SYS_STAFF_ROOM){
-        existing.active=newActive;existing.hidden=true;existing.room=SYS_STAFF_ROOM;
-        existing.gender=existing.gender||'女性';
-        toUpdate.push(existing);
-      }
+      var changed=false;
+      if(sysRes.name!==s.name){sysRes.name=s.name;changed=true}
+      if(sysRes.active!==newActive){sysRes.active=newActive;changed=true}
+      if(sysRes.hidden!==true){sysRes.hidden=true;changed=true}
+      if(sysRes.room!==SYS_STAFF_ROOM){sysRes.room=SYS_STAFF_ROOM;changed=true}
+      if(!sysRes.gender){sysRes.gender='女性';changed=true}
+      if(!sysRes.yomi){sysRes.yomi='-';changed=true}
+      if(changed)toUpdate.push(sysRes);
     }else{
-      // GASの拒否を回避するため、通常入居者と同じ連番ID（nextResId）を使用
       var newId=nextResId();
-      // yomi に '-' を入れて GAS のカラムシフト（空文字を欠落として扱う挙動）を回避
       var newRes={id:newId,name:s.name,yomi:'-',room:SYS_STAFF_ROOM,gender:'女性',
                   active:(s.active!==false),hidden:true};
       D.residents.push(newRes);
+      s._sysId=newId; // ローカルにIDを記録
+      usedSysIds[newId]=true;
       toAdd.push(newRes);
     }
   });
 
-  // 2. ローカルに無い sys-res は削除対象
+  // 2. 使われていない sys-res は削除対象（職員が削除された場合のみ）
   _getStaffResidents().forEach(function(r){
-    if(!localStaffByName[r.name])toDelete.push(r);
+    var id=toNum(r.id);
+    if(id!==null&&!usedSysIds[id])toDelete.push(r);
   });
 
   // 3. ローカル削除
@@ -2512,7 +2529,7 @@ function extractStaffsFromCfg(opts){
     sysList.forEach(function(r){
       var nm=String(r.name||'').trim();
       if(!nm)return;
-      seen[nm]={name:nm,active:r.active!==false};
+      seen[nm]={name:nm,active:r.active!==false,_sysId:toNum(r.id)};
     });
     Object.keys(seen).forEach(function(k){server.push(seen[k])});
   }else if(D.cfg&&Array.isArray(D.cfg._staffs)){
@@ -2525,7 +2542,7 @@ function extractStaffsFromCfg(opts){
   server.forEach(function(s){if(!dedup[s.name]){dedup[s.name]=true;u.push(s)}});
   if(opts.union){
     (D.staffs||[]).forEach(function(s){
-      if(s&&s.name&&!dedup[s.name]){u.push({name:s.name,active:s.active!==false});dedup[s.name]=true}
+      if(s&&s.name&&!dedup[s.name]){u.push({name:s.name,active:s.active!==false,_sysId:s._sysId});dedup[s.name]=true}
     });
   }
   D.staffs=u;
