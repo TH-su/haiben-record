@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0">
-<title>排泄ケア記録システム</title>
+<title>排泄記録システム</title>
 <style>
 :root{
   --pri:#1a73e8;--pri-l:#e8f0fe;--pri-d:#1557b0;
@@ -290,12 +290,92 @@ textarea{resize:vertical;min-height:76px}
 
 /* select for resident */
 #resSel{font-size:16px;padding:12px 14px;border-radius:10px}
+
+/* 職員（記録者）管理リスト（設定画面） */
+.staff-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}
+.staff-grid .sg-item{display:flex;align-items:center;gap:4px;padding:6px 8px;background:#fff;
+  border:1px solid var(--g2);border-radius:6px;font-size:13px;font-weight:600;color:var(--g8)}
+.staff-grid .sg-item .sg-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.staff-grid .sg-item .sg-del{background:none;border:none;color:var(--g5);cursor:pointer;
+  font-size:14px;padding:2px 6px;border-radius:4px;line-height:1}
+.staff-grid .sg-item .sg-del:hover{background:#ffebee;color:var(--ng)}
+.staff-grid .sg-empty{padding:18px;text-align:center;font-size:12px;color:var(--g6);
+  background:var(--g0);border:1px dashed var(--g3);border-radius:6px;grid-column:1/-1}
+
+/* 職員選択モーダル：4列x6行のグリッド */
+.staff-pick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:60vh;overflow-y:auto}
+.staff-pick-grid .spg-b{padding:14px 6px;background:#fff;border:1px solid var(--g3);border-radius:8px;
+  font-size:14px;font-weight:700;color:var(--g9);cursor:pointer;transition:all .12s;
+  min-height:46px;display:flex;align-items:center;justify-content:center;text-align:center;
+  word-break:break-all;line-height:1.3}
+.staff-pick-grid .spg-b:hover{border-color:var(--pri);background:#e3f2fd;color:var(--pri-d)}
+.staff-pick-grid .spg-b:active{transform:scale(.96)}
+.staff-pick-grid .spg-b.is-selected{background:var(--pri);color:#fff;border-color:var(--pri)}
+
+/* 記録者フィールド：ピッカー起動表示 */
+#recStaff, #mLaxStaff{cursor:pointer}
+#recStaff:read-only, #mLaxStaff:read-only{background:#fff8e1;border-color:#fbc02d}
+
+/* btn-go disabled 状態 */
+.btn-go:disabled, .btn-go.is-disabled{background:#bdbdbd;color:#fff;cursor:not-allowed;opacity:.7}
+.btn-go:disabled:hover, .btn-go.is-disabled:hover{background:#bdbdbd}
+#btnSubmitHint{display:none;font-size:11px;color:var(--ng);text-align:center;margin-top:6px;font-weight:700}
+#btnSubmitHint.on{display:block}
+
+/* 記録者入力ラッパー（入力欄＋クリアボタン） */
+.staff-input-wrap{display:flex;gap:6px;align-items:stretch}
+.staff-input-wrap input{flex:1;min-width:0}
+.staff-clear-btn{padding:0 12px;border:1px solid var(--g3);background:#fff;color:var(--g6);
+  border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;line-height:1}
+.staff-clear-btn:hover{background:#ffebee;color:var(--ng);border-color:var(--ng)}
+
+/* 職員管理（編集/退職ボタン） */
+.staff-grid .sg-item{flex-wrap:wrap}
+.staff-grid .sg-item .sg-actions{display:flex;gap:2px}
+.staff-grid .sg-edit, .staff-grid .sg-retire, .staff-grid .sg-restore{background:none;border:none;cursor:pointer;
+  font-size:13px;padding:2px 6px;border-radius:4px;line-height:1;color:var(--g6)}
+.staff-grid .sg-edit:hover{background:#e3f2fd;color:var(--pri-d)}
+.staff-grid .sg-retire:hover{background:#fff3e0;color:#e65100}
+.staff-grid .sg-restore:hover{background:#e8f5e9;color:#1b5e20}
+.staff-grid .sg-item.is-retired{opacity:.55;background:#f5f5f5}
+.staff-grid .sg-item.is-retired .sg-nm{text-decoration:line-through;color:var(--g6)}
+
+/* 💧 水分摂取入力 */
+#waterRow{padding:6px 0}
+.water-display{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;padding:10px;
+  background:linear-gradient(to bottom,#e3f2fd 0%,#bbdefb 100%);border-radius:10px;border:1px solid #90caf9}
+.water-display .water-ic{display:inline-flex;align-items:center;line-height:1}
+.water-display .water-ic svg{width:38px;height:38px;display:block}
+.water-display .water-value{font-size:28px;font-weight:700;color:#0d47a1;min-width:60px;text-align:right;
+  font-variant-numeric:tabular-nums;line-height:1}
+.water-display .water-unit{font-size:14px;font-weight:700;color:#0d47a1}
+.water-ctrl{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.water-ctrl input[type=range]{flex:1;min-width:120px;cursor:pointer}
+.water-step{min-width:46px;padding:8px 6px;border:1px solid var(--g3);background:#fff;border-radius:6px;
+  font-size:12px;font-weight:700;color:var(--g8);cursor:pointer}
+.water-step:hover{background:#e3f2fd;border-color:var(--pri);color:var(--pri-d)}
+.water-step:active{transform:scale(.96)}
+.water-preset{display:flex;gap:6px;flex-wrap:wrap}
+.water-pre{flex:1;min-width:54px;padding:8px;border:1px solid var(--g3);background:#fff;border-radius:6px;
+  font-size:12px;font-weight:700;color:var(--g8);cursor:pointer}
+.water-pre:hover{background:#e3f2fd;border-color:var(--pri);color:var(--pri-d)}
+.water-pre.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+
+/* 排泄記録に並ぶ 水分摂取マーク（一覧・履歴・詳細で再利用） */
+.water-mark{display:inline-flex;align-items:center;gap:4px;background:#e3f2fd;color:#0d47a1;
+  padding:2px 8px 2px 6px;border-radius:10px;font-size:12px;font-weight:700;vertical-align:middle;
+  margin-left:4px;white-space:nowrap;line-height:1.4}
+.water-mark svg{width:1.2em;height:1.2em}
+/* タイムライン内のセル：通常より少し大きめに表示してアイコンを読み取り可能に */
+.tl-info .water-mini{display:inline-flex;align-items:center;gap:2px;color:#0d47a1;font-weight:700;
+  vertical-align:middle}
+.tl-info .water-mini svg{width:1.3em;height:1.3em}
 </style>
 </head>
 <body>
 
 <header class="hdr">
-  <div><h1>🏥 排泄ケア記録</h1><div class="hdr-sub" id="hDate"></div></div>
+  <div><h1>🏥 排泄記録</h1><div class="hdr-sub" id="hDate"></div></div>
   <div style="display:flex;align-items:center;gap:8px">
     <div class="api-bd api-of" id="apiBd">●</div>
     <div style="font-size:12px;opacity:.85" id="hTime"></div>
@@ -420,10 +500,43 @@ textarea{resize:vertical;min-height:76px}
     <div class="cd-t">📝 備考・記録者</div>
     <div class="fg"><label class="fl">備考</label>
       <textarea id="recNote" placeholder="特記事項があれば入力してください…"></textarea></div>
-    <div class="fg" style="margin-bottom:0"><label class="fl">記録者</label>
-      <input type="text" id="recStaff" placeholder="スタッフ名を入力"></div>
+    <div class="fg" style="margin-bottom:0"><label class="fl">記録者 <span style="color:var(--ng);font-weight:700">*</span> <small style="font-weight:400;color:var(--g6)">（日中：10分無操作で自動クリア／夜間 21:00〜翌7:00：保持、7:00でリセット）</small></label>
+      <div class="staff-input-wrap">
+        <input type="text" id="recStaff" placeholder="タップして職員を選択 or 直接入力">
+        <button type="button" class="staff-clear-btn" id="recStaffClear" title="記録者をクリア">✕</button>
+      </div>
+    </div>
   </div>
-  <button class="btn-go" id="btnSubmit">💾 記　録　す　る</button>
+
+  <!-- 水分摂取（水分のみの記録もOK：排泄なしでも保存可能） -->
+  <div class="cd">
+    <div class="cd-t"><span id="waterTitleIc" style="vertical-align:-0.2em;display:inline-block;line-height:1"></span> 水分摂取（水分のみの記録もOK・最大500cc）</div>
+    <div id="waterRow">
+      <div class="water-display">
+        <span class="water-ic" id="waterDispIc"></span>
+        <span class="water-value" id="waterVal">0</span>
+        <small class="water-unit">cc</small>
+      </div>
+      <div class="water-ctrl">
+        <button type="button" class="water-step" data-step="-50">-50</button>
+        <button type="button" class="water-step" data-step="-10">-10</button>
+        <input type="range" id="waterSlider" min="0" max="500" step="10" value="0">
+        <button type="button" class="water-step" data-step="10">+10</button>
+        <button type="button" class="water-step" data-step="50">+50</button>
+      </div>
+      <div class="water-preset">
+        <button type="button" class="water-pre" data-v="0">0cc</button>
+        <button type="button" class="water-pre" data-v="50">50cc</button>
+        <button type="button" class="water-pre" data-v="100">100cc</button>
+        <button type="button" class="water-pre" data-v="150">150cc</button>
+        <button type="button" class="water-pre" data-v="200">200cc</button>
+        <button type="button" class="water-pre" data-v="300">300cc</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-go" id="btnSubmit" disabled>💾 記　録　す　る</button>
+  <div id="btnSubmitHint" class="on">⚠️ 記録者を選択してください</div>
   <button class="bn bs" id="btnSched" style="margin-top:10px;width:100%;background:#fff8e1;color:#8d6e00;border:1px solid #fbc02d;font-weight:700">⏰ 予定入力（排泄確認時間を設定）</button>
 </div>
 
@@ -449,12 +562,16 @@ textarea{resize:vertical;min-height:76px}
   </div>
   <!-- 排泄記録セクション（過去の時刻 / 既に記録があるセル用）-->
   <div id="mRecSection" style="display:none">
-    <div style="font-size:12px;color:var(--g6);margin-bottom:6px;font-weight:700">📝 上記の時刻で排泄記録を入力</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
-      <button class="bn bsm sch-rec" data-t="urine" style="background:#1976d2;color:#fff">💧 排尿</button>
-      <button class="bn bsm sch-rec" data-t="stool" style="background:#5d4037;color:#fff">🟤 排便</button>
-      <button class="bn bsm sch-rec" data-t="both" style="background:#7b1fa2;color:#fff">💧🟤 両方</button>
-      <button class="bn bsm sch-rec" data-t="none" style="background:#607d8b;color:#fff">✖️ 誘導 排泄なし</button>
+    <div style="font-size:12px;color:var(--g6);margin-bottom:6px;font-weight:700">📝 上記の時刻で記録を入力</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <button class="bn bsm sch-rec" data-t="urine" style="background:#4fc3f7;color:#fff">💧 排尿</button>
+      <button class="bn bsm sch-rec" data-t="stool" style="background:#a1887f;color:#fff">🟤 排便</button>
+      <button class="bn bsm sch-rec" data-t="both"  style="background:#ba68c8;color:#fff">💧🟤 両方</button>
+      <button class="bn bsm sch-rec" data-t="none"  style="background:#fff;color:#37474f;border:1.5px solid #455a64;font-weight:700">✖️ 誘導 排泄なし</button>
+    </div>
+    <!-- 水分摂取は排泄ボタン群とは離して配置（1行分の余白）。左寄せ＋他ボタンと同サイズ -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:20px;margin-bottom:10px">
+      <button class="bn bsm sch-rec" data-t="water" style="background:#1565c0;color:#fff;display:inline-flex;align-items:center;justify-content:center;gap:6px"><span id="mSchWaterIc" style="display:inline-flex;align-items:center"></span>水分摂取</button>
     </div>
     <div class="md-f">
       <button class="bn bs" id="mSchCellCancel2">キャンセル</button>
@@ -560,6 +677,17 @@ textarea{resize:vertical;min-height:76px}
       </label>
     </div>
     <div id="resList"></div>
+  </div>
+  <div class="cd">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h3 style="font-size:13px;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
+      <button class="bn bp bsm" id="btnAddStaff">＋ 追加</button>
+    </div>
+    <div style="font-size:11px;color:var(--g6);line-height:1.55;margin-bottom:8px">
+      入力画面の「記録者」欄をタップすると、ここで登録した職員名から選んで入力できます。<br>
+      苗字のみで十分です（例：山田）。最大 24 名まで登録できます。
+    </div>
+    <div id="staffList" class="staff-grid"></div>
   </div>
   <div class="cd">
     <div class="cd-t">⚠️ アラートしきい値</div>
@@ -678,9 +806,9 @@ textarea{resize:vertical;min-height:76px}
     <button class="bn bp bsm" id="mHistInput">✏️ この入居者で入力</button>
     <button class="bn bs bsm" id="mHist5Day">📊 5日表示</button>
     <button class="bn blax bsm" id="mHistLax">💊 下剤</button>
+    <button class="bn bs bsm" id="mHistClose" style="margin-left:auto" title="閉じる">✕ 閉じる</button>
   </div>
   <div id="mHistC"></div>
-  <div class="md-f"><button class="bn bs" id="mHistClose">閉じる</button></div>
 </div></div>
 
 <div class="mo" id="mLax"><div class="md" style="max-width:460px">
@@ -711,12 +839,43 @@ textarea{resize:vertical;min-height:76px}
     <input type="text" id="mLaxTabCustom" placeholder="その他の錠数（例: 5滴・10ml）" style="margin-top:6px"></div>
   <div class="fg"><label class="fl">備考</label>
     <textarea id="mLaxNote" rows="2" placeholder="服薬状況など"></textarea></div>
-  <div class="fg" style="margin-bottom:0"><label class="fl">記録者</label>
-    <input type="text" id="mLaxStaff" placeholder="スタッフ名"></div>
+  <div class="fg" style="margin-bottom:0"><label class="fl">記録者 <span style="color:var(--ng);font-weight:700">*</span></label>
+    <input type="text" id="mLaxStaff" placeholder="タップして職員を選択" readonly></div>
   <div class="md-f">
     <button class="bn br bsm" id="mLaxDel" style="margin-right:auto;display:none">🗑️ 削除</button>
     <button class="bn bs" id="mLaxCancel">キャンセル</button>
     <button class="bn bp" id="mLaxSave">💾 保存</button>
+  </div>
+</div></div>
+
+<!-- ── 職員（記録者）選択モーダル ── -->
+<div class="mo" id="mStaffPick"><div class="md" style="max-width:520px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <div class="md-t" style="margin-bottom:0;flex:1">👤 記録者を選択</div>
+    <button class="bn bs bsm" id="mStaffPickClose" title="閉じる" style="margin-left:auto">✕ 閉じる</button>
+  </div>
+  <div id="mStaffPickEmpty" style="display:none;padding:14px;text-align:center;font-size:12px;color:var(--g6);line-height:1.6;background:var(--g0);border:1px solid var(--g2);border-radius:6px">
+    まだ職員が登録されていません。<br>
+    <span style="color:var(--g7)">設定 → 👤 職員（記録者）管理</span> から追加するか、下の欄から直接入力してください。
+  </div>
+  <div id="mStaffPickGrid" class="staff-pick-grid"></div>
+  <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--g2)">
+    <div style="font-size:11px;color:var(--g6);margin-bottom:6px">リストに無い場合は直接入力（職員管理に自動登録されます）</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <input type="text" id="mStaffPickManual" placeholder="苗字を入力" style="flex:1;min-width:140px;padding:8px;border:1px solid var(--g3);border-radius:6px;font-size:13px" maxlength="10">
+      <button class="bn bp bsm" id="mStaffPickManualOk">追加</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ── プロンプト入力モーダル（職員追加・編集） ── -->
+<div class="mo" id="mPrompt"><div class="md" style="max-width:380px">
+  <div class="md-t" id="mPromptT">入力</div>
+  <div style="font-size:12px;color:var(--g7);margin-bottom:8px" id="mPromptMsg"></div>
+  <input type="text" id="mPromptInp" placeholder="" style="width:100%;padding:10px;font-size:15px;border:1px solid var(--g3);border-radius:6px;box-sizing:border-box" maxlength="20">
+  <div class="md-f" style="margin-top:14px">
+    <button class="bn bs" id="mPromptCancel">キャンセル</button>
+    <button class="bn bp" id="mPromptOk">OK</button>
   </div>
 </div></div>
 
@@ -731,11 +890,13 @@ textarea{resize:vertical;min-height:76px}
 <script>
 /* ═══════════ DATA ═══════════ */
 let D={residents:[],records:[],cfg:{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3}};
-let ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false};
+let ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0};
 /* 排泄元マーカー（タイムライン／5日表示共通） */
 function tlMarks(r){
   if(r.type==='none')return'<span style="font-size:13px;color:#455a64;font-weight:700">✖️</span>';
   if(r.type==='laxative')return'<span class="ev-d l"></span>';
+  // 水分摂取のみ：コップマーク
+  if(r.type==='water')return'<span title="水分摂取のみ" style="display:inline-flex;align-items:center">'+waterSvg('15px')+'</span>';
   var h='';
   if(r.type==='urine'||r.type==='both'){
     var us=r.urineSrc||'self';
@@ -1072,6 +1233,21 @@ function load(){
   if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
   if(!Array.isArray(D.residents))D.residents=[];
   if(!Array.isArray(D.records))D.records=[];
+  // 職員（記録者）リスト：{name, active} のオブジェクト配列。最大 32 名 (4列x8行)。
+  // 旧フォーマット（string 配列）から移行：文字列なら {name:str, active:true} に変換。
+  if(!Array.isArray(D.staffs))D.staffs=[];
+  D.staffs=D.staffs.map(function(s){
+    if(typeof s==='string'){
+      var nm=s.trim(); return nm?{name:nm,active:true}:null;
+    }
+    if(s && typeof s==='object' && typeof s.name==='string' && s.name.trim()){
+      return {name:s.name.trim(), active:(s.active!==false)};
+    }
+    return null;
+  }).filter(Boolean);
+  // 重複排除（同名は最初の1件のみ残す）
+  var _seen=Object.create(null);
+  D.staffs=D.staffs.filter(function(s){if(_seen[s.name])return false;_seen[s.name]=true;return true;});
   var beforeR=D.residents.length,beforeC=D.records.length;
   cleanData();
   // データが変化した場合、または初回のみ保存（不要な上書きを防止）
@@ -1114,8 +1290,22 @@ function _idx(){if(!_recIdx)_idxBuild();return _recIdx}
 function recsByRes(rid){return _idx().byRes[rid]||[]}
 function recsByResDate(rid,d){return _idx().byResDate[rid+'|'+d]||[]}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
-function today(){return new Date().toISOString().split('T')[0]}
-function dateOff(n){var d=new Date();d.setDate(d.getDate()+(n||0));return d.toISOString().split('T')[0]}
+/* ⚠️ 日付関数はローカル時刻ベースで返す。
+   toISOString().split('T')[0] は UTC 日付を返すため、JST(UTC+9) では夜中〜朝の
+   時間帯に「昨日」が返ってしまい、「今日」ボタンが 1 日前を表示する原因となる。 */
+function today(){
+  var d=new Date();
+  return d.getFullYear()+'-'+
+         String(d.getMonth()+1).padStart(2,'0')+'-'+
+         String(d.getDate()).padStart(2,'0');
+}
+function dateOff(n){
+  var d=new Date();
+  d.setDate(d.getDate()+(n||0));
+  return d.getFullYear()+'-'+
+         String(d.getMonth()+1).padStart(2,'0')+'-'+
+         String(d.getDate()).padStart(2,'0');
+}
 function fmtMD(dateStr){if(!dateStr)return'';var p=dateStr.split('-');if(p.length<3)return dateStr;return parseInt(p[1],10)+'/'+parseInt(p[2],10)}
 function fmtLast(rec,viewDate){if(!rec)return'';var d=rec.date||'';var t=rec.time||'';
   // 「本日」ラベルは viewDate が今日かつ記録日も今日のときだけ
@@ -1300,10 +1490,22 @@ function jumpToInputForRecord(rid,dateStr,hm,type){
   ci.rid=rid;
   if($('resSel'))$('resSel').value=String(rid);
   if($('recDT'))$('recDT').value=dateStr+'T'+(hm||'00:00');
-  // 種別ボタンを擬似クリックして関連セクションを展開
-  var btn=document.querySelector('.type-btn[data-t="'+type+'"]');
-  if(btn)btn.click();
-  showToast('📝 排泄記録の入力画面に切り替えました');
+  if(type === 'water'){
+    // 水分摂取モード：排泄種別ボタンは何も選択せず、水分入力欄にフォーカスを誘導
+    // デフォルト 100cc を仮セットして「これから量を変更してください」と促す
+    if(typeof setWaterCC === 'function') setWaterCC(100);
+    showToast('🥤 水分摂取量を入力してください（10cc刻み）');
+    // スクロールを水分セクションに合わせる
+    setTimeout(function(){
+      var wr=$('waterRow');
+      if(wr && wr.scrollIntoView) wr.scrollIntoView({behavior:'smooth',block:'center'});
+    }, 50);
+  } else {
+    // 排泄種別ボタンを擬似クリックして関連セクションを展開
+    var btn=document.querySelector('.type-btn[data-t="'+type+'"]');
+    if(btn) btn.click();
+    showToast('📝 排泄記録の入力画面に切り替えました');
+  }
 }
 function deleteSchedCell(){
   if(!schCellCtx)return;
@@ -1371,7 +1573,22 @@ function submitRec(){
   var sv=$('resSel').value;
   ci.rid=sv?parseInt(sv):null;
   if(!ci.rid||isNaN(ci.rid)){showToast('⚠️ 入居者を選択してください');ci.rid=null;return}
-  if(!ci.type){showToast('⚠️ 排泄種別を選択してください');return}
+  // 排泄種別 もしくは 水分摂取 のいずれかが必要
+  var hasWater = Number(ci.waterCC) > 0;
+  if(!ci.type && !hasWater){
+    showToast('⚠️ 排泄種別を選択するか、水分摂取量を入力してください');return
+  }
+  // 排泄種別が無く水分のみの場合は type='water' に設定
+  if(!ci.type && hasWater){ ci.type = 'water'; }
+  // 水分摂取として記録する場合は **必ず 1cc 以上** が必要。
+  // （type='water' は水分のみの記録なので 0cc では成立しない。
+  //   修正モードで既存の water 記録を 0cc に変えて保存しようとしたケースも防止）
+  if(ci.type === 'water' && !hasWater){
+    showToast('⚠️ 水分摂取量を入力してください（1cc 以上）');return
+  }
+  // 記録者必須（ボタン側でも disabled だが、ロジック側でも二重防御）
+  var _staffNow=($('recStaff').value||'').trim();
+  if(!_staffNow){ showToast('⚠️ 記録者を選択してください','err'); return; }
   let ua=ci.urineAmt;
   if((ci.type==='urine'||ci.type==='both')&&!ua){const cv=$('cusUV').value;if(cv)ua=parseInt(cv)}
   const dt=$('recDT').value;if(!dt){showToast('⚠️ 日時を入力してください');return}
@@ -1388,11 +1605,12 @@ function submitRec(){
     existing.urineSrc=uSrcStr();existing.stoolSrc=sSrcStr();
     existing.stoolAmt=ci.stoolAmt;existing.consistency=ci.consistency;existing.stoolColor=ci.stoolColor;
     existing.notes=$('recNote').value.trim();existing.staff=$('recStaff').value.trim();
+    existing.waterCC = (Number(ci.waterCC)>0 ? Math.round(Number(ci.waterCC)/10)*10 : 0);
     existing.updatedAt=new Date().toISOString();
     save();apiPush('saveRecord',{record:existing});
     if(existing.staff)localStorage.setItem('hbcr_ls',existing.staff);
     const res=D.residents.find(r=>r.id===ci.rid);
-    const tl={urine:'排尿',stool:'排便',both:'排尿＋排便',none:'誘導・排泄なし'}[ci.type];
+    const tl={urine:'排尿',stool:'排便',both:'排尿＋排便',none:'誘導・排泄なし',water:'水分摂取のみ'}[ci.type];
     showToast('✅ '+(res?res.name:'')+' — '+tl+'を修正しました');
     editRecId=null;resetForm();
     if(typeof renderBoard==='function')renderBoard();
@@ -1404,12 +1622,13 @@ function submitRec(){
     type:ci.type,
     urineAmt:ua,urineColor:ci.urineColor,urineSrc:uSrcStr(),
     stoolAmt:ci.stoolAmt,consistency:ci.consistency,stoolColor:ci.stoolColor,stoolSrc:sSrcStr(),
+    waterCC: (Number(ci.waterCC)>0 ? Math.round(Number(ci.waterCC)/10)*10 : 0),
     notes:$('recNote').value.trim(),staff:$('recStaff').value.trim(),createdAt:new Date().toISOString()};
   D.records.push(rec);save();
   apiPush('addRecord',{record:rec});
   if(rec.staff)localStorage.setItem('hbcr_ls',rec.staff);
   const res=D.residents.find(r=>r.id===ci.rid);
-  const tl={urine:'排尿',stool:'排便',both:'排尿＋排便'}[ci.type];
+  const tl={urine:'排尿',stool:'排便',both:'排尿＋排便',water:'水分摂取のみ'}[ci.type];
   showToast('✅ '+(res?res.name:'')+' — '+tl+'を記録しました');resetForm()}
 
 // 記録の修正モードを開始
@@ -1478,8 +1697,11 @@ function editRec(id){
   // 備考・記録者
   $('recNote').value=r.notes||'';
   $('recStaff').value=r.staff||'';
-  // 送信ボタンのラベルを変更
+  // 水分摂取
+  if(typeof setWaterCC === 'function') setWaterCC(r.waterCC||0);
+  // 送信ボタンのラベルとゲート状態を更新
   updateSubmitBtnLabel();
+  if(typeof updateSubmitGate==='function') updateSubmitGate();
   showToast('✏️ 修正モードに切り替えました');
 }
 
@@ -1504,7 +1726,8 @@ function updateSubmitBtnLabel(){
   }
 }
 
-function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false};
+function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0};
+  if(typeof setWaterCC==='function') setWaterCC(0);
   editRecId=null;
   setNow();$('recNote').value='';$('resSel').value='';
   $$('.type-btn').forEach(b=>b.classList.remove('su','ss','sb','sn'));
@@ -1514,7 +1737,11 @@ function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolA
   $$('.src-b').forEach(b=>b.classList.remove('on'));
   $('secU').style.display='none';$('secS').style.display='none';
   $('cusU').style.display='none';$('cusUV').value='';
-  updateSubmitBtnLabel();}
+  updateSubmitBtnLabel();
+  // 記録者は ci.rid と紐づかないので reset では消さない（直前入力した人を再利用しやすい）
+  // ただしゲート状態は再評価する
+  if(typeof updateSubmitGate==='function') updateSubmitGate();
+}
 
 /* ═══════════ BOARD ═══════════ */
 // 更新ボタン: API接続中はサーバーから最新取得、未接続はローカル再描画
@@ -1550,17 +1777,31 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     const lCons=ls?fmtCons(ls):'';const lSA=ls?ls.stoolAmt:null;
     // 備考: 当日の排尿・排便記録のうち notes が入っているものを時刻順で列挙
     var _esc=function(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')};
-    var dayNotes=recsByResDate(re.id,date).filter(function(r){
-      return r.type!=='laxative' && r.notes && String(r.notes).trim()
+    // 当日の備考 (notes) と 水分摂取 (waterCC>0) を統合して時刻順に表示
+    var dayBoth=recsByResDate(re.id,date).filter(function(r){
+      if(r.type==='laxative') return false;
+      var hasNote = !!(r.notes && String(r.notes).trim());
+      var hasWater = Number(r.waterCC)>0;
+      return hasNote || hasWater;
     }).sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
-    var notesHtml=dayNotes.length?dayNotes.map(function(r){
-      var ic=r.type==='urine'?'💧':r.type==='stool'?'🟤':r.type==='both'?'💧🟤':r.type==='none'?'✖️':'📝';
-      return'<div style="margin-bottom:4px;display:flex;gap:6px;align-items:flex-start">'+
+    // 当日合計水分摂取量
+    var dayWaterTotal = recsByResDate(re.id,date).reduce(function(s,r){
+      return s + (Number(r.waterCC)>0 ? Number(r.waterCC) : 0);
+    }, 0);
+    var waterSummary = dayWaterTotal>0
+      ? '<div style="margin-bottom:6px;padding:3px 8px;background:#e3f2fd;color:#0d47a1;border-radius:10px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px">'+waterSvg('1.1em')+' 本日 '+dayWaterTotal+'cc</div>'
+      : '';
+    var notesHtml=waterSummary + (dayBoth.length?dayBoth.map(function(r){
+      // 種別アイコン：水分のみは SVG コップ、それ以外は従来通り
+      var ic=r.type==='urine'?'💧':r.type==='stool'?'🟤':r.type==='both'?'💧🟤':r.type==='none'?'✖️':r.type==='water'?waterSvg('1.1em'):'📝';
+      var wtag=(Number(r.waterCC)>0)?'<span class="water-mark">'+waterSvg('1.1em')+' '+Number(r.waterCC)+'cc</span>':'';
+      var noteText=(r.notes && String(r.notes).trim())?_esc(r.notes).replace(/\n/g,'<br>'):'';
+      return'<div style="margin-bottom:4px;display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap">'+
         '<span style="color:var(--g6);font-variant-numeric:tabular-nums;flex-shrink:0;font-weight:600">'+(r.time||'')+'</span>'+
-        '<span style="flex-shrink:0">'+ic+'</span>'+
-        '<span style="flex:1">'+_esc(r.notes).replace(/\n/g,'<br>')+'</span>'+
+        '<span style="flex-shrink:0;display:inline-flex;align-items:center">'+ic+'</span>'+
+        '<span style="flex:1;min-width:0">'+noteText+wtag+'</span>'+
       '</div>';
-    }).join(''):'';
+    }).join(''):'');
     // 当日の全記録（排尿・排便・下剤を含む）— 操作ボタンで使用
     const dAll=recsByResDate(re.id,date);
     const hasRec=dAll.length>0;
@@ -1660,6 +1901,8 @@ function renderTL(){const date=$('tlDate').value||today();
         }
         if(r.type==='laxative'){info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'')}
         if(r.type==='none'){info+='誘導'}
+        // 水分摂取マーク（排尿の 💧 と区別するため、円柱コップ SVG を採用）
+        if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
       cells+='<td class="tl-c has'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+inner+'</td>'}
     // 最終排尿・排便の日付差 (表示中日付との差) ― マイナスのみ表示
@@ -1752,6 +1995,7 @@ function showFiveDay(rid,endDate){
         }
         if(r.type==='laxative')info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'');
         if(r.type==='none')info+='誘導';
+        if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'');
       }).join('');
       cells+='<td class="tl-c has'+schCls+'" data-fdslot="'+date+'-'+s+'">'+schLbl5+inner+'</td>';
@@ -1813,10 +2057,14 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
       +(r.medicine?'<div>薬剤: '+r.medicine+'</div>':'')
       +(r.tablets?'<div>錠数: '+r.tablets+'錠</div>':'')
       +'</div>';
+  }else if(r.type==='water'){
+    // 水分摂取のみの記録：排泄詳細は表示しない
+    h+='<div class="hi" style="margin-bottom:8px;background:#e3f2fd;border-left:4px solid #1976d2;padding:8px 12px;border-radius:6px;color:#0d47a1"><b style="display:inline-flex;align-items:center;gap:6px">'+waterSvg('1.3em')+' 水分摂取のみ</b></div>';
   }else{
     if(r.type==='urine'||r.type==='both'){h+='<div class="hi u" style="margin-bottom:8px"><b style="color:var(--u)">💧 排尿</b>'+(r.urineAmt?'<div>量: '+fmtUA(r.urineAmt)+'</div>':'')+(r.urineColor?'<div>色: '+r.urineColor+'</div>':'')+'</div>'}
     if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);h+='<div class="hi s" style="margin-bottom:8px"><b style="color:var(--s)">🟤 排便</b>'+(c?'<div>性状: '+c+'</div>':'')+(r.stoolAmt?'<div>量: '+r.stoolAmt+'</div>':'')+(r.stoolColor?'<div>色: '+r.stoolColor+'</div>':'')+'</div>'}
   }
+  if(Number(r.waterCC)>0)h+='<div class="hi" style="margin-bottom:8px;background:#e3f2fd;border-left:4px solid #1976d2;padding:8px 12px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:6px">'+waterSvg('1.3em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
   if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size:13px;margin-top:6px">📝 '+r.notes+'</div>';
   if(r.staff)h+='<div style="margin-top:8px;font-size:12px;color:var(--g5)">記録者: '+r.staff+'</div>';
   $('mDetC').innerHTML=h;$('mDet').classList.add('on')}
@@ -1830,8 +2078,9 @@ function showDetMulti(recs){
   curDetDate=recs[0].date;curDetSlot=hmToSlot(recs[0].time);
   if($('mDetHist'))$('mDetHist').style.display='';
   const res=D.residents.find(x=>x.id===recs[0].residentId);
-  const typeLbl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤'};
-  const typeColor={urine:'var(--u)',stool:'var(--s)',both:'#e91e63',laxative:'#7b1fa2'};
+  // 水分のみのラベルはアイコン無しの「水分のみ」（複数詳細はバッジ表示のため）
+  const typeLbl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導',water:'水分のみ'};
+  const typeColor={urine:'var(--u)',stool:'var(--s)',both:'#e91e63',laxative:'#7b1fa2',none:'#607d8b',water:'#0d47a1'};
 
   let h='<div style="margin-bottom:12px"><b>'+(res?res.name:'不明')+'</b>'
     +'<span style="color:var(--g5);margin-left:8px">'+(res?res.room+'号室':'')+'</span>'
@@ -1869,6 +2118,10 @@ function showDetMulti(recs){
         +(r.medicine?'<div>薬剤: '+r.medicine+'</div>':'')
         +(r.tablets?'<div>錠数: '+r.tablets+'錠</div>':'')
         +'</div>'}
+    // 水分摂取
+    if(Number(r.waterCC)>0){
+      h+='<div class="hi" style="margin-bottom:6px;background:#e3f2fd;border-left:4px solid #1976d2;padding:6px 10px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:4px">'+waterSvg('1.2em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
+    }
     if(r.notes)h+='<div style="padding:6px 8px;background:var(--g0);border-radius:6px;font-size:12px">📝 '+r.notes+'</div>';
     if(r.staff)h+='<div style="margin-top:6px;font-size:11px;color:var(--g5)">記録者: '+r.staff+'</div>';
     h+='</div>';
@@ -1912,19 +2165,26 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   const recs=recsByRes(rid).slice().sort((a,b)=>b.datetime.localeCompare(a.datetime)).slice(0,100);
   if(!recs.length){$('mHistC').innerHTML='<p style="color:var(--g5);font-size:13px">記録がありません</p>'}
   else{
+    const _wsvgSm = waterSvg('1.15em');
     const tbl='<div class="ht-w"><table class="ht"><thead><tr>'+
-      '<th>日付</th><th>時刻</th><th>種別</th><th>排尿量</th><th>尿の色</th><th>便の性状</th><th>排便量</th><th>便の色</th><th>備考</th><th>記録者</th>'+
+      '<th>日付</th><th>時刻</th><th>種別</th><th>排尿量</th><th>尿の色</th><th>便の性状</th><th>排便量</th><th>便の色</th><th><span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分</span></th><th>備考</th><th>記録者</th>'+
       '</tr></thead><tbody>'+recs.map(r=>{
-        const tc=r.type==='urine'?'tp-u':r.type==='stool'?'tp-s':r.type==='laxative'?'tp-l':r.type==='none'?'tp-n':'tp-b';
-        const tl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導'}[r.type]||r.type;
+        const tc=r.type==='urine'?'tp-u':r.type==='stool'?'tp-s':r.type==='laxative'?'tp-l':r.type==='none'?'tp-n':r.type==='water'?'tp-w':'tp-b';
+        // 水分のみ行の種別ラベル：アイコン付き
+        const tl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導'}[r.type]
+                  || (r.type==='water' ? ('<span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分のみ</span>') : r.type);
         var isLax=(r.type==='laxative');
         var isNone=(r.type==='none');
+        var isWater=(r.type==='water');
         var laxInfo=isLax?((r.medicine||'-')+' '+(r.tablets?r.tablets+'錠':'')):'';
-        return'<tr'+(isLax?' style="background:#f3e5f5"':isNone?' style="background:#eceff1"':'')+'><td>'+r.date+'</td><td>'+r.time+'</td><td class="'+tc+'">'+tl+'</td>'+
-          '<td>'+(isLax||isNone?'-':(r.urineAmt?fmtUA(r.urineAmt):'-'))+'</td>'+
-          '<td>'+(isLax||isNone?'-':(r.urineColor||'-'))+'</td>'+
-          '<td'+(isLax?' colspan="3" style="text-align:left"':isNone?' colspan="3" style="text-align:left;color:var(--g5)"':'')+'>'+(isLax?laxInfo:isNone?'排泄なし':(fmtCons(r)||'-'))+'</td>'+
-          (isLax||isNone?'':'<td>'+(r.stoolAmt||'-')+'</td><td>'+(r.stoolColor||'-')+'</td>')+
+        var waterCell = (Number(r.waterCC)>0) ? '<span class="water-mark">'+_wsvgSm+Number(r.waterCC)+'cc</span>' : '-';
+        // 水分のみは排泄詳細を空に
+        return'<tr'+(isLax?' style="background:#f3e5f5"':isNone?' style="background:#eceff1"':isWater?' style="background:#e3f2fd"':'')+'><td>'+r.date+'</td><td>'+r.time+'</td><td class="'+tc+'">'+tl+'</td>'+
+          '<td>'+(isLax||isNone||isWater?'-':(r.urineAmt?fmtUA(r.urineAmt):'-'))+'</td>'+
+          '<td>'+(isLax||isNone||isWater?'-':(r.urineColor||'-'))+'</td>'+
+          '<td'+(isLax?' colspan="3" style="text-align:left"':isNone?' colspan="3" style="text-align:left;color:var(--g5)"':isWater?' colspan="3" style="text-align:left;color:#0d47a1"':'')+'>'+(isLax?laxInfo:isNone?'排泄なし':isWater?'水分のみ':(fmtCons(r)||'-'))+'</td>'+
+          (isLax||isNone||isWater?'':'<td>'+(r.stoolAmt||'-')+'</td><td>'+(r.stoolColor||'-')+'</td>')+
+          '<td>'+waterCell+'</td>'+
           '<td style="text-align:left;white-space:normal;max-width:100px;word-break:break-all">'+(r.notes||'')+'</td>'+
           '<td>'+(r.staff||'')+'</td></tr>'}).join('')+'</tbody></table></div>';
     $('mHistC').innerHTML=tbl}
@@ -1993,6 +2253,7 @@ function saveLax(){
   var d=dt.split('T')[0],t=dt.split('T')[1]||'';
   var note=($('mLaxNote').value||'').trim();
   var staff=($('mLaxStaff').value||'').trim();
+  if(!staff){showToast('⚠️ 記録者を選択してください','err');return}
   if(staff)localStorage.setItem('hbcr_ls',staff);
   if(editLaxId){
     var ex=D.records.find(function(r){return r.id===editLaxId});
@@ -2066,7 +2327,366 @@ function renderCfg(){
   $('cfgUW').value=D.cfg.urineWarnH;$('cfgUD').value=D.cfg.urineDangerH;
   $('cfgSW').value=D.cfg.stoolWarnD;$('cfgSD').value=D.cfg.stoolDangerD;
   if($('cfgApi'))$('cfgApi').value=apiUrl||'';
-  if($('apiStatus')&&apiUrl)$('apiStatus').textContent='接続URL: '+apiUrl.slice(0,60)+'...'}
+  if($('apiStatus')&&apiUrl)$('apiStatus').textContent='接続URL: '+apiUrl.slice(0,60)+'...';
+  renderStaffList();
+}
+
+/* ========================================================
+   職員（記録者）管理
+   - D.staffs は {name, active} オブジェクト配列（最大 32 名）
+   - 設定画面で 追加・編集・退職（非表示）・復帰 を管理
+   - 入力画面の記録者欄をタップ → 4×N グリッドピッカー（active のみ表示）
+   ======================================================== */
+var STAFF_MAX=32;
+
+/* 全件（退職含む） / アクティブのみ の取得 */
+function getStaffAll(){ return Array.isArray(D.staffs)?D.staffs:[]; }
+function getStaffActive(){ return getStaffAll().filter(function(s){return s && s.active!==false; }); }
+
+/* HTML エスケープ */
+function escapeHtmlText(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+/* モーダル式プロンプト（window.prompt 不要） */
+var _promptResolve=null;
+function customPrompt(opts){
+  if(typeof opts==='string') opts={message:opts};
+  opts=opts||{};
+  return new Promise(function(resolve){
+    _promptResolve=resolve;
+    $('mPromptT').textContent=opts.title||'入力';
+    $('mPromptMsg').textContent=opts.message||'';
+    var inp=$('mPromptInp');
+    inp.value=opts.value||'';
+    inp.placeholder=opts.placeholder||'';
+    $('mPrompt').classList.add('on');
+    setTimeout(function(){ try{inp.focus();inp.select();}catch(e){} }, 50);
+  });
+}
+function _closePrompt(val){
+  $('mPrompt').classList.remove('on');
+  var r=_promptResolve; _promptResolve=null;
+  if(r) r(val);
+}
+
+/* 設定画面：職員リストの描画 */
+function renderStaffList(){
+  var box=$('staffList');if(!box)return;
+  var list=getStaffAll();
+  if(list.length===0){
+    box.innerHTML='<div class="sg-empty">まだ職員が登録されていません。「＋ 追加」から登録してください。</div>';
+    return;
+  }
+  box.innerHTML=list.map(function(s,i){
+    var safe=escapeHtmlText(s.name);
+    var retired=(s.active===false);
+    var cls='sg-item'+(retired?' is-retired':'');
+    var actionBtns='';
+    if(retired){
+      actionBtns='<button class="sg-restore" data-i="'+i+'" title="復帰">↩</button>';
+    } else {
+      actionBtns='<button class="sg-edit" data-i="'+i+'" title="編集">✎</button>'+
+                 '<button class="sg-retire" data-i="'+i+'" title="退職にする">🏃</button>';
+    }
+    actionBtns+='<button class="sg-del" data-i="'+i+'" title="完全削除">×</button>';
+    return '<div class="'+cls+'"><span class="sg-nm" title="'+safe+'">'+safe+'</span>'+
+           '<div class="sg-actions">'+actionBtns+'</div></div>';
+  }).join('');
+  $$('#staffList .sg-edit').forEach(function(b){
+    b.addEventListener('click',function(){
+      var i=parseInt(this.dataset.i,10);
+      var cur=D.staffs[i];if(!cur)return;
+      customPrompt({title:'職員を編集',message:'苗字を変更します（10文字以内）',value:cur.name}).then(function(v){
+        if(v==null)return;
+        v=String(v).trim();
+        if(!v){ showToast('⚠️ 入力が空です','err'); return; }
+        if(v.length>10){ showToast('⚠️ 10文字以内で入力してください','err'); return; }
+        if(D.staffs.some(function(s,j){return j!==i && s.name===v;})){
+          showToast('⚠️ 既に登録されている苗字です','err'); return;
+        }
+        var oldName=cur.name;
+        cur.name=v;
+        save();
+        renderStaffList();
+        // 入力中のフィールドに同じ名前があれば追従
+        ['recStaff','mLaxStaff'].forEach(function(id){
+          if($(id) && $(id).value===oldName){ $(id).value=v; }
+        });
+        showToast('✅ '+oldName+' → '+v+' に変更しました');
+      });
+    });
+  });
+  $$('#staffList .sg-retire').forEach(function(b){
+    b.addEventListener('click',function(){
+      var i=parseInt(this.dataset.i,10);
+      var s=D.staffs[i];if(!s)return;
+      customConfirm('「'+s.name+'」を退職にしますか？\n選択画面から非表示になります（過去の記録は保持）').then(function(ok){
+        if(!ok)return;
+        s.active=false;
+        save();
+        renderStaffList();
+        showToast(s.name+' を退職にしました');
+      });
+    });
+  });
+  $$('#staffList .sg-restore').forEach(function(b){
+    b.addEventListener('click',function(){
+      var i=parseInt(this.dataset.i,10);
+      var s=D.staffs[i];if(!s)return;
+      s.active=true;
+      save();
+      renderStaffList();
+      showToast('✅ '+s.name+' を復帰しました');
+    });
+  });
+  $$('#staffList .sg-del').forEach(function(b){
+    b.addEventListener('click',function(){
+      var i=parseInt(this.dataset.i,10);
+      var s=D.staffs[i];if(!s)return;
+      customConfirm('「'+s.name+'」を完全に削除しますか？\n（過去の記録は影響を受けません。退職にする場合は 🏃 を使用してください）').then(function(ok){
+        if(!ok)return;
+        D.staffs.splice(i,1);
+        save();
+        renderStaffList();
+        showToast('職員を削除しました');
+      });
+    });
+  });
+}
+
+function addStaffPrompt(){
+  if(getStaffAll().length>=STAFF_MAX){
+    showToast('⚠️ 最大'+STAFF_MAX+'名まで登録できます','err');return;
+  }
+  customPrompt({title:'職員を追加',message:'苗字を入力してください（例：山田 / 10文字以内）',placeholder:'山田'}).then(function(nm){
+    if(nm==null)return;
+    addStaffByName(nm,true);
+  });
+}
+
+/* 苗字を職員マスタへ追加。既存ならアクティブ化のみ。
+   isExplicit: ユーザが「追加」ボタンを押した場合 true（エラートーストを出す） */
+function addStaffByName(nm, isExplicit){
+  nm=String(nm||'').trim();
+  if(!nm){ if(isExplicit) showToast('⚠️ 入力が空です','err'); return null; }
+  if(nm.length>10){ if(isExplicit) showToast('⚠️ 10文字以内で入力してください','err'); return null; }
+  var existing=D.staffs.find(function(s){return s.name===nm;});
+  if(existing){
+    if(existing.active===false){ existing.active=true; save(); renderStaffList(); showToast('✅ '+nm+' を復帰しました'); return existing; }
+    if(isExplicit) showToast('⚠️ 既に登録されています','err');
+    return existing;
+  }
+  if(getStaffAll().length>=STAFF_MAX){
+    if(isExplicit) showToast('⚠️ 最大'+STAFF_MAX+'名まで登録できます','err'); return null;
+  }
+  var rec={name:nm,active:true};
+  D.staffs.push(rec);
+  save();
+  renderStaffList();
+  showToast('✅ '+nm+' を追加しました');
+  return rec;
+}
+
+/* 記録者ピッカー：4列グリッドで職員を選ぶ。退職者は表示しない。最大 32 名対応。
+   target は値を入れたい input 要素の id（'recStaff' or 'mLaxStaff'） */
+var _staffPickTarget=null;
+function openStaffPicker(targetInputId){
+  _staffPickTarget=targetInputId;
+  var grid=$('mStaffPickGrid');
+  var emptyBox=$('mStaffPickEmpty');
+  var list=getStaffActive();   // 退職者を除外、最大 32 名想定
+  var curVal=$(targetInputId)?$(targetInputId).value:'';
+  if(list.length===0){
+    if(grid)grid.innerHTML='';
+    if(emptyBox)emptyBox.style.display='';
+  } else {
+    if(emptyBox)emptyBox.style.display='none';
+    if(grid){
+      grid.innerHTML=list.map(function(s){
+        var safe=escapeHtmlText(s.name);
+        var selCls=(s.name===curVal)?' is-selected':'';
+        return '<button type="button" class="spg-b'+selCls+'" data-nm="'+safe+'">'+safe+'</button>';
+      }).join('');
+      $$('#mStaffPickGrid .spg-b').forEach(function(b){
+        b.addEventListener('click',function(){
+          selectStaffPick(this.dataset.nm);
+        });
+      });
+    }
+  }
+  if($('mStaffPickManual'))$('mStaffPickManual').value='';
+  $('mStaffPick').classList.add('on');
+}
+function selectStaffPick(nm){
+  if(!_staffPickTarget)return;
+  var el=$(_staffPickTarget);
+  if(el){
+    el.value=nm;
+    try{ el.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){
+      try{ var ev=document.createEvent('Event'); ev.initEvent('input',true,true); el.dispatchEvent(ev); }catch(e2){}
+    }
+  }
+  $('mStaffPick').classList.remove('on');
+  _staffPickTarget=null;
+  updateSubmitGate();
+  noteStaffActivity();   // 30分タイマー再設定
+}
+
+/* 「記録する」ボタンの有効/無効ゲート。
+   有効化の条件は ① 記録者あり かつ ② 排泄種別 or 水分摂取(>0) のいずれかあり。
+   不足項目に応じて hint テキストを動的に切り替える。 */
+function updateSubmitGate(){
+  var btn=$('btnSubmit');
+  var hint=$('btnSubmitHint');
+  var inp=$('recStaff');
+  if(!btn||!inp)return;
+  var hasStaff = !!(inp.value && inp.value.trim());
+  var hasType  = !!(typeof ci === 'object' && ci && ci.type);
+  var hasWater = !!(typeof ci === 'object' && ci && Number(ci.waterCC) > 0);
+  var hasContent = hasType || hasWater;
+  var canSubmit = hasStaff && hasContent;
+  btn.disabled = !canSubmit;
+  btn.classList.toggle('is-disabled', !canSubmit);
+  if(hint){
+    var msg = '';
+    if(!hasStaff && !hasContent){
+      msg = '⚠️ 記録者と、排泄種別または水分摂取量を入力してください';
+    } else if(!hasStaff){
+      msg = '⚠️ 記録者を選択してください';
+    } else if(!hasContent){
+      msg = '⚠️ 排泄種別を選択するか、水分摂取量を入力してください';
+    }
+    if(msg){
+      hint.textContent = msg;
+      hint.classList.add('on');
+    } else {
+      hint.classList.remove('on');
+    }
+  }
+}
+
+/* ========================================================
+   記録者欄の時間帯別 自動クリア機能
+   ------------------------------------------------------------
+   勤務シフトを考慮した２モード運用：
+     ◆ 日中 (07:00〜21:00): 最終入力から **10分** で自動クリア
+     ◆ 夜間 (21:00〜翌07:00): 最終記録者を **維持**、翌 07:00 にクリア
+
+   - 最終アクティビティ時刻を LS に保存（リロード後も継続）
+   - 入力・ピッカー選択のたびに状況に応じたタイマー再設定
+   - 夜間に setTimeout を 7AM まで張る（長くても 10 時間 = setTimeout 上限内）
+   ======================================================== */
+var STAFF_TTL_DAY_MS   = 10 * 60 * 1000;  // 日中の無操作タイムアウト（10分）
+var STAFF_DAY_START_H  = 7;                // 日中開始時刻（hour, ローカル）
+var STAFF_DAY_END_H    = 21;               // 日中終了時刻
+var STAFF_TS_KEY = 'hbcr_staff_ts';        // 最終アクティビティ時刻 (epoch ms)
+var _staffTimer = null;
+
+/* 現在ローカル時刻が日中時間帯かどうか */
+function isStaffDayTime(d){
+  var h = (d || new Date()).getHours();
+  return h >= STAFF_DAY_START_H && h < STAFF_DAY_END_H;
+}
+/* 次の 07:00 までのミリ秒（夜間モードで使用） */
+function msUntilNextStaffMorning(){
+  var now = new Date();
+  var next7 = new Date(now);
+  next7.setHours(STAFF_DAY_START_H, 0, 0, 0);
+  if(next7 <= now) next7.setDate(next7.getDate() + 1);
+  return next7.getTime() - now.getTime();
+}
+
+function noteStaffActivity(){
+  try{ localStorage.setItem(STAFF_TS_KEY, String(Date.now())); }catch(e){}
+  scheduleStaffClear();
+}
+function scheduleStaffClear(){
+  if(_staffTimer){ clearTimeout(_staffTimer); _staffTimer=null; }
+  var inp=$('recStaff');
+  if(!inp || !inp.value || !inp.value.trim()) return;
+  var delay;
+  if(isStaffDayTime()){
+    // 日中：10分後にチェック
+    delay = STAFF_TTL_DAY_MS + 500;
+  } else {
+    // 夜間：翌 07:00 にチェック（厳密に「次の朝7時」までを setTimeout）
+    delay = msUntilNextStaffMorning() + 500;
+  }
+  _staffTimer = setTimeout(clearStaffIfStale, delay);
+}
+function clearStaffIfStale(){
+  var inp=$('recStaff');
+  if(!inp) return;
+  var ts = 0;
+  try{ ts = parseInt(localStorage.getItem(STAFF_TS_KEY)||'0',10); }catch(e){}
+  var shouldClear = false;
+  var reason = '';
+  if(isStaffDayTime()){
+    // 日中モード：10分経過でクリア。夜間からの繰越（ts が古い）も同条件で確実にクリア
+    if(!ts || (Date.now() - ts) >= STAFF_TTL_DAY_MS){
+      shouldClear = true;
+      reason = '日中10分の無操作';
+    }
+  } else {
+    // 夜間モード：原則維持。何もしない（次回 setTimeout が翌7時を狙う）
+  }
+  if(shouldClear){
+    if(inp.value){
+      inp.value = '';
+      try{ inp.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){}
+      updateSubmitGate();
+      showToast('🕒 ' + reason + 'のため記録者をクリアしました');
+    }
+    try{ localStorage.removeItem(STAFF_TS_KEY); }catch(e){}
+  } else {
+    // クリアしないが、次回のチェック時刻を更新（夜間→日中の境界をまたぐため）
+    scheduleStaffClear();
+  }
+}
+/* 起動時：記録者の有効期限チェック。日中なら 10 分超でクリア、夜間ならそのまま保持。 */
+function initStaffAutoClear(){
+  clearStaffIfStale();
+  scheduleStaffClear();
+}
+
+/* ========================================================
+   水分摂取量 入力
+   ------------------------------------------------------------
+   - ci.waterCC（0〜500cc、10cc刻み）
+   - スライダー / -50/-10/+10/+50 / プリセット 0〜300 からの入力
+   - アイコンは円柱形コップに青い水（約70%）を入れた SVG。
+     排尿の 💧 と確実に区別できる視覚に統一する。
+   ======================================================== */
+var WATER_MAX = 500;
+
+/* 水分摂取アイコン（SVG）。size='1em' / '1.4em' / '28px' などを渡せる。
+   - 円柱コップ：白塗り＋濃グレー枠
+   - 中身：青い水が約 70% の高さまで（y=8.4 を境界に下が水）
+   - DOMノード数を最小限に保つため、シンプルな矩形3要素で構成 */
+function waterSvg(size){
+  var s = size || '1.15em';
+  return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" '+
+         'style="vertical-align:-0.2em;display:inline-block;flex-shrink:0" aria-hidden="true">'+
+         '<rect x="6" y="3" width="12" height="18" rx="1.6" ry="1.6" fill="#fff" stroke="#37474f" stroke-width="1.5"/>'+
+         '<rect x="7.5" y="8.4" width="9" height="11.6" rx="0.6" ry="0.6" fill="#2196f3"/>'+
+         '<line x1="7.5" y1="8.6" x2="16.5" y2="8.6" stroke="#0d47a1" stroke-width="0.7"/>'+
+         '</svg>';
+}
+function setWaterCC(v){
+  v = Math.round(Number(v||0) / 10) * 10;
+  if(!isFinite(v) || v < 0) v = 0;
+  if(v > WATER_MAX) v = WATER_MAX;
+  ci.waterCC = v;
+  var disp = $('waterVal'); if(disp) disp.textContent = v;
+  var sld = $('waterSlider'); if(sld && Number(sld.value) !== v) sld.value = v;
+  $$('.water-pre').forEach(function(b){ b.classList.toggle('on', Number(b.dataset.v) === v); });
+  // 水分のみ記録モード切替（updateSubmitGate に通知）
+  if(typeof updateSubmitGate==='function') updateSubmitGate();
+}
+function resetWater(){ setWaterCC(0); }
 async function toggleResActive(id,makeActive){
   var r=D.residents.find(function(x){return x.id===id});if(!r)return;
   if(!makeActive){
@@ -2128,11 +2748,11 @@ function saveRes(){const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$(
 
 /* ═══════════ EXPORT / IMPORT ═══════════ */
 function expCSV(){const BOM='\uFEFF';
-  const hdr=['日付','時刻','居室','氏名','種別','排尿量','尿の色','便の性状','排便量','便の色','備考','記録者'];
+  const hdr=['日付','時刻','居室','氏名','種別','排尿量','尿の色','便の性状','排便量','便の色','水分(cc)','備考','記録者'];
   const rows=D.records.map(r=>{const res=D.residents.find(x=>x.id===r.residentId);
-    const tl={urine:'排尿',stool:'排便',both:'両方'}[r.type]||r.type;
+    const tl={urine:'排尿',stool:'排便',both:'両方',laxative:'下剤',none:'誘導',water:'水分のみ'}[r.type]||r.type;
     return[r.date,r.time,res?res.room:'',res?res.name:'',tl,
-      r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',r.notes||'',r.staff||'']
+      r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',Number(r.waterCC)>0?Number(r.waterCC):'',r.notes||'',r.staff||'']
       .map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')});
   dl(BOM+[hdr.join(','),...rows].join('\n'),'haiben_'+today()+'.csv','text/csv;charset=utf-8;')}
 function expJSON(){dl(JSON.stringify(D,null,2),'haiben_backup_'+today()+'.json','application/json')}
@@ -2169,9 +2789,30 @@ function init(){
   // 入居者プルダウン
   $('resSel').addEventListener('change',function(){var v=this.value;ci.rid=v?parseInt(v):null;if(isNaN(ci.rid))ci.rid=null});
 
-  // 排泄種別
+  // 排泄種別（同じボタンを再クリックすると選択解除）
   $$('.type-btn').forEach(b=>b.addEventListener('click',function(){
-    const t=this.dataset.t;ci.type=t;
+    const t=this.dataset.t;
+    const isAlreadyOn = (ci.type === t);
+    if(isAlreadyOn){
+      // 解除モード：ci.type を null に戻し、関連セクションを閉じる
+      ci.type = null;
+      $$('.type-btn').forEach(x=>x.classList.remove('su','ss','sb','sn'));
+      $('secU').style.display='none';
+      $('secS').style.display='none';
+      ci.urineAmt=null;ci.urineColor=null;
+      ci.stoolAmt=null;ci.consistency=null;ci.stoolColor=null;
+      ci.uSelf=false;ci.uPad=false;ci.sToilet=false;ci.sPad=false;
+      $$('#uSrcRow .src-b').forEach(x=>x.classList.remove('on'));
+      $$('#sSrcRow .src-b').forEach(x=>x.classList.remove('on'));
+      $$('.ua').forEach(x=>x.classList.remove('on'));
+      $$('#uRow .cb').forEach(x=>x.classList.remove('on'));
+      $$('.cons-b').forEach(x=>x.classList.remove('on'));
+      $$('.sa').forEach(x=>x.classList.remove('on'));
+      $$('#scRow .cb').forEach(x=>x.classList.remove('on'));
+      if(typeof updateSubmitGate==='function') updateSubmitGate();
+      return;
+    }
+    ci.type=t;
     $$('.type-btn').forEach(x=>x.classList.remove('su','ss','sb','sn'));
     this.classList.add(t==='urine'?'su':t==='stool'?'ss':t==='none'?'sn':'sb');
     $('secU').style.display=(t==='urine'||t==='both')?'block':'none';
@@ -2179,6 +2820,7 @@ function init(){
     // 非表示側のソース選択はクリア（残留防止）
     if(t==='urine'||t==='none'){ci.sToilet=false;ci.sPad=false;$$('#sSrcRow .src-b').forEach(x=>x.classList.remove('on'))}
     if(t==='stool'||t==='none'){ci.uSelf=false;ci.uPad=false;$$('#uSrcRow .src-b').forEach(x=>x.classList.remove('on'))}
+    if(typeof updateSubmitGate==='function') updateSubmitGate();
   }));
 
   // 排尿元・排便元（複数選択可）
@@ -2219,7 +2861,108 @@ function init(){
     $$('#scRow .cb').forEach(x=>x.classList.remove('on'));this.classList.add('on');ci.stoolColor=this.dataset.v}));
 
   // 記録ボタン
-  $('btnSubmit').addEventListener('click',submitRec);
+  $('btnSubmit').addEventListener('click',function(e){
+    // 念のため二重チェック（disabled 属性を回避された場合の保険）
+    var inp=$('recStaff');
+    if(!inp || !(inp.value && inp.value.trim())){
+      showToast('⚠️ 記録者を選択してください','err');
+      return;
+    }
+    submitRec();
+  });
+  // 記録者欄：タップでピッカー、ただし直接編集・削除も可能。
+  // 自動でフォーカス時にピッカー開くと編集できなくなるので、明示的なタップ・クリックのみで開く。
+  if($('recStaff')){
+    // フィールド自体をタップしたとき：値が空ならピッカーを開く / 値があるなら編集を許可
+    $('recStaff').addEventListener('click',function(e){
+      if(!this.value || !this.value.trim()){ openStaffPicker('recStaff'); }
+      // 値がある時は何もしない（直接編集できる）
+    });
+    $('recStaff').addEventListener('input',function(){ updateSubmitGate(); noteStaffActivity(); });
+    $('recStaff').addEventListener('change',function(){ updateSubmitGate(); noteStaffActivity(); });
+  }
+  // 記録者クリアボタン
+  if($('recStaffClear')){
+    $('recStaffClear').addEventListener('click',function(){
+      var inp=$('recStaff'); if(!inp) return;
+      inp.value=''; updateSubmitGate();
+      try{ localStorage.removeItem(STAFF_TS_KEY); }catch(e){}
+      if(_staffTimer){ clearTimeout(_staffTimer); _staffTimer=null; }
+      // クリア直後はピッカーを開いて選び直しを促す
+      openStaffPicker('recStaff');
+    });
+  }
+  // 下剤モーダルの記録者欄にも同じピッカー（こちらは editable 不要なのでクリックで常に開く）
+  if($('mLaxStaff')){
+    $('mLaxStaff').addEventListener('click',function(){ openStaffPicker('mLaxStaff'); });
+    $('mLaxStaff').addEventListener('focus',function(){ openStaffPicker('mLaxStaff'); });
+  }
+  // ピッカーモーダル
+  if($('mStaffPickClose')){
+    $('mStaffPickClose').addEventListener('click',function(){
+      $('mStaffPick').classList.remove('on'); _staffPickTarget=null;
+    });
+  }
+  if($('mStaffPick')){
+    $('mStaffPick').addEventListener('click',function(e){
+      if(e.target===this){ this.classList.remove('on'); _staffPickTarget=null; }
+    });
+  }
+  if($('mStaffPickManualOk')){
+    $('mStaffPickManualOk').addEventListener('click',function(){
+      var v=$('mStaffPickManual').value.trim();
+      if(!v){ showToast('⚠️ 名前を入力してください','err'); return; }
+      // 追加：マスタ登録（既存ならアクティブ化のみ）してから選択
+      addStaffByName(v, false);
+      selectStaffPick(v);
+    });
+  }
+  if($('mStaffPickManual')){
+    $('mStaffPickManual').addEventListener('keydown',function(e){
+      if(e.key==='Enter'){ e.preventDefault(); $('mStaffPickManualOk').click(); }
+    });
+  }
+
+  // プロンプトモーダル（追加・編集）
+  if($('mPromptOk'))$('mPromptOk').addEventListener('click',function(){ _closePrompt($('mPromptInp').value); });
+  if($('mPromptCancel'))$('mPromptCancel').addEventListener('click',function(){ _closePrompt(null); });
+  if($('mPrompt'))$('mPrompt').addEventListener('click',function(e){ if(e.target===this) _closePrompt(null); });
+  if($('mPromptInp'))$('mPromptInp').addEventListener('keydown',function(e){
+    if(e.key==='Enter'){ e.preventDefault(); _closePrompt(this.value); }
+    else if(e.key==='Escape'){ e.preventDefault(); _closePrompt(null); }
+  });
+
+  // 水分摂取アイコン（SVG）を見やすい大きさで挿入
+  if($('waterTitleIc')) $('waterTitleIc').innerHTML = waterSvg('1.3em');
+  if($('waterDispIc'))  $('waterDispIc').innerHTML  = waterSvg('38px');
+  // 過去時刻モーダルの水分ボタンにもアイコンを注入
+  if($('mSchWaterIc'))  $('mSchWaterIc').innerHTML  = waterSvg('1.2em');
+  if($('waterSlider'))$('waterSlider').addEventListener('input',function(){ setWaterCC(this.value); });
+  $$('.water-step').forEach(function(b){
+    b.addEventListener('click',function(){
+      var cur = Number(ci.waterCC||0);
+      var step = parseInt(this.dataset.step,10) || 0;
+      setWaterCC(cur + step);
+    });
+  });
+  $$('.water-pre').forEach(function(b){
+    b.addEventListener('click',function(){
+      var v = parseInt(this.dataset.v,10)||0;
+      // 同じプリセットを再クリック → 0cc にして水分摂取を「無し」にする
+      // 0cc は記録されない（submitRec 側でも waterCC>0 のみ保存される）
+      if(Number(ci.waterCC) === v && v !== 0){
+        setWaterCC(0);
+        showToast('🥤 水分摂取の入力を解除しました');
+      } else {
+        setWaterCC(v);
+      }
+    });
+  });
+
+  // 初期状態のゲート反映 + 30分タイマー
+  setWaterCC(0);
+  updateSubmitGate();
+  initStaffAutoClear();
 
   // 一覧表示
   $('bdDate').addEventListener('change',function(){renderBoard();updateDayNavHi('bdDayNav',$('bdDate').value)});
@@ -2310,6 +3053,7 @@ function init(){
   })});
 
   // 設定
+  if($('btnAddStaff')) $('btnAddStaff').addEventListener('click',addStaffPrompt);
   $('btnAddRes').addEventListener('click',function(){editResId=null;$('mResT').textContent='入居者を追加';
     $('mRN').value='';if($('mRY'))$('mRY').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
     if($('mRLax'))$('mRLax').value='';
