@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0">
-<title>排泄記録システム</title>
+<title>排泄ケア記録システム</title>
 <style>
 :root{
   --pri:#1a73e8;--pri-l:#e8f0fe;--pri-d:#1557b0;
@@ -375,7 +375,7 @@ textarea{resize:vertical;min-height:76px}
 <body>
 
 <header class="hdr">
-  <div><h1>🏥 排泄記録</h1><div class="hdr-sub" id="hDate"></div></div>
+  <div><h1>🏥 排泄ケア記録</h1><div class="hdr-sub" id="hDate"></div></div>
   <div style="display:flex;align-items:center;gap:8px">
     <div class="api-bd api-of" id="apiBd">●</div>
     <div style="font-size:12px;opacity:.85" id="hTime"></div>
@@ -665,6 +665,33 @@ textarea{resize:vertical;min-height:76px}
 </div>
 
 <!-- ── 設定 ── -->
+<!-- ── 職員管理（専用画面） ── -->
+<div id="sc-staff" class="scr">
+  <div class="cd">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+      <h3 style="font-size:15px;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
+      <button class="bn bp" id="btnAddStaff2" style="padding:8px 16px">＋ 職員を追加</button>
+    </div>
+    <!-- 同期状態パネル（最重要・常時表示） -->
+    <div style="margin-bottom:12px;padding:12px;background:#fff8e1;border:2px solid #fbc02d;border-radius:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <span style="font-size:13px;font-weight:700;color:#5d4037">📡 サーバー同期状態：　<span id="staffSyncStat2">確認中...</span></span>
+        <button class="bn bp" id="btnStaffResync2" style="padding:10px 18px;background:#1565c0;color:#fff;font-weight:700;font-size:13px">🔄 全員を再送信</button>
+      </div>
+      <div id="staffSyncDetail2" style="font-size:11px;color:var(--g7);line-height:1.5"></div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #fbc02d;font-size:11px;color:var(--g6)">
+        💡 別端末で職員名が出ない場合は「🔄 全員を再送信」を押してください。<br>
+        💡 別端末で受信するには、その端末でアプリ右下の「設定」→ GAS Web App URL を保存しておく必要があります。
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--g6);line-height:1.55;margin-bottom:10px">
+      入力画面の「記録者」欄をタップすると、ここで登録した職員名から選んで入力できます。<br>
+      苗字のみで十分です（例：山田）。最大 24 名まで登録できます。
+    </div>
+    <div id="staffList2" class="staff-grid"></div>
+  </div>
+</div>
+
 <div id="sc-cfg" class="scr">
   <div class="cd">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -682,6 +709,14 @@ textarea{resize:vertical;min-height:76px}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <h3 style="font-size:13px;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
       <button class="bn bp bsm" id="btnAddStaff">＋ 追加</button>
+    </div>
+    <!-- 同期状態パネル（常時表示・操作の起点） -->
+    <div style="margin-bottom:10px;padding:10px 12px;background:#fff8e1;border:2px solid #fbc02d;border-radius:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:700;color:#5d4037">📡 サーバー同期状態：　<span id="staffSyncStat">確認中...</span></span>
+        <button class="bn bp bsm" id="btnStaffResync" style="padding:8px 14px;background:#1565c0;color:#fff;font-weight:700">🔄 強制再送信</button>
+      </div>
+      <div id="staffSyncDetail" style="font-size:11px;color:var(--g7);line-height:1.5"></div>
     </div>
     <div style="font-size:11px;color:var(--g6);line-height:1.55;margin-bottom:8px">
       入力画面の「記録者」欄をタップすると、ここで登録した職員名から選んで入力できます。<br>
@@ -742,6 +777,9 @@ textarea{resize:vertical;min-height:76px}
   </button>
   <button data-sc="tl">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>時系列
+  </button>
+  <button data-sc="staff">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>職員
   </button>
   <button data-sc="cfg">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>設定
@@ -1046,6 +1084,17 @@ async function syncFromAPI(showLoader){
     D.residents=mergedRes;
     D.records=mergedRec;
     D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
+    // 旧バージョンの遺留物（id=999999 の単一行など）をサーバー側からも消す
+    if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
+    // 職員リストを「room=_staff_ の隠し入居者」から復元（ローカル限定の未送信職員はマージで保持）
+    var hadStaffs=Array.isArray(D.staffs)?D.staffs.length:0;
+    var extracted=extractStaffsFromCfg({union:true});
+    // ローカル限定（オフライン追加で未送信）の職員があれば、サーバーに反映
+    if(extracted&&Array.isArray(D.staffs)&&D.staffs.length>hadStaffs){
+      if(typeof pushStaffsSync==='function')pushStaffsSync();
+    }
+    // 同期後の整合性チェック：D.staffs にあるのに sys-resident が無い名前を再送信
+    if(typeof ensureStaffsSynced==='function')ensureStaffsSynced();
     cleanData();save();
     // 同期成功時に URL の保存を refresh（cookie 1年延長・バックアップ層も再書込）
     if(apiUrl)saveApiUrl(apiUrl);
@@ -1202,7 +1251,12 @@ function normalizeData(){
 function cleanData(){
   normalizeData();
   if(D.residents)D.residents=D.residents.filter(isValidRes);
-  if(D.records)D.records=D.records.filter(function(r){return r&&r.id&&r.residentId!=null&&toNum(r.residentId)!==null&&r.datetime})}
+  if(D.records)D.records=D.records.filter(function(r){return r&&r.id&&r.residentId!=null&&toNum(r.residentId)!==null&&r.datetime});
+  // 旧バージョンの遺留システム記録（type=_sys_staffs_）を除去
+  if(typeof isUserRec==='function'&&Array.isArray(D.records)){
+    D.records=D.records.filter(isUserRec);
+  }
+}
 function nextResId(){
   var ids=D.residents.map(function(r){return toNum(r.id)}).filter(function(v){return v!==null});
   return ids.length?Math.max.apply(null,ids)+1:1}
@@ -1248,6 +1302,13 @@ function load(){
   // 重複排除（同名は最初の1件のみ残す）
   var _seen=Object.create(null);
   D.staffs=D.staffs.filter(function(s){if(_seen[s.name])return false;_seen[s.name]=true;return true;});
+  // ローカル staffs が空で cfg に _staffs がある場合は復元（同期復旧の起動時シナリオ）
+  if(!D.staffs.length && D.cfg && Array.isArray(D.cfg._staffs)){
+    if(typeof extractStaffsFromCfg==='function')extractStaffsFromCfg({union:false});
+    else{
+      D.staffs=D.cfg._staffs.map(function(s){return s&&s.name?{name:String(s.name).trim(),active:s.active!==false}:null}).filter(Boolean);
+    }
+  }
   var beforeR=D.residents.length,beforeC=D.records.length;
   cleanData();
   // データが変化した場合、または初回のみ保存（不要な上書きを防止）
@@ -1409,7 +1470,7 @@ function renderSchedList(){
     var t=this.dataset.t;schedDraft=schedDraft.filter(function(x){return x!==t});renderSchedList()})});
 }
 function openSchedModal(){
-  var sel=$('mSchRes');var act=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name})
+  var sel=$('mSchRes');var act=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name})
     .sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
     act.map(function(r){return'<option value="'+r.id+'">'+r.room+'　'+r.name+'</option>'}).join('');
@@ -1533,13 +1594,23 @@ function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav 
   if(name==='input')setNow();
   if(name==='board'){if($('bdDate')&&!$('bdDate').value)$('bdDate').value=today();updateDayNavHi('bdDayNav',$('bdDate').value);renderBoard()}
   if(name==='tl'){if($('tlDate')&&!$('tlDate').value)$('tlDate').value=today();updateDayNavHi('tlDayNav',$('tlDate').value);renderTL()}
-  if(name==='cfg')renderCfg()}
+  if(name==='cfg')renderCfg();
+  if(name==='staff'){
+    // 開いた瞬間に最新データから D.staffs を再構築（同期直後・別端末からの初回起動でも即反映）
+    if(typeof extractStaffsFromCfg==='function'&&typeof _getStaffResidents==='function'){
+      var sysList=_getStaffResidents();
+      if(sysList.length>0)extractStaffsFromCfg({union:true});
+    }
+    if(typeof renderStaffList==='function')renderStaffList();
+    if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
+  }
+}
 
 /* ═══════════ RESIDENT SELECT ═══════════ */
 /* 五十音順：フリガナ優先、未設定なら氏名でフォールバック */
 function resSortKey(r){return String((r&&r.yomi)?r.yomi:(r&&r.name)?r.name:'').trim()}
 function resSortAiu(a,b){return resSortKey(a).localeCompare(resSortKey(b),'ja')}
-function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name})
+function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name})
   .sort(resSortAiu);const cv=ci.rid;
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
     a.map(r=>'<option value="'+r.id+'"'+(cv===r.id?' selected':'')+'>'+r.name+'　'+r.room+'号室</option>').join('');
@@ -1767,7 +1838,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
   var cntLbl=isTodayView?'本日回数':'当日回数';
   if($('bdHdrUCnt'))$('bdHdrUCnt').textContent=cntLbl;
   if($('bdHdrSCnt'))$('bdHdrSCnt').textContent=cntLbl;
-  const res=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   tb.innerHTML=res.map((re,i)=>{
     const lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
     const uh=elH(lu||null),sh=elH(ls||null);
@@ -1871,7 +1942,7 @@ function setupTopScroll(){setupTopScrollFor('tlScrollTop','tlBox')}
 
 /* ═══════════ TIMELINE (30分) ═══════════ */
 function renderTL(){const date=$('tlDate').value||today();
-  const res=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   // ヘッダー行: 時刻（0〜23）を各2列（:00, :30）
   let h1='<th rowspan="2" style="min-width:96px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
   let h2='';
@@ -2162,7 +2233,7 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   if($('mHistInput'))$('mHistInput').style.display=(res.active===false)?'none':'';
   if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
   $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
-  const recs=recsByRes(rid).slice().sort((a,b)=>b.datetime.localeCompare(a.datetime)).slice(0,100);
+  const recs=recsByRes(rid).filter(isUserRec).slice().sort((a,b)=>b.datetime.localeCompare(a.datetime)).slice(0,100);
   if(!recs.length){$('mHistC').innerHTML='<p style="color:var(--g5);font-size:13px">記録がありません</p>'}
   else{
     const _wsvgSm = waterSvg('1.15em');
@@ -2195,7 +2266,7 @@ function openLaxModal(presetRid,editId){
   editLaxId=editId||null;
   // 入居者セレクタ組み立て
   var sel=$('mLaxRes');
-  var a=D.residents.filter(function(r){return r.active!==false&&r.hidden!==true&&r.name})
+  var a=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name})
     .sort(resSortAiu);
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
     a.map(function(r){return'<option value="'+r.id+'">'+r.name+'　'+r.room+'号室</option>'}).join('');
@@ -2296,7 +2367,7 @@ async function deleteLaxCur(){
 /* ═══════════ SETTINGS ═══════════ */
 function renderCfg(){
   var showInactive=$('cfgShowInactive')&&$('cfgShowInactive').checked;
-  const all=[...D.residents].filter(isValidRes).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  const all=[...D.residents].filter(isValidRes).filter(isUserRes).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   const actives=all.filter(function(r){return r.active!==false});
   const inactives=all.filter(function(r){return r.active===false});
   const list=showInactive?all:actives;
@@ -2341,6 +2412,187 @@ var STAFF_MAX=32;
 
 /* 全件（退職含む） / アクティブのみ の取得 */
 function getStaffAll(){ return Array.isArray(D.staffs)?D.staffs:[]; }
+
+/* 職員リストの複数端末同期（最終版・確実）
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   実証された事実：
+     - residents シートは name/yomi/room/gender/active/hidden の6列のみを保存
+     - 独自フィールドや特殊文字を含む name は GAS によって破棄/切詰される
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   方針：エンコード一切無し。職員1名 = 1行の「隠し入居者」として保存する。
+     - 各職員は ID 999900〜999931（32枠）に振り、name には職員の苗字をそのまま入れる
+     - room='_staff_' を識別マーカーに、active で在籍/退職を表現
+     - hidden:true で UI 全面非表示。スプシで人間が読める形なのでデバッグ容易
+     - 旧バージョンの 999999 単一行は自動削除して移行 */
+var SYS_STAFF_ROOM='STAFF';     // 識別マーカー（room列の純粋な英大文字、GAS互換性最大化）
+var SYS_STAFF_ROOM_LEGACY='_staff_'; // 旧マーカー（移行用）
+var LEGACY_SYS_RID=999999;      // 旧バージョンの単一行（移行用）
+var LEGACY_SYS_NAME_PREFIX='__sys_staffs__';
+var LEGACY_SYS_ID_BASE=999900;
+var LEGACY_SYS_ID_MAX=999999;
+
+/* 職員入居者の判定：room='_staff_' が唯一の判定基準
+   （ID範囲縛りは廃止。GASが大きいID範囲を弾く可能性を排除し、
+    nextResId() で連番採番された通常レンジのIDで保存する） */
+function _isStaffRes(r){
+  if(!r)return false;
+  if(toNum(r.id)===null)return false;
+  // GAS のカラムシフト対策: yomi 列にも STAFF が入っているケースも判定
+  if(r.room===SYS_STAFF_ROOM||r.room===SYS_STAFF_ROOM_LEGACY)return true;
+  if(r.yomi===SYS_STAFF_ROOM||r.yomi===SYS_STAFF_ROOM_LEGACY)return true;
+  return false;
+}
+function _getStaffResidents(){
+  return (D.residents||[]).filter(_isStaffRes);
+}
+function pushStaffsSync(){
+  if(!Array.isArray(D.residents))D.residents=[];
+  var sysResByName={};
+  _getStaffResidents().forEach(function(r){if(r.name)sysResByName[r.name]=r});
+  var localStaffByName={};
+  (D.staffs||[]).forEach(function(s){if(s&&s.name)localStaffByName[s.name]=s});
+
+  var toAdd=[],toUpdate=[],toDelete=[];
+
+  // 1. ローカル各職員 → 既存sys-resを更新 or 新規作成
+  (D.staffs||[]).forEach(function(s){
+    if(!s||!s.name)return;
+    var existing=sysResByName[s.name];
+    if(existing){
+      var newActive=(s.active!==false);
+      // active や hidden が違っていれば更新
+      if(existing.active!==newActive||existing.hidden!==true||existing.room!==SYS_STAFF_ROOM){
+        existing.active=newActive;existing.hidden=true;existing.room=SYS_STAFF_ROOM;
+        existing.gender=existing.gender||'女性';
+        toUpdate.push(existing);
+      }
+    }else{
+      // GASの拒否を回避するため、通常入居者と同じ連番ID（nextResId）を使用
+      var newId=nextResId();
+      // yomi に '-' を入れて GAS のカラムシフト（空文字を欠落として扱う挙動）を回避
+      var newRes={id:newId,name:s.name,yomi:'-',room:SYS_STAFF_ROOM,gender:'女性',
+                  active:(s.active!==false),hidden:true};
+      D.residents.push(newRes);
+      toAdd.push(newRes);
+    }
+  });
+
+  // 2. ローカルに無い sys-res は削除対象
+  _getStaffResidents().forEach(function(r){
+    if(!localStaffByName[r.name])toDelete.push(r);
+  });
+
+  // 3. ローカル削除
+  toDelete.forEach(function(r){
+    D.residents=D.residents.filter(function(x){return x!==r});
+  });
+
+  // 4. cfg バックアップ（同一端末高速復旧用）
+  if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
+  D.cfg._staffs=(D.staffs||[]).map(function(s){return{name:s.name,active:s.active!==false}});
+  D.cfg._staffsTs=Date.now();
+
+  save();
+
+  // 5. サーバー送信（差分のみ）
+  toAdd.forEach(function(r){apiPush('saveRes',{resident:r})});
+  toUpdate.forEach(function(r){apiPush('saveRes',{resident:r})});
+  toDelete.forEach(function(r){apiPush('delRes',{id:r.id})});
+}
+function extractStaffsFromCfg(opts){
+  // 1次: room/yomi='STAFF' の隠し入居者から復元 → 2次: cfg._staffs（同一端末バックアップ）
+  opts=opts||{};
+  var sysList=_getStaffResidents();
+  var server=null;
+  if(sysList.length>0){
+    // 同名の重複は最新IDを優先（古いID順にソートしてから上書き処理）
+    sysList.sort(function(a,b){return toNum(a.id)-toNum(b.id)});
+    var seen={};
+    server=[];
+    sysList.forEach(function(r){
+      var nm=String(r.name||'').trim();
+      if(!nm)return;
+      seen[nm]={name:nm,active:r.active!==false};
+    });
+    Object.keys(seen).forEach(function(k){server.push(seen[k])});
+  }else if(D.cfg&&Array.isArray(D.cfg._staffs)){
+    server=D.cfg._staffs.map(function(s){
+      return s&&s.name?{name:String(s.name).trim(),active:s.active!==false}:null
+    }).filter(Boolean);
+  }
+  if(!server)return false;
+  var dedup={},u=[];
+  server.forEach(function(s){if(!dedup[s.name]){dedup[s.name]=true;u.push(s)}});
+  if(opts.union){
+    (D.staffs||[]).forEach(function(s){
+      if(s&&s.name&&!dedup[s.name]){u.push({name:s.name,active:s.active!==false});dedup[s.name]=true}
+    });
+  }
+  D.staffs=u;
+  return true;
+}
+/* システム入居者を UI から除外（room マーカーで判定） */
+function isUserRes(r){
+  if(!r)return false;
+  if(_isStaffRes(r))return false;
+  // 旧バージョン互換
+  if(toNum(r.id)===LEGACY_SYS_RID)return false;
+  if(typeof r.name==='string'&&r.name.indexOf(LEGACY_SYS_NAME_PREFIX)===0)return false;
+  return true;
+}
+function isUserRec(r){
+  if(!r)return false;
+  if(r.type==='_sys_staffs_'||r.id==='sys_staffs_v1')return false; // 旧版の遺留
+  return true;
+}
+/* 整合性チェック：D.staffs に名前があるのに対応する sys-resident が存在しない場合、
+   pushStaffsSync を呼んで自動的に再送信する。これにより：
+   - 旧バージョンで保存できなかったデータが新方式で確実に反映される
+   - ITP/キャッシュ消去後の復旧時も自動で再同期される */
+function ensureStaffsSynced(){
+  if(!Array.isArray(D.staffs)||D.staffs.length===0)return false;
+  var sysList=_getStaffResidents();
+  var sysNames={};sysList.forEach(function(r){if(r.name)sysNames[r.name]=true});
+  var missing=D.staffs.filter(function(s){return s&&s.name&&!sysNames[s.name]});
+  if(missing.length>0){
+    if(typeof pushStaffsSync==='function')pushStaffsSync();
+    return true;
+  }
+  return false;
+}
+
+/* 旧バージョン遺留物の自動掃除＋サーバー削除
+   - 旧 999999 単一行（古い hijack 方式）
+   - 旧 999900〜999999 個別職員行（GASが大きいIDを弾いたためサーバーに無い可能性大）
+   - 旧 type=_sys_staffs_ 特殊 record
+   既存の正常データには一切影響しない（room='_staff_' のみが新方式の判別子） */
+function cleanupLegacyStaffsRec(){
+  if(Array.isArray(D.records)){
+    var before=D.records.length;
+    D.records=D.records.filter(isUserRec);
+    if(D.records.length!==before){save();_recIdx=null;}
+  }
+  if(Array.isArray(D.residents)){
+    var legacyRes=D.residents.filter(function(r){
+      if(!r)return false;
+      var id=toNum(r.id);
+      // 名前ベースの旧シングル行（id=999999, name=__sys_staffs__）
+      if(id===LEGACY_SYS_RID)return true;
+      if(typeof r.name==='string'&&r.name.indexOf(LEGACY_SYS_NAME_PREFIX)===0)return true;
+      // 999900〜999999 範囲の旧個別職員行（GASに登録できなかった可能性大）
+      if(id!==null&&id>=LEGACY_SYS_ID_BASE&&id<=LEGACY_SYS_ID_MAX&&r.room===SYS_STAFF_ROOM)return true;
+      return false;
+    });
+    if(legacyRes.length>0){
+      var ids=legacyRes.map(function(r){return r.id});
+      D.residents=D.residents.filter(function(r){return legacyRes.indexOf(r)<0});
+      save();
+      if(typeof apiPush==='function'){
+        ids.forEach(function(lid){apiPush('delRes',{id:lid})});
+      }
+    }
+  }
+}
 function getStaffActive(){ return getStaffAll().filter(function(s){return s && s.active!==false; }); }
 
 /* HTML エスケープ */
@@ -2374,7 +2626,12 @@ function _closePrompt(val){
 
 /* 設定画面：職員リストの描画 */
 function renderStaffList(){
-  var box=$('staffList');if(!box)return;
+  // 両方のコンテナ（旧設定画面 staffList / 新職員タブ staffList2）に同じ内容をレンダリング
+  ['staffList','staffList2'].forEach(function(boxId){renderStaffListInto(boxId)});
+  if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
+}
+function renderStaffListInto(boxId){
+  var box=$(boxId);if(!box)return;
   var list=getStaffAll();
   if(list.length===0){
     box.innerHTML='<div class="sg-empty">まだ職員が登録されていません。「＋ 追加」から登録してください。</div>';
@@ -2395,7 +2652,7 @@ function renderStaffList(){
     return '<div class="'+cls+'"><span class="sg-nm" title="'+safe+'">'+safe+'</span>'+
            '<div class="sg-actions">'+actionBtns+'</div></div>';
   }).join('');
-  $$('#staffList .sg-edit').forEach(function(b){
+  $$('#'+boxId+' .sg-edit').forEach(function(b){
     b.addEventListener('click',function(){
       var i=parseInt(this.dataset.i,10);
       var cur=D.staffs[i];if(!cur)return;
@@ -2409,7 +2666,7 @@ function renderStaffList(){
         }
         var oldName=cur.name;
         cur.name=v;
-        save();
+        pushStaffsSync();
         renderStaffList();
         // 入力中のフィールドに同じ名前があれば追従
         ['recStaff','mLaxStaff'].forEach(function(id){
@@ -2419,42 +2676,71 @@ function renderStaffList(){
       });
     });
   });
-  $$('#staffList .sg-retire').forEach(function(b){
+  $$('#'+boxId+' .sg-retire').forEach(function(b){
     b.addEventListener('click',function(){
       var i=parseInt(this.dataset.i,10);
       var s=D.staffs[i];if(!s)return;
       customConfirm('「'+s.name+'」を退職にしますか？\n選択画面から非表示になります（過去の記録は保持）').then(function(ok){
         if(!ok)return;
         s.active=false;
-        save();
+        pushStaffsSync();
         renderStaffList();
         showToast(s.name+' を退職にしました');
       });
     });
   });
-  $$('#staffList .sg-restore').forEach(function(b){
+  $$('#'+boxId+' .sg-restore').forEach(function(b){
     b.addEventListener('click',function(){
       var i=parseInt(this.dataset.i,10);
       var s=D.staffs[i];if(!s)return;
       s.active=true;
-      save();
+      pushStaffsSync();
       renderStaffList();
       showToast('✅ '+s.name+' を復帰しました');
     });
   });
-  $$('#staffList .sg-del').forEach(function(b){
+  $$('#'+boxId+' .sg-del').forEach(function(b){
     b.addEventListener('click',function(){
       var i=parseInt(this.dataset.i,10);
       var s=D.staffs[i];if(!s)return;
       customConfirm('「'+s.name+'」を完全に削除しますか？\n（過去の記録は影響を受けません。退職にする場合は 🏃 を使用してください）').then(function(ok){
         if(!ok)return;
         D.staffs.splice(i,1);
-        save();
+        pushStaffsSync();
         renderStaffList();
         showToast('職員を削除しました');
       });
     });
   });
+  // 同期状態の診断を更新
+  if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
+}
+
+/* 職員同期状態の診断パネル（両画面に同じ内容を表示） */
+function renderStaffSyncStat(){
+  var local=(D.staffs||[]).length;
+  var sysList=_getStaffResidents();
+  var server=sysList.length;
+  var localNames={};(D.staffs||[]).forEach(function(s){if(s&&s.name)localNames[s.name]=true});
+  var serverNames={};sysList.forEach(function(r){if(r.name)serverNames[r.name]=true});
+  var unsynced=[];
+  Object.keys(localNames).forEach(function(n){if(!serverNames[n])unsynced.push(n)});
+  var statHtml,detText;
+  if(!apiUrl){
+    statHtml='<span style="color:var(--g6)">🔌 オフライン（GAS URL 未設定）</span>';
+    detText='ローカル '+local+' 名（端末内のみ・未同期）';
+  }else if(unsynced.length===0&&local>0){
+    statHtml='<span style="color:#1b5e20">✅ 同期済</span>';
+    detText='ローカル '+local+' 名 / サーバー '+server+' 名';
+  }else if(unsynced.length>0){
+    statHtml='<span style="color:#bf360c">⚠️ '+unsynced.length+' 名が未同期</span>';
+    detText='未送信: '+unsynced.join(', ')+'（→ 強制再送信ボタンで送信）';
+  }else{
+    statHtml='<span style="color:var(--g6)">職員未登録</span>';
+    detText='ローカル '+local+' 名 / サーバー '+server+' 名';
+  }
+  ['staffSyncStat','staffSyncStat2'].forEach(function(id){var el=$(id);if(el)el.innerHTML=statHtml});
+  ['staffSyncDetail','staffSyncDetail2'].forEach(function(id){var el=$(id);if(el)el.textContent=detText});
 }
 
 function addStaffPrompt(){
@@ -2475,7 +2761,7 @@ function addStaffByName(nm, isExplicit){
   if(nm.length>10){ if(isExplicit) showToast('⚠️ 10文字以内で入力してください','err'); return null; }
   var existing=D.staffs.find(function(s){return s.name===nm;});
   if(existing){
-    if(existing.active===false){ existing.active=true; save(); renderStaffList(); showToast('✅ '+nm+' を復帰しました'); return existing; }
+    if(existing.active===false){ existing.active=true; pushStaffsSync(); renderStaffList(); showToast('✅ '+nm+' を復帰しました'); return existing; }
     if(isExplicit) showToast('⚠️ 既に登録されています','err');
     return existing;
   }
@@ -2484,7 +2770,7 @@ function addStaffByName(nm, isExplicit){
   }
   var rec={name:nm,active:true};
   D.staffs.push(rec);
-  save();
+  pushStaffsSync();
   renderStaffList();
   showToast('✅ '+nm+' を追加しました');
   return rec;
@@ -2497,6 +2783,16 @@ function openStaffPicker(targetInputId){
   _staffPickTarget=targetInputId;
   var grid=$('mStaffPickGrid');
   var emptyBox=$('mStaffPickEmpty');
+  // 開く直前に sys-residents から D.staffs を再構築（同期直後・別端末から復旧時の最後の砦）
+  if(typeof extractStaffsFromCfg==='function'){
+    var sysList=(typeof _getStaffResidents==='function')?_getStaffResidents():[];
+    if(sysList.length>0){
+      // sys-residents が存在する場合は D.staffs を上書き再構築
+      var prevCnt=(D.staffs||[]).length;
+      extractStaffsFromCfg({union:true});
+      if((D.staffs||[]).length!==prevCnt&&typeof renderStaffList==='function')renderStaffList();
+    }
+  }
   var list=getStaffActive();   // 退職者を除外、最大 32 名想定
   var curVal=$(targetInputId)?$(targetInputId).value:'';
   if(list.length===0){
@@ -2749,7 +3045,7 @@ function saveRes(){const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$(
 /* ═══════════ EXPORT / IMPORT ═══════════ */
 function expCSV(){const BOM='\uFEFF';
   const hdr=['日付','時刻','居室','氏名','種別','排尿量','尿の色','便の性状','排便量','便の色','水分(cc)','備考','記録者'];
-  const rows=D.records.map(r=>{const res=D.residents.find(x=>x.id===r.residentId);
+  const rows=D.records.filter(isUserRec).map(r=>{const res=D.residents.find(x=>x.id===r.residentId);
     const tl={urine:'排尿',stool:'排便',both:'両方',laxative:'下剤',none:'誘導',water:'水分のみ'}[r.type]||r.type;
     return[r.date,r.time,res?res.room:'',res?res.name:'',tl,
       r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',Number(r.waterCC)>0?Number(r.waterCC):'',r.notes||'',r.staff||'']
@@ -2768,6 +3064,10 @@ function dl(c,n,t){const a=document.createElement('a');a.href=URL.createObjectUR
 /* ═══════════ INIT ═══════════ */
 function init(){
   load();
+  // 旧バージョン（999999単一行・特殊record）の遺留物を起動時に掃除
+  if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
+  // ローカルに保存された職員リストがサーバーに反映されていない場合は自動で再送信
+  if(typeof ensureStaffsSynced==='function')setTimeout(function(){ensureStaffsSynced()},800);
   // 時計
   function tick(){const n=new Date();$('hDate').textContent=n.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
     $('hTime').textContent=n.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}
@@ -3054,6 +3354,25 @@ function init(){
 
   // 設定
   if($('btnAddStaff')) $('btnAddStaff').addEventListener('click',addStaffPrompt);
+  if($('btnAddStaff2')) $('btnAddStaff2').addEventListener('click',addStaffPrompt);
+  // 職員リスト 強制再送信ボタン（旧 設定画面 + 新 職員タブ 両方）
+  function _forceResyncStaffs(){
+    if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
+    var sysList=_getStaffResidents();
+    sysList.forEach(function(r){
+      D.residents=D.residents.filter(function(x){return x!==r});
+      apiPush('delRes',{id:r.id});
+    });
+    save();
+    if(Array.isArray(D.staffs)&&D.staffs.length>0){
+      pushStaffsSync();
+      setTimeout(function(){renderStaffSyncStat();renderStaffList();showToast('🔄 '+D.staffs.length+' 名をサーバーに再送信（'+sysList.length+' 件の旧エントリを削除）')},300);
+    }else{
+      setTimeout(function(){renderStaffSyncStat();renderStaffList();showToast('🧹 '+sysList.length+' 件の旧エントリを削除しました')},300);
+    }
+  }
+  if($('btnStaffResync')) $('btnStaffResync').addEventListener('click',_forceResyncStaffs);
+  if($('btnStaffResync2')) $('btnStaffResync2').addEventListener('click',_forceResyncStaffs);
   $('btnAddRes').addEventListener('click',function(){editResId=null;$('mResT').textContent='入居者を追加';
     $('mRN').value='';if($('mRY'))$('mRY').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
     if($('mRLax'))$('mRLax').value='';
