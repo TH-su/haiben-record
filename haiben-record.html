@@ -673,15 +673,15 @@ textarea{resize:vertical;min-height:76px}
       <button class="bn bp" id="btnAddStaff2" style="padding:8px 16px">＋ 職員を追加</button>
     </div>
     <!-- 同期状態パネル（最重要・常時表示） -->
-    <div style="margin-bottom:12px;padding:12px;background:#fff8e1;border:2px solid #fbc02d;border-radius:8px">
+    <div style="margin-bottom:12px;padding:12px;background:#e3f2fd;border:2px solid #1565c0;border-radius:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-        <span style="font-size:13px;font-weight:700;color:#5d4037">📡 サーバー同期状態：　<span id="staffSyncStat2">確認中...</span></span>
-        <button class="bn bp" id="btnStaffResync2" style="padding:10px 18px;background:#1565c0;color:#fff;font-weight:700;font-size:13px">🔄 全員を再送信</button>
+        <span style="font-size:13px;font-weight:700;color:#0d47a1">📡 サーバー同期状態：　<span id="staffSyncStat2">確認中...</span></span>
+        <button class="bn bp" id="btnStaffReceive2" style="padding:10px 18px;background:#1565c0;color:#fff;font-weight:700;font-size:13px">📥 全員を受信</button>
       </div>
       <div id="staffSyncDetail2" style="font-size:11px;color:var(--g7);line-height:1.5"></div>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #fbc02d;font-size:11px;color:var(--g6)">
-        💡 別端末で職員名が出ない場合は「🔄 全員を再送信」を押してください。<br>
-        💡 別端末で受信するには、その端末でアプリ右下の「設定」→ GAS Web App URL を保存しておく必要があります。
+      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #90caf9;font-size:11px;color:var(--g6)">
+        💡 別端末で登録した職員を取り込むには「📥 全員を受信」を押してください。<br>
+        💡 受信するには、設定で GAS Web App URL を保存しておく必要があります。
       </div>
     </div>
     <div style="font-size:12px;color:var(--g6);line-height:1.55;margin-bottom:10px">
@@ -1089,12 +1089,8 @@ async function syncFromAPI(showLoader){
     // 職員リストを「room=_staff_ の隠し入居者」から復元（ローカル限定の未送信職員はマージで保持）
     var hadStaffs=Array.isArray(D.staffs)?D.staffs.length:0;
     var extracted=extractStaffsFromCfg({union:true});
-    // ローカル限定（オフライン追加で未送信）の職員があれば、サーバーに反映
-    if(extracted&&Array.isArray(D.staffs)&&D.staffs.length>hadStaffs){
-      if(typeof pushStaffsSync==='function')pushStaffsSync();
-    }
-    // 同期後の整合性チェック：D.staffs にあるのに sys-resident が無い名前を再送信
-    if(typeof ensureStaffsSynced==='function')ensureStaffsSynced();
+    // 注: 起動時の自動 push は廃止（サンプル/古いデータがサーバーを上書きする事故を防ぐ）。
+    // 職員リストの同期は「職員タブ → 全員を受信」または UI 操作（追加/編集/削除）時のみ。
     cleanData();save();
     // 同期成功時に URL の保存を refresh（cookie 1年延長・バックアップ層も再書込）
     if(apiUrl)saveApiUrl(apiUrl);
@@ -2650,6 +2646,7 @@ function renderStaffList(){
 function renderStaffListInto(boxId){
   var box=$(boxId);if(!box)return;
   var list=getStaffAll();
+  var includeReorder=(boxId==='staffList2'); // 職員タブのみ並び替えボタン
   if(list.length===0){
     box.innerHTML='<div class="sg-empty">まだ職員が登録されていません。「＋ 追加」から登録してください。</div>';
     return;
@@ -2659,16 +2656,41 @@ function renderStaffListInto(boxId){
     var retired=(s.active===false);
     var cls='sg-item'+(retired?' is-retired':'');
     var actionBtns='';
+    if(includeReorder){
+      var upDis=(i===0?' disabled style="opacity:.3"':'');
+      var dnDis=(i===list.length-1?' disabled style="opacity:.3"':'');
+      actionBtns+='<button class="sg-up" data-i="'+i+'" title="上へ"'+upDis+'>▲</button>';
+      actionBtns+='<button class="sg-down" data-i="'+i+'" title="下へ"'+dnDis+'>▼</button>';
+    }
     if(retired){
-      actionBtns='<button class="sg-restore" data-i="'+i+'" title="復帰">↩</button>';
+      actionBtns+='<button class="sg-restore" data-i="'+i+'" title="復帰">↩</button>';
     } else {
-      actionBtns='<button class="sg-edit" data-i="'+i+'" title="編集">✎</button>'+
-                 '<button class="sg-retire" data-i="'+i+'" title="退職にする">🏃</button>';
+      actionBtns+='<button class="sg-edit" data-i="'+i+'" title="編集">✎</button>'+
+                  '<button class="sg-retire" data-i="'+i+'" title="退職にする">🏃</button>';
     }
     actionBtns+='<button class="sg-del" data-i="'+i+'" title="完全削除">×</button>';
     return '<div class="'+cls+'"><span class="sg-nm" title="'+safe+'">'+safe+'</span>'+
            '<div class="sg-actions">'+actionBtns+'</div></div>';
   }).join('');
+  // 並び替えハンドラ（職員タブのみ）
+  if(includeReorder){
+    $$('#'+boxId+' .sg-up').forEach(function(b){
+      b.addEventListener('click',function(){
+        var i=parseInt(this.dataset.i,10);
+        if(i<=0||!D.staffs[i]||!D.staffs[i-1])return;
+        var tmp=D.staffs[i];D.staffs[i]=D.staffs[i-1];D.staffs[i-1]=tmp;
+        save();renderStaffList();
+      });
+    });
+    $$('#'+boxId+' .sg-down').forEach(function(b){
+      b.addEventListener('click',function(){
+        var i=parseInt(this.dataset.i,10);
+        if(i>=D.staffs.length-1||!D.staffs[i]||!D.staffs[i+1])return;
+        var tmp=D.staffs[i];D.staffs[i]=D.staffs[i+1];D.staffs[i+1]=tmp;
+        save();renderStaffList();
+      });
+    });
+  }
   $$('#'+boxId+' .sg-edit').forEach(function(b){
     b.addEventListener('click',function(){
       var i=parseInt(this.dataset.i,10);
@@ -3084,7 +3106,7 @@ function init(){
   // 旧バージョン（999999単一行・特殊record）の遺留物を起動時に掃除
   if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
   // ローカルに保存された職員リストがサーバーに反映されていない場合は自動で再送信
-  if(typeof ensureStaffsSynced==='function')setTimeout(function(){ensureStaffsSynced()},800);
+  // 起動時の自動 push は廃止（サンプル/古いデータがサーバーを上書きする事故を防ぐ）
   // 時計
   function tick(){const n=new Date();$('hDate').textContent=n.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
     $('hTime').textContent=n.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}
@@ -3390,6 +3412,23 @@ function init(){
   }
   if($('btnStaffResync')) $('btnStaffResync').addEventListener('click',_forceResyncStaffs);
   if($('btnStaffResync2')) $('btnStaffResync2').addEventListener('click',_forceResyncStaffs);
+  // 職員タブの「全員を受信」: サーバーから fresh fetch して D.staffs を置換（push しない）
+  function _forceReceiveStaffs(){
+    if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
+    showToast('📡 サーバーから受信中...');
+    syncFromAPI(true).then(function(ok){
+      if(!ok){showToast('⚠️ 受信に失敗しました','err');return}
+      // サーバーの sys-resident のみで D.staffs を上書き（union しない＝古いローカルを破棄）
+      var prevCnt=(D.staffs||[]).length;
+      var ext=extractStaffsFromCfg({union:false});
+      save();
+      if(typeof renderStaffList==='function')renderStaffList();
+      if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
+      var newCnt=(D.staffs||[]).length;
+      showToast('📥 サーバーから '+newCnt+' 名を受信しました'+(prevCnt!==newCnt?'（変更前: '+prevCnt+' 名）':''));
+    });
+  }
+  if($('btnStaffReceive2')) $('btnStaffReceive2').addEventListener('click',_forceReceiveStaffs);
   $('btnAddRes').addEventListener('click',function(){editResId=null;$('mResT').textContent='入居者を追加';
     $('mRN').value='';if($('mRY'))$('mRY').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
     if($('mRLax'))$('mRLax').value='';
