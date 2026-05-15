@@ -2565,27 +2565,28 @@ function pushStaffsSync(){
   save();
 
   // 5. サーバー送信（差分のみ）
-  // 順次キューで送信（並列発火による GAS 取りこぼしを防止）
-  toAdd.forEach(function(r){_staffApiPush('saveRes',{resident:r})});
-  toUpdate.forEach(function(r){_staffApiPush('saveRes',{resident:r})});
-  toDelete.forEach(function(r){_staffApiPush('delRes',{id:r.id})});
+  // ===== 重要 ===========================================================
+  // per-resident 個別行（saveRes）は GAS の同時実行制約により取りこぼしが多発するため
+  // 通常は送信しない。スナップショット record（1 API コール）を「唯一の正本」とする。
+  // 既存の per-resident 行は強制再送信時にクリーンアップされる。
+  // =====================================================================
   // 信頼性の砦：全職員リストを 1 record にスナップショットとして送信（原子的・確実）
   if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
+  // toDelete のみ反映（職員が削除された場合の per-resident クリーンアップ）
+  toDelete.forEach(function(r){_staffApiPush('delRes',{id:r.id})});
 }
 function extractStaffsFromCfg(opts){
   // 復元優先順位:
-  // 1次: スナップショット record（信頼できる正本・原子的に保存される）
-  // 2次: room/yomi='STAFF' の隠し入居者（人間可読・順序情報を提供）
+  // 1次: スナップショット record（唯一の信頼できる正本）
+  // 2次: per-resident sys-resident（旧データ救済・snapshot 未送信時のフォールバック）
   // 3次: cfg._staffs（同一端末バックアップ）
   opts=opts||{};
   var server=null;
 
-  // 1次: スナップショット record から復元
+  // 1次: スナップショット record から復元（順序は o フィールドで完全保持）
   var snapData=(typeof readStaffsSnapshot==='function')?readStaffsSnapshot():null;
-  var snapSet={};
   if(snapData&&snapData.length>0){
-    server=[];
-    // 順序: o（order）でソート
+    server=[];var snapSet={};
     snapData.slice().sort(function(a,b){return(a.o||0)-(b.o||0)})
       .forEach(function(x){
         var nm=String(x.n||'').trim();if(!nm||snapSet[nm])return;
@@ -2594,54 +2595,26 @@ function extractStaffsFromCfg(opts){
       });
   }
 
-  // 2次: per-resident sys-resident から補完（snapshot に無い名前 + _sysId 紐付け）
-  var sysList=_getStaffResidents();
-  if(sysList.length>0){
-    // 順序: yomi='Sxxxx'
-    sysList.sort(function(a,b){
-      var ay=(a.yomi||'').match(/^S(\d+)/);
-      var by=(b.yomi||'').match(/^S(\d+)/);
-      if(ay&&by)return parseInt(ay[1],10)-parseInt(by[1],10);
-      if(ay)return -1;
-      if(by)return 1;
-      return toNum(a.id)-toNum(b.id);
-    });
-    var seenSysName={};
-    var dupes=[];
-    var sysIdByName={};
-    sysList.forEach(function(r){
-      var nm=String(r.name||'').trim();
-      if(!nm)return;
-      if(seenSysName[nm]){dupes.push(r);return}
-      seenSysName[nm]=true;
-      sysIdByName[nm]=toNum(r.id);
-    });
-    // 重複 sys-resident をローカルから除去 + サーバーへ削除リクエスト
-    if(dupes.length>0&&apiUrl&&typeof _staffApiPush==='function'){
-      dupes.forEach(function(r){
-        D.residents=D.residents.filter(function(x){return x!==r});
-        _staffApiPush('delRes',{id:r.id});
+  // 2次: per-resident（snapshot が無い場合のフォールバック）
+  // 旧データの救済が目的。snapshot があれば per-resident は無視する
+  if(!server){
+    var sysList=_getStaffResidents();
+    if(sysList.length>0){
+      sysList.sort(function(a,b){
+        var ay=(a.yomi||'').match(/^S(\d+)/);
+        var by=(b.yomi||'').match(/^S(\d+)/);
+        if(ay&&by)return parseInt(ay[1],10)-parseInt(by[1],10);
+        if(ay)return -1;if(by)return 1;
+        return toNum(a.id)-toNum(b.id);
       });
-    }
-    // server が無い場合は per-resident から構築（snapshot が無いケース）
-    if(!server){
-      server=[];
+      server=[];var seenName={};
       sysList.forEach(function(r){
         var nm=String(r.name||'').trim();
-        if(!nm||snapSet[nm])return;
-        server.push({name:nm,active:r.active!==false,_sysId:toNum(r.id)});
-      });
-    }else{
-      // snapshot に無い名前を per-resident から補完
-      sysList.forEach(function(r){
-        var nm=String(r.name||'').trim();
-        if(!nm||snapSet[nm])return;
-        snapSet[nm]=true;
-        server.push({name:nm,active:r.active!==false,_sysId:toNum(r.id)});
+        if(!nm||seenName[nm])return;
+        seenName[nm]=true;
+        server.push({name:nm,active:r.active!==false});
       });
     }
-    // server エントリに _sysId を紐付け
-    server.forEach(function(s){if(s&&!s._sysId&&sysIdByName[s.name])s._sysId=sysIdByName[s.name]});
   }
 
   // 3次: cfg._staffs（最後の砦）
@@ -2655,7 +2628,7 @@ function extractStaffsFromCfg(opts){
   server.forEach(function(s){if(s&&s.name&&!dedup[s.name]){dedup[s.name]=true;u.push(s)}});
   if(opts.union){
     (D.staffs||[]).forEach(function(s){
-      if(s&&s.name&&!dedup[s.name]){u.push({name:s.name,active:s.active!==false,_sysId:s._sysId});dedup[s.name]=true}
+      if(s&&s.name&&!dedup[s.name]){u.push({name:s.name,active:s.active!==false});dedup[s.name]=true}
     });
   }
   D.staffs=u;
@@ -2939,10 +2912,12 @@ function renderStaffListInto(boxId){
 /* 職員同期状態の診断パネル（両画面に同じ内容を表示） */
 function renderStaffSyncStat(){
   var local=(D.staffs||[]).length;
-  var sysList=_getStaffResidents();
-  var server=sysList.length;
+  // サーバー数はスナップショット（正本）から取得
+  var snapData=(typeof readStaffsSnapshot==='function')?readStaffsSnapshot():null;
+  var server=snapData?snapData.length:0;
   var localNames={};(D.staffs||[]).forEach(function(s){if(s&&s.name)localNames[s.name]=true});
-  var serverNames={};sysList.forEach(function(r){if(r.name)serverNames[r.name]=true});
+  var serverNames={};
+  if(snapData)snapData.forEach(function(x){if(x&&x.n)serverNames[String(x.n).trim()]=true});
   var unsynced=[];
   Object.keys(localNames).forEach(function(n){if(!serverNames[n])unsynced.push(n)});
   var statHtml,detText;
@@ -3580,10 +3555,38 @@ function init(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
     if(!Array.isArray(D.staffs)||D.staffs.length===0){showToast('⚠️ ローカルに職員が登録されていません','err');return}
     var n=D.staffs.length;
-    showToast('🔄 '+n+' 名をサーバーへ順次送信中... (約'+Math.ceil(n*0.4)+'秒)');
-    pushStaffsSync();
-    // verify-and-retry: 送信完了後にサーバー状態を確認、欠落があれば自動再送信（最大3回）
-    _verifyAndRetryStaffs(0,3);
+    // STEP 1: 既存の per-resident（STAFF行）を全削除（重複・空行・順序混乱の元）
+    var sysList=_getStaffResidents();
+    var deletedCount=sysList.length;
+    if(sysList.length>0){
+      var ids=sysList.map(function(r){return r.id});
+      D.residents=D.residents.filter(function(r){return!_isStaffRes(r)});
+      save();
+      ids.forEach(function(id){_staffApiPush('delRes',{id:id})});
+    }
+    // STEP 2: スナップショット record を 1 API コールで送信（原子的・確実）
+    if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
+    showToast('🔄 '+n+' 名のスナップショットをサーバーへ送信中...'+(deletedCount>0?'（'+deletedCount+' 件の旧 STAFF 行も削除）':''));
+    // verify
+    setTimeout(function(){
+      function waitForQueueDrain(cb){
+        if(!_staffSendQueue.length&&!_staffSending){cb();return}
+        setTimeout(function(){waitForQueueDrain(cb)},500);
+      }
+      waitForQueueDrain(function(){
+        syncFromAPI(false).then(function(ok){
+          if(!ok)return;
+          var snap=readStaffsSnapshot();
+          var snapCount=snap?snap.length:0;
+          renderStaffSyncStat();renderStaffList();
+          if(snapCount===n){
+            showToast('✅ '+n+' 名すべてサーバーに保存されました（スナップショット）');
+          }else{
+            showToast('⚠️ スナップショットが '+snapCount+' 名（ローカル '+n+' 名）。再度送信してください','err');
+          }
+        });
+      });
+    },500);
   }
   function _verifyAndRetryStaffs(attempt,maxAttempts){
     function waitForQueueDrain(cb){
