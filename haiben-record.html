@@ -2569,14 +2569,35 @@ function pushStaffsSync(){
   toAdd.forEach(function(r){_staffApiPush('saveRes',{resident:r})});
   toUpdate.forEach(function(r){_staffApiPush('saveRes',{resident:r})});
   toDelete.forEach(function(r){_staffApiPush('delRes',{id:r.id})});
+  // 信頼性の砦：全職員リストを 1 record にスナップショットとして送信（原子的・確実）
+  if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
 }
 function extractStaffsFromCfg(opts){
-  // 1次: room/yomi='STAFF' の隠し入居者から復元 → 2次: cfg._staffs（同一端末バックアップ）
+  // 復元優先順位:
+  // 1次: スナップショット record（信頼できる正本・原子的に保存される）
+  // 2次: room/yomi='STAFF' の隠し入居者（人間可読・順序情報を提供）
+  // 3次: cfg._staffs（同一端末バックアップ）
   opts=opts||{};
-  var sysList=_getStaffResidents();
   var server=null;
+
+  // 1次: スナップショット record から復元
+  var snapData=(typeof readStaffsSnapshot==='function')?readStaffsSnapshot():null;
+  var snapSet={};
+  if(snapData&&snapData.length>0){
+    server=[];
+    // 順序: o（order）でソート
+    snapData.slice().sort(function(a,b){return(a.o||0)-(b.o||0)})
+      .forEach(function(x){
+        var nm=String(x.n||'').trim();if(!nm||snapSet[nm])return;
+        snapSet[nm]=true;
+        server.push({name:nm,active:(x.a===1||x.a===true)});
+      });
+  }
+
+  // 2次: per-resident sys-resident から補完（snapshot に無い名前 + _sysId 紐付け）
+  var sysList=_getStaffResidents();
   if(sysList.length>0){
-    // 順序：yomi='Sxxxx' の数値があればそれで並べ替え、無ければ ID 順
+    // 順序: yomi='Sxxxx'
     sysList.sort(function(a,b){
       var ay=(a.yomi||'').match(/^S(\d+)/);
       var by=(b.yomi||'').match(/^S(\d+)/);
@@ -2585,32 +2606,53 @@ function extractStaffsFromCfg(opts){
       if(by)return 1;
       return toNum(a.id)-toNum(b.id);
     });
-    // 同名の重複は最初に出現したもの（並び順優先）を採用。残りは削除候補
-    var seen={};
-    server=[];
+    var seenSysName={};
     var dupes=[];
+    var sysIdByName={};
     sysList.forEach(function(r){
       var nm=String(r.name||'').trim();
       if(!nm)return;
-      if(seen[nm]){dupes.push(r);return} // 重複 → 削除候補
-      seen[nm]=true;
-      server.push({name:nm,active:r.active!==false,_sysId:toNum(r.id)});
+      if(seenSysName[nm]){dupes.push(r);return}
+      seenSysName[nm]=true;
+      sysIdByName[nm]=toNum(r.id);
     });
-    // 重複 sys-resident をローカルから除去 + サーバーへ削除リクエスト（次回受信で重複が消える）
+    // 重複 sys-resident をローカルから除去 + サーバーへ削除リクエスト
     if(dupes.length>0&&apiUrl&&typeof _staffApiPush==='function'){
       dupes.forEach(function(r){
         D.residents=D.residents.filter(function(x){return x!==r});
         _staffApiPush('delRes',{id:r.id});
       });
     }
-  }else if(D.cfg&&Array.isArray(D.cfg._staffs)){
+    // server が無い場合は per-resident から構築（snapshot が無いケース）
+    if(!server){
+      server=[];
+      sysList.forEach(function(r){
+        var nm=String(r.name||'').trim();
+        if(!nm||snapSet[nm])return;
+        server.push({name:nm,active:r.active!==false,_sysId:toNum(r.id)});
+      });
+    }else{
+      // snapshot に無い名前を per-resident から補完
+      sysList.forEach(function(r){
+        var nm=String(r.name||'').trim();
+        if(!nm||snapSet[nm])return;
+        snapSet[nm]=true;
+        server.push({name:nm,active:r.active!==false,_sysId:toNum(r.id)});
+      });
+    }
+    // server エントリに _sysId を紐付け
+    server.forEach(function(s){if(s&&!s._sysId&&sysIdByName[s.name])s._sysId=sysIdByName[s.name]});
+  }
+
+  // 3次: cfg._staffs（最後の砦）
+  if(!server&&D.cfg&&Array.isArray(D.cfg._staffs)){
     server=D.cfg._staffs.map(function(s){
       return s&&s.name?{name:String(s.name).trim(),active:s.active!==false}:null
     }).filter(Boolean);
   }
   if(!server)return false;
   var dedup={},u=[];
-  server.forEach(function(s){if(!dedup[s.name]){dedup[s.name]=true;u.push(s)}});
+  server.forEach(function(s){if(s&&s.name&&!dedup[s.name]){dedup[s.name]=true;u.push(s)}});
   if(opts.union){
     (D.staffs||[]).forEach(function(s){
       if(s&&s.name&&!dedup[s.name]){u.push({name:s.name,active:s.active!==false,_sysId:s._sysId});dedup[s.name]=true}
@@ -2619,6 +2661,64 @@ function extractStaffsFromCfg(opts){
   D.staffs=u;
   return true;
 }
+/* スナップショット record：全職員リストを 1 件の record.notes に JSON で保存
+   per-resident 行と違い 1 API コールで原子的に保存できるため取りこぼし無し。
+   受信側はスナップショットを最優先で読み、欠落分の補完にも使う。 */
+var SYS_STAFF_SNAPSHOT_ID='sys_staffs_snapshot_v1';
+var SYS_STAFF_SNAPSHOT_MARKER='_SYS_STAFFS_SNAPSHOT_';
+function _findStaffSnapshot(){
+  if(!Array.isArray(D.records))return null;
+  return D.records.find(function(r){
+    return r&&(r.id===SYS_STAFF_SNAPSHOT_ID||(r.type==='laxative'&&r.medicine===SYS_STAFF_SNAPSHOT_MARKER));
+  })||null;
+}
+function pushStaffsSnapshot(){
+  if(!apiUrl)return;
+  if(!Array.isArray(D.records))D.records=[];
+  var arr=(D.staffs||[]).map(function(s,i){
+    return {n:String(s.name||''),a:(s.active!==false)?1:0,o:i};
+  }).filter(function(x){return!!x.n});
+  var payload=JSON.stringify({staffs:arr,ts:Date.now()});
+  var snap=_findStaffSnapshot();
+  // residentId は実在する入居者の ID を使う（GAS の検証突破のため）
+  var anchorRid=null;
+  for(var i=0;i<D.residents.length;i++){
+    var rr=D.residents[i];
+    if(rr&&!_isStaffRes(rr)&&toNum(rr.id)!==null){anchorRid=toNum(rr.id);break}
+  }
+  if(anchorRid===null)anchorRid=1;
+  if(!snap){
+    snap={
+      id:SYS_STAFF_SNAPSHOT_ID,
+      residentId:anchorRid,
+      type:'laxative', // GAS が確実に受け付ける既知のタイプ
+      date:'2000-01-01',time:'00:00',datetime:'2000-01-01T00:00',tsUTC:0,
+      medicine:SYS_STAFF_SNAPSHOT_MARKER,tablets:'',
+      notes:payload,staff:'',
+      createdAt:new Date().toISOString()
+    };
+    D.records.push(snap);
+    save();_recIdx=null;
+    _staffApiPush('addRecord',{record:snap});
+  }else{
+    snap.residentId=anchorRid;
+    snap.notes=payload;snap.updatedAt=new Date().toISOString();
+    snap.medicine=SYS_STAFF_SNAPSHOT_MARKER;
+    snap.type='laxative';
+    save();_recIdx=null;
+    _staffApiPush('saveRecord',{record:snap});
+  }
+}
+function readStaffsSnapshot(){
+  var snap=_findStaffSnapshot();
+  if(!snap||!snap.notes)return null;
+  try{
+    var p=JSON.parse(snap.notes);
+    if(p&&Array.isArray(p.staffs))return p.staffs;
+  }catch(e){}
+  return null;
+}
+
 /* システム入居者を UI から除外（room マーカーで判定） */
 function isUserRes(r){
   if(!r)return false;
@@ -2631,6 +2731,9 @@ function isUserRes(r){
 function isUserRec(r){
   if(!r)return false;
   if(r.type==='_sys_staffs_'||r.id==='sys_staffs_v1')return false; // 旧版の遺留
+  // スナップショット record も UI から除外
+  if(r.id===SYS_STAFF_SNAPSHOT_ID)return false;
+  if(r.type==='laxative'&&r.medicine===SYS_STAFF_SNAPSHOT_MARKER)return false;
   return true;
 }
 /* 整合性チェック：D.staffs に名前があるのに対応する sys-resident が存在しない場合、
