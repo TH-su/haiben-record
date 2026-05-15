@@ -667,6 +667,10 @@ textarea{resize:vertical;min-height:76px}
 <!-- ── 設定 ── -->
 <!-- ── 職員管理（専用画面） ── -->
 <div id="sc-staff" class="scr">
+  <!-- 画面上部の更新ボタン -->
+  <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+    <button class="bn bs bsm" id="btnStaffRefresh" style="padding:6px 14px">🔄 更新</button>
+  </div>
   <div class="cd">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
       <h3 style="font-size:15px;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
@@ -693,6 +697,10 @@ textarea{resize:vertical;min-height:76px}
 </div>
 
 <div id="sc-cfg" class="scr">
+  <!-- 画面上部の更新ボタン -->
+  <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+    <button class="bn bs bsm" id="btnCfgRefresh" style="padding:6px 14px">🔄 更新</button>
+  </div>
   <div class="cd">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <h3 style="font-size:13px;font-weight:700;color:var(--g7)">👥 入居者管理</h3>
@@ -1106,6 +1114,53 @@ async function syncFromAPI(showLoader){
 
 // 未送信キュー（API書き込み失敗時、後で再送する）
 var PQ_KEY='hbcr_pq';
+
+/* 職員同期専用の順次送信キュー
+   GAS Apps Script の同時実行制限・レート制限を避けるため、saveRes/delRes を
+   1件ずつ順番に送信する。fire-and-forget の apiPush と違い、前のリクエストの完了を
+   待ってから次を投げる。これにより並列起因の取りこぼしを防止。 */
+var _staffSendQueue=[],_staffSending=false;
+function _staffSendNext(){
+  if(_staffSending)return;
+  if(!_staffSendQueue.length){
+    if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
+    return;
+  }
+  _staffSending=true;
+  var item=_staffSendQueue.shift();
+  if(!apiUrl){
+    _staffSending=false;
+    return;
+  }
+  apiPost(item.action,item.data).then(function(r){
+    if(!(r&&r.ok!==false)){
+      // 失敗時はリトライ（最大3回）
+      if((item.retries||0)<3){
+        item.retries=(item.retries||0)+1;
+        _staffSendQueue.unshift(item);
+      }else{
+        console.warn('[hbcr] staff push 失敗（リトライ上限）:',item);
+        enqueuePending(item.action,item.data);
+      }
+    }
+  }).catch(function(e){
+    if((item.retries||0)<3){
+      item.retries=(item.retries||0)+1;
+      _staffSendQueue.unshift(item);
+    }else{
+      console.warn('[hbcr] staff push 例外:',e);
+      enqueuePending(item.action,item.data);
+    }
+  }).finally(function(){
+    _staffSending=false;
+    setTimeout(_staffSendNext,150); // 150ms 間隔で次を送信
+  });
+}
+function _staffApiPush(action,data){
+  if(!apiUrl)return;
+  _staffSendQueue.push({action:action,data:data,retries:0});
+  _staffSendNext();
+}
 function loadPendingQueue(){try{var s=localStorage.getItem(PQ_KEY);return s?JSON.parse(s):[]}catch(e){return[]}}
 function savePendingQueue(q){try{localStorage.setItem(PQ_KEY,JSON.stringify(q))}catch(e){}}
 function enqueuePending(action,data){
@@ -2510,9 +2565,10 @@ function pushStaffsSync(){
   save();
 
   // 5. サーバー送信（差分のみ）
-  toAdd.forEach(function(r){apiPush('saveRes',{resident:r})});
-  toUpdate.forEach(function(r){apiPush('saveRes',{resident:r})});
-  toDelete.forEach(function(r){apiPush('delRes',{id:r.id})});
+  // 順次キューで送信（並列発火による GAS 取りこぼしを防止）
+  toAdd.forEach(function(r){_staffApiPush('saveRes',{resident:r})});
+  toUpdate.forEach(function(r){_staffApiPush('saveRes',{resident:r})});
+  toDelete.forEach(function(r){_staffApiPush('delRes',{id:r.id})});
 }
 function extractStaffsFromCfg(opts){
   // 1次: room/yomi='STAFF' の隠し入居者から復元 → 2次: cfg._staffs（同一端末バックアップ）
@@ -3410,18 +3466,16 @@ function init(){
   // 職員リスト 強制再送信ボタン（旧 設定画面 + 新 職員タブ 両方）
   function _forceResyncStaffs(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
-    var sysList=_getStaffResidents();
-    sysList.forEach(function(r){
-      D.residents=D.residents.filter(function(x){return x!==r});
-      apiPush('delRes',{id:r.id});
-    });
-    save();
-    if(Array.isArray(D.staffs)&&D.staffs.length>0){
-      pushStaffsSync();
-      setTimeout(function(){renderStaffSyncStat();renderStaffList();showToast('🔄 '+D.staffs.length+' 名をサーバーに再送信（'+sysList.length+' 件の旧エントリを削除）')},300);
-    }else{
-      setTimeout(function(){renderStaffSyncStat();renderStaffList();showToast('🧹 '+sysList.length+' 件の旧エントリを削除しました')},300);
-    }
+    if(!Array.isArray(D.staffs)||D.staffs.length===0){showToast('⚠️ ローカルに職員が登録されていません','err');return}
+    // delete-then-recreate ではなく pushStaffsSync を1回呼ぶだけ。
+    // 既存の sys-resident は in-place 更新（_sysId or 同名で照合）、不足分のみ追加、
+    // 余剰分のみ削除。順次キューで送信されるため取りこぼしなし。
+    pushStaffsSync();
+    var n=D.staffs.length;
+    setTimeout(function(){
+      renderStaffSyncStat();renderStaffList();
+      showToast('🔄 '+n+' 名をサーバーへ順次送信中...');
+    },200);
   }
   if($('btnStaffResync')) $('btnStaffResync').addEventListener('click',_forceResyncStaffs);
   if($('btnStaffResync2')) $('btnStaffResync2').addEventListener('click',_forceResyncStaffs);
@@ -3442,6 +3496,24 @@ function init(){
     });
   }
   if($('btnStaffReceive2')) $('btnStaffReceive2').addEventListener('click',_forceReceiveStaffs);
+  // 画面上部「🔄 更新」ボタン：全データをサーバーから受信して画面を再描画
+  function _refreshFromServer(){
+    if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
+    showToast('🔄 サーバーから更新中...');
+    syncFromAPI(true).then(function(ok){
+      if(!ok){showToast('⚠️ 更新に失敗しました','err');return}
+      // 受信した最新データから D.staffs を再構築
+      if(typeof extractStaffsFromCfg==='function')extractStaffsFromCfg({union:false});
+      save();
+      buildResSel();
+      if(typeof renderCfg==='function')renderCfg();
+      if(typeof renderStaffList==='function')renderStaffList();
+      if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
+      showToast('✅ 最新データに更新しました');
+    });
+  }
+  if($('btnStaffRefresh')) $('btnStaffRefresh').addEventListener('click',_refreshFromServer);
+  if($('btnCfgRefresh')) $('btnCfgRefresh').addEventListener('click',_refreshFromServer);
   $('btnAddRes').addEventListener('click',function(){editResId=null;$('mResT').textContent='入居者を追加';
     $('mRN').value='';if($('mRY'))$('mRY').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
     if($('mRLax'))$('mRLax').value='';
