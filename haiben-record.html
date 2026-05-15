@@ -34,9 +34,9 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
   transition:color .2s;font-family:inherit}
 .bnav button.on{color:var(--pri)}
 .bnav svg{width:22px;height:22px}
-.bnav button[data-sc="cfg"]{flex:0 0 44px;opacity:.55;font-size:9px}
-.bnav button[data-sc="cfg"] svg{width:16px;height:16px}
-.bnav button[data-sc="cfg"].on{opacity:1}
+.bnav button[data-sc="cfg"],.bnav button[data-sc="staff"]{flex:0 0 44px;opacity:.55;font-size:9px}
+.bnav button[data-sc="cfg"] svg,.bnav button[data-sc="staff"] svg{width:16px;height:16px}
+.bnav button[data-sc="cfg"].on,.bnav button[data-sc="staff"].on{opacity:1}
 
 /* screens */
 .scr{display:none;padding:14px;max-width:960px;margin:0 auto}
@@ -2451,7 +2451,8 @@ function pushStaffsSync(){
   var usedSysIds={};
 
   // 1. ローカル各職員 → _sysId で既存sys-resを特定 or name フォールバック or 新規作成
-  (D.staffs||[]).forEach(function(s){
+  //    yomi 列に「Sxxxx」形式で並び順を埋め込み、全端末で順序を共有する
+  (D.staffs||[]).forEach(function(s,idx){
     if(!s||!s.name)return;
     var sysRes=null;
     // 1次: _sysId で直接特定（リネーム時もズレない）
@@ -2466,6 +2467,7 @@ function pushStaffsSync(){
         if(sysResById[k].name===s.name)sysRes=sysResById[k];
       });
     }
+    var posStr='S'+('0000'+idx).slice(-4); // S0000, S0001, S0002...
     if(sysRes){
       var sid2=toNum(sysRes.id);
       usedSysIds[sid2]=true;s._sysId=sid2; // ローカルにIDを記録
@@ -2476,11 +2478,11 @@ function pushStaffsSync(){
       if(sysRes.hidden!==true){sysRes.hidden=true;changed=true}
       if(sysRes.room!==SYS_STAFF_ROOM){sysRes.room=SYS_STAFF_ROOM;changed=true}
       if(!sysRes.gender){sysRes.gender='女性';changed=true}
-      if(!sysRes.yomi){sysRes.yomi='-';changed=true}
+      if(sysRes.yomi!==posStr){sysRes.yomi=posStr;changed=true} // 並び順を更新
       if(changed)toUpdate.push(sysRes);
     }else{
       var newId=nextResId();
-      var newRes={id:newId,name:s.name,yomi:'-',room:SYS_STAFF_ROOM,gender:'女性',
+      var newRes={id:newId,name:s.name,yomi:posStr,room:SYS_STAFF_ROOM,gender:'女性',
                   active:(s.active!==false),hidden:true};
       D.residents.push(newRes);
       s._sysId=newId; // ローカルにIDを記録
@@ -2518,16 +2520,24 @@ function extractStaffsFromCfg(opts){
   var sysList=_getStaffResidents();
   var server=null;
   if(sysList.length>0){
-    // 同名の重複は最新IDを優先（古いID順にソートしてから上書き処理）
-    sysList.sort(function(a,b){return toNum(a.id)-toNum(b.id)});
+    // 順序：yomi='Sxxxx' の数値があればそれで並べ替え、無ければ ID 順
+    sysList.sort(function(a,b){
+      var ay=(a.yomi||'').match(/^S(\d+)/);
+      var by=(b.yomi||'').match(/^S(\d+)/);
+      if(ay&&by)return parseInt(ay[1],10)-parseInt(by[1],10);
+      if(ay)return -1;
+      if(by)return 1;
+      return toNum(a.id)-toNum(b.id);
+    });
+    // 同名の重複は最初に出現したもの（並び順優先）を採用
     var seen={};
     server=[];
     sysList.forEach(function(r){
       var nm=String(r.name||'').trim();
-      if(!nm)return;
-      seen[nm]={name:nm,active:r.active!==false,_sysId:toNum(r.id)};
+      if(!nm||seen[nm])return;
+      seen[nm]=true;
+      server.push({name:nm,active:r.active!==false,_sysId:toNum(r.id)});
     });
-    Object.keys(seen).forEach(function(k){server.push(seen[k])});
   }else if(D.cfg&&Array.isArray(D.cfg._staffs)){
     server=D.cfg._staffs.map(function(s){
       return s&&s.name?{name:String(s.name).trim(),active:s.active!==false}:null
@@ -2646,7 +2656,7 @@ function renderStaffList(){
 function renderStaffListInto(boxId){
   var box=$(boxId);if(!box)return;
   var list=getStaffAll();
-  var includeReorder=(boxId==='staffList2'); // 職員タブのみ並び替えボタン
+  var includeReorder=(boxId==='staffList'); // 設定画面のみ並び替えボタン
   if(list.length===0){
     box.innerHTML='<div class="sg-empty">まだ職員が登録されていません。「＋ 追加」から登録してください。</div>';
     return;
@@ -2672,14 +2682,16 @@ function renderStaffListInto(boxId){
     return '<div class="'+cls+'"><span class="sg-nm" title="'+safe+'">'+safe+'</span>'+
            '<div class="sg-actions">'+actionBtns+'</div></div>';
   }).join('');
-  // 並び替えハンドラ（職員タブのみ）
+  // 並び替えハンドラ（設定画面のみ）
+  // 並び順は yomi 列に位置を埋め込んでサーバーへ送信 → 全端末で共有される
   if(includeReorder){
     $$('#'+boxId+' .sg-up').forEach(function(b){
       b.addEventListener('click',function(){
         var i=parseInt(this.dataset.i,10);
         if(i<=0||!D.staffs[i]||!D.staffs[i-1])return;
         var tmp=D.staffs[i];D.staffs[i]=D.staffs[i-1];D.staffs[i-1]=tmp;
-        save();renderStaffList();
+        pushStaffsSync(); // サーバーへ新順序を送信（yomi位置を更新）
+        renderStaffList();
       });
     });
     $$('#'+boxId+' .sg-down').forEach(function(b){
@@ -2687,7 +2699,8 @@ function renderStaffListInto(boxId){
         var i=parseInt(this.dataset.i,10);
         if(i>=D.staffs.length-1||!D.staffs[i]||!D.staffs[i+1])return;
         var tmp=D.staffs[i];D.staffs[i]=D.staffs[i+1];D.staffs[i+1]=tmp;
-        save();renderStaffList();
+        pushStaffsSync(); // サーバーへ新順序を送信（yomi位置を更新）
+        renderStaffList();
       });
     });
   }
