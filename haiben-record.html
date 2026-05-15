@@ -1087,8 +1087,29 @@ async function syncFromAPI(showLoader){
     localRes.forEach(function(r){if(r&&r.id!=null&&!r._seed){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
     var seenRecId={};
     var mergedRec=[];
-    apiRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){mergedRec.push(r);seenRecId[r.id]=true}}});
+    // snapshot record の保護：server 版 notes が空または marker が無ければ local 版を優先
+    function _isSnapshotRec(r){
+      if(!r)return false;
+      if(r.id===SYS_STAFF_SNAPSHOT_ID)return true;
+      if(r.medicine===SYS_STAFF_SNAPSHOT_MARKER)return true;
+      if(typeof r.notes==='string'&&r.notes.indexOf('"__SYS_STAFFS_SNAPSHOT__"')>=0)return true;
+      return false;
+    }
+    var localSnap=localRec.find(_isSnapshotRec);
+    apiRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){
+      // snapshot の場合、server 版が壊れていれば local の notes/medicine を保護
+      if(_isSnapshotRec(r)&&localSnap){
+        var sNotesOk=(typeof r.notes==='string'&&r.notes.indexOf('"staffs":')>=0);
+        if(!sNotesOk&&localSnap.notes){r.notes=localSnap.notes}
+        if(!r.medicine&&localSnap.medicine)r.medicine=localSnap.medicine;
+      }
+      mergedRec.push(r);seenRecId[r.id]=true
+    }}});
     localRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){mergedRec.push(r);seenRecId[r.id]=true}}});
+    // server 側に snapshot が無く、local にあれば確実に追加
+    if(localSnap&&!mergedRec.some(_isSnapshotRec)){
+      mergedRec.push(localSnap);
+    }
     D.residents=mergedRes;
     D.records=mergedRec;
     D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
@@ -2645,19 +2666,36 @@ function extractStaffsFromCfg(opts){
    受信側はスナップショットを最優先で読み、欠落分の補完にも使う。 */
 var SYS_STAFF_SNAPSHOT_ID='sys_staffs_snapshot_v1';
 var SYS_STAFF_SNAPSHOT_MARKER='_SYS_STAFFS_SNAPSHOT_';
+var SYS_STAFF_SNAPSHOT_LOCAL_KEY='hbcr_staffs_snapshot'; // 独立 localStorage キー（最終防壁）
 function _findStaffSnapshot(){
   if(!Array.isArray(D.records))return null;
   return D.records.find(function(r){
-    return r&&(r.id===SYS_STAFF_SNAPSHOT_ID||(r.type==='laxative'&&r.medicine===SYS_STAFF_SNAPSHOT_MARKER));
+    if(!r)return false;
+    // 複数の判定基準（GAS による id 変換・medicine 削除のいずれにも対応）
+    if(r.id===SYS_STAFF_SNAPSHOT_ID)return true;
+    if(r.medicine===SYS_STAFF_SNAPSHOT_MARKER)return true;
+    if(typeof r.notes==='string'&&r.notes.indexOf('"__SYS_STAFFS_SNAPSHOT__"')>=0)return true;
+    return false;
   })||null;
 }
+/* localStorage に直接保存（D.records とは独立した最終バックアップ）
+   sync の merge で D.records の snapshot が空 notes に上書きされても、ここが残れば復旧可 */
+function _saveSnapshotLocal(payloadJson){
+  try{localStorage.setItem(SYS_STAFF_SNAPSHOT_LOCAL_KEY,payloadJson)}catch(e){}
+}
+function _loadSnapshotLocal(){
+  try{return localStorage.getItem(SYS_STAFF_SNAPSHOT_LOCAL_KEY)||null}catch(e){return null}
+}
 function pushStaffsSnapshot(){
-  if(!apiUrl)return;
   if(!Array.isArray(D.records))D.records=[];
   var arr=(D.staffs||[]).map(function(s,i){
     return {n:String(s.name||''),a:(s.active!==false)?1:0,o:i};
   }).filter(function(x){return!!x.n});
-  var payload=JSON.stringify({staffs:arr,ts:Date.now()});
+  // payload に魔法のマーカー文字列を含める → 万が一 id/medicine が変わっても notes で識別可
+  var payload=JSON.stringify({_mark:'__SYS_STAFFS_SNAPSHOT__',staffs:arr,ts:Date.now()});
+  // 最終防壁：独立 localStorage キーに保存（D.records とは独立）
+  _saveSnapshotLocal(payload);
+  if(!apiUrl)return; // 送信は apiUrl がある場合のみ
   var snap=_findStaffSnapshot();
   // residentId は実在する入居者の ID を使う（GAS の検証突破のため）
   var anchorRid=null;
@@ -2666,12 +2704,16 @@ function pushStaffsSnapshot(){
     if(rr&&!_isStaffRes(rr)&&toNum(rr.id)!==null){anchorRid=toNum(rr.id);break}
   }
   if(anchorRid===null)anchorRid=1;
+  // 日付は「今日」を使う（GAS の日付フィルタによる除外を回避）
+  var todayD=new Date();
+  function _p2(n){return(n<10?'0':'')+n}
+  var todayStr=todayD.getFullYear()+'-'+_p2(todayD.getMonth()+1)+'-'+_p2(todayD.getDate());
   if(!snap){
     snap={
       id:SYS_STAFF_SNAPSHOT_ID,
       residentId:anchorRid,
-      type:'laxative', // GAS が確実に受け付ける既知のタイプ
-      date:'2000-01-01',time:'00:00',datetime:'2000-01-01T00:00',tsUTC:0,
+      type:'laxative',
+      date:todayStr,time:'00:00',datetime:todayStr+'T00:00',tsUTC:todayD.getTime(),
       medicine:SYS_STAFF_SNAPSHOT_MARKER,tablets:'',
       notes:payload,staff:'',
       createdAt:new Date().toISOString()
@@ -2684,17 +2726,29 @@ function pushStaffsSnapshot(){
     snap.notes=payload;snap.updatedAt=new Date().toISOString();
     snap.medicine=SYS_STAFF_SNAPSHOT_MARKER;
     snap.type='laxative';
+    // 日付も今日に更新（古い snapshot がフィルタアウトされる場合の救済）
+    snap.date=todayStr;snap.datetime=todayStr+'T00:00';snap.tsUTC=todayD.getTime();
     save();_recIdx=null;
     _staffApiPush('saveRecord',{record:snap});
   }
 }
 function readStaffsSnapshot(){
+  // 1次：D.records から
   var snap=_findStaffSnapshot();
-  if(!snap||!snap.notes)return null;
-  try{
-    var p=JSON.parse(snap.notes);
-    if(p&&Array.isArray(p.staffs))return p.staffs;
-  }catch(e){}
+  if(snap&&snap.notes){
+    try{
+      var p=JSON.parse(snap.notes);
+      if(p&&Array.isArray(p.staffs))return p.staffs;
+    }catch(e){}
+  }
+  // 2次：独立 localStorage（最終防壁）から
+  var local=_loadSnapshotLocal();
+  if(local){
+    try{
+      var p2=JSON.parse(local);
+      if(p2&&Array.isArray(p2.staffs))return p2.staffs;
+    }catch(e){}
+  }
   return null;
 }
 
