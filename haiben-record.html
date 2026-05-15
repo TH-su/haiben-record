@@ -1303,9 +1303,15 @@ function cleanData(){
   normalizeData();
   if(D.residents)D.residents=D.residents.filter(isValidRes);
   if(D.records)D.records=D.records.filter(function(r){return r&&r.id&&r.residentId!=null&&toNum(r.residentId)!==null&&r.datetime});
-  // 旧バージョンの遺留システム記録（type=_sys_staffs_）を除去
-  if(typeof isUserRec==='function'&&Array.isArray(D.records)){
-    D.records=D.records.filter(isUserRec);
+  // 旧バージョンの遺留システム記録（type=_sys_staffs_, id='sys_staffs_v1'）のみ削除
+  // ⚠️ NEW snapshot record (id='sys_staffs_snapshot_v1') は絶対に削除しない（職員データの正本）
+  if(Array.isArray(D.records)){
+    D.records=D.records.filter(function(r){
+      if(!r)return false;
+      // 旧 v1 hijack のみ削除（type='_sys_staffs_' は古い経路）
+      if(r.type==='_sys_staffs_'||r.id==='sys_staffs_v1')return false;
+      return true;
+    });
   }
 }
 function nextResId(){
@@ -2733,7 +2739,12 @@ function ensureStaffsSynced(){
 function cleanupLegacyStaffsRec(){
   if(Array.isArray(D.records)){
     var before=D.records.length;
-    D.records=D.records.filter(isUserRec);
+    // ⚠️ snapshot record は削除しない。旧 v1 hijack のみ削除。
+    D.records=D.records.filter(function(r){
+      if(!r)return false;
+      if(r.type==='_sys_staffs_'||r.id==='sys_staffs_v1')return false; // 旧版のみ削除
+      return true;
+    });
     if(D.records.length!==before){save();_recIdx=null;}
   }
   if(Array.isArray(D.residents)){
