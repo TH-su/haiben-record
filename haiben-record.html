@@ -1153,7 +1153,7 @@ function _staffSendNext(){
     }
   }).finally(function(){
     _staffSending=false;
-    setTimeout(_staffSendNext,150); // 150ms 間隔で次を送信
+    setTimeout(_staffSendNext,250); // 250ms 間隔で次を送信（GAS のレート制限対策で余裕を取る）
   });
 }
 function _staffApiPush(action,data){
@@ -2585,15 +2585,24 @@ function extractStaffsFromCfg(opts){
       if(by)return 1;
       return toNum(a.id)-toNum(b.id);
     });
-    // 同名の重複は最初に出現したもの（並び順優先）を採用
+    // 同名の重複は最初に出現したもの（並び順優先）を採用。残りは削除候補
     var seen={};
     server=[];
+    var dupes=[];
     sysList.forEach(function(r){
       var nm=String(r.name||'').trim();
-      if(!nm||seen[nm])return;
+      if(!nm)return;
+      if(seen[nm]){dupes.push(r);return} // 重複 → 削除候補
       seen[nm]=true;
       server.push({name:nm,active:r.active!==false,_sysId:toNum(r.id)});
     });
+    // 重複 sys-resident をローカルから除去 + サーバーへ削除リクエスト（次回受信で重複が消える）
+    if(dupes.length>0&&apiUrl&&typeof _staffApiPush==='function'){
+      dupes.forEach(function(r){
+        D.residents=D.residents.filter(function(x){return x!==r});
+        _staffApiPush('delRes',{id:r.id});
+      });
+    }
   }else if(D.cfg&&Array.isArray(D.cfg._staffs)){
     server=D.cfg._staffs.map(function(s){
       return s&&s.name?{name:String(s.name).trim(),active:s.active!==false}:null
@@ -3467,43 +3476,70 @@ function init(){
   function _forceResyncStaffs(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
     if(!Array.isArray(D.staffs)||D.staffs.length===0){showToast('⚠️ ローカルに職員が登録されていません','err');return}
-    // delete-then-recreate ではなく pushStaffsSync を1回呼ぶだけ。
-    // 既存の sys-resident は in-place 更新（_sysId or 同名で照合）、不足分のみ追加、
-    // 余剰分のみ削除。順次キューで送信されるため取りこぼしなし。
-    pushStaffsSync();
     var n=D.staffs.length;
-    setTimeout(function(){
-      renderStaffSyncStat();renderStaffList();
-      showToast('🔄 '+n+' 名をサーバーへ順次送信中...');
-    },200);
+    showToast('🔄 '+n+' 名をサーバーへ順次送信中... (約'+Math.ceil(n*0.4)+'秒)');
+    pushStaffsSync();
+    // verify-and-retry: 送信完了後にサーバー状態を確認、欠落があれば自動再送信（最大3回）
+    _verifyAndRetryStaffs(0,3);
+  }
+  function _verifyAndRetryStaffs(attempt,maxAttempts){
+    function waitForQueueDrain(cb){
+      if(!_staffSendQueue.length&&!_staffSending){cb();return}
+      setTimeout(function(){waitForQueueDrain(cb)},500);
+    }
+    waitForQueueDrain(function(){
+      // キューが空になったら確認のため再同期
+      syncFromAPI(false).then(function(ok){
+        if(!ok)return;
+        var sysList=_getStaffResidents();
+        var localNames={};(D.staffs||[]).forEach(function(s){if(s&&s.name)localNames[s.name]=true});
+        var serverNames={};sysList.forEach(function(r){if(r.name)serverNames[r.name]=true});
+        var missing=Object.keys(localNames).filter(function(n){return !serverNames[n]});
+        if(missing.length===0){
+          renderStaffSyncStat();renderStaffList();
+          showToast('✅ '+sysList.length+' 名すべてサーバーに登録されました');
+          return;
+        }
+        if(attempt+1>=maxAttempts){
+          renderStaffSyncStat();renderStaffList();
+          showToast('⚠️ '+missing.length+' 名が反映されませんでした: '+missing.slice(0,3).join(', ')+(missing.length>3?'...':'')+'\n再度「強制再送信」を試してください','err');
+          return;
+        }
+        showToast('🔁 '+missing.length+' 名が未反映、再送信中... (試行 '+(attempt+2)+'/'+maxAttempts+')');
+        pushStaffsSync();
+        _verifyAndRetryStaffs(attempt+1,maxAttempts);
+      });
+    });
   }
   if($('btnStaffResync')) $('btnStaffResync').addEventListener('click',_forceResyncStaffs);
   if($('btnStaffResync2')) $('btnStaffResync2').addEventListener('click',_forceResyncStaffs);
-  // 職員タブの「全員を受信」: サーバーから fresh fetch して D.staffs を置換（push しない）
+  // 職員タブの「全員を受信」: サーバーから fresh fetch（非破壊・union 結合）
+  // ローカル限定の未送信エントリは保護される。完全に受信のみ→サーバー側で削除されたものはローカルからも消える、
+  // という挙動ではなく、ローカル＋サーバーの和集合を取る安全モード。
   function _forceReceiveStaffs(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
     showToast('📡 サーバーから受信中...');
     syncFromAPI(true).then(function(ok){
       if(!ok){showToast('⚠️ 受信に失敗しました','err');return}
-      // サーバーの sys-resident のみで D.staffs を上書き（union しない＝古いローカルを破棄）
       var prevCnt=(D.staffs||[]).length;
-      var ext=extractStaffsFromCfg({union:false});
+      // union:true でローカル限定エントリを保護
+      var ext=extractStaffsFromCfg({union:true});
       save();
       if(typeof renderStaffList==='function')renderStaffList();
       if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
       var newCnt=(D.staffs||[]).length;
-      showToast('📥 サーバーから '+newCnt+' 名を受信しました'+(prevCnt!==newCnt?'（変更前: '+prevCnt+' 名）':''));
+      showToast('📥 サーバーから受信完了。職員 '+newCnt+' 名'+(prevCnt!==newCnt?'（変更前: '+prevCnt+' 名）':''));
     });
   }
   if($('btnStaffReceive2')) $('btnStaffReceive2').addEventListener('click',_forceReceiveStaffs);
-  // 画面上部「🔄 更新」ボタン：全データをサーバーから受信して画面を再描画
+  // 画面上部「🔄 更新」ボタン：全データをサーバーから受信（union 結合・非破壊）
   function _refreshFromServer(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
     showToast('🔄 サーバーから更新中...');
     syncFromAPI(true).then(function(ok){
       if(!ok){showToast('⚠️ 更新に失敗しました','err');return}
-      // 受信した最新データから D.staffs を再構築
-      if(typeof extractStaffsFromCfg==='function')extractStaffsFromCfg({union:false});
+      // union:true でローカル限定エントリを保護（未送信データの消失を防止）
+      if(typeof extractStaffsFromCfg==='function')extractStaffsFromCfg({union:true});
       save();
       buildResSel();
       if(typeof renderCfg==='function')renderCfg();
