@@ -339,6 +339,13 @@ textarea{resize:vertical;min-height:76px}
 .staff-grid .sg-restore:hover{background:#e8f5e9;color:#1b5e20}
 .staff-grid .sg-item.is-retired{opacity:.55;background:#f5f5f5}
 .staff-grid .sg-item.is-retired .sg-nm{text-decoration:line-through;color:var(--g6)}
+/* ドラッグ&ドロップ並び替え用 */
+.staff-grid .sg-item.is-draggable{cursor:grab}
+.staff-grid .sg-item.is-draggable:active{cursor:grabbing}
+.staff-grid .sg-item.sg-dragging{opacity:.35;transform:scale(.95)}
+.staff-grid .sg-item.sg-drag-over{box-shadow:inset 0 -3px 0 0 var(--pri);background:#e3f2fd}
+.staff-grid .sg-item .sg-handle{flex-shrink:0;color:var(--g4);font-size:14px;cursor:grab;user-select:none;padding:0 4px;line-height:1}
+.staff-grid .sg-item .sg-handle:active{cursor:grabbing}
 
 /* 💧 水分摂取入力 */
 #waterRow{padding:6px 0}
@@ -1380,6 +1387,24 @@ function load(){
   // 重複排除（同名は最初の1件のみ残す）
   var _seen=Object.create(null);
   D.staffs=D.staffs.filter(function(s){if(_seen[s.name])return false;_seen[s.name]=true;return true;});
+  // 起動時に localStorage の snapshot を D.staffs へ適用（最優先・順序保証）
+  // これにより端末を再起動しても同じ snapshot 順序で表示される
+  if(typeof readStaffsSnapshot==='function'){
+    var snapStaffsOnLoad=readStaffsSnapshot();
+    if(snapStaffsOnLoad&&snapStaffsOnLoad.length>0){
+      // snapshot の o 順にソート
+      var srtSnap=snapStaffsOnLoad.slice().sort(function(a,b){return(a.o||0)-(b.o||0)});
+      var snapBased=srtSnap.map(function(x){
+        return {name:String(x.n||x.name||'').trim(),active:(x.a===1||x.a===true||x.active!==false)};
+      }).filter(function(s){return!!s.name});
+      // ローカルにあって snapshot に無いものを末尾に保持（オフライン追加分の保護）
+      var snapSet={};snapBased.forEach(function(s){snapSet[s.name]=true});
+      (D.staffs||[]).forEach(function(s){
+        if(s&&s.name&&!snapSet[s.name]){snapBased.push({name:s.name,active:s.active!==false});snapSet[s.name]=true}
+      });
+      D.staffs=snapBased;
+    }
+  }
   // ローカル staffs が空で cfg に _staffs がある場合は復元（同期復旧の起動時シナリオ）
   if(!D.staffs.length && D.cfg && Array.isArray(D.cfg._staffs)){
     if(typeof extractStaffsFromCfg==='function')extractStaffsFromCfg({union:false});
@@ -2870,7 +2895,9 @@ function renderStaffListInto(boxId){
   box.innerHTML=list.map(function(s,i){
     var safe=escapeHtmlText(s.name);
     var retired=(s.active===false);
-    var cls='sg-item'+(retired?' is-retired':'');
+    var cls='sg-item'+(retired?' is-retired':'')+(includeReorder?' is-draggable':'');
+    var dragAttr=includeReorder?' draggable="true" data-drag-idx="'+i+'"':'';
+    var handle=includeReorder?'<span class="sg-handle" title="ドラッグで並び替え">⋮⋮</span>':'';
     var actionBtns='';
     if(includeReorder){
       var upDis=(i===0?' disabled style="opacity:.3"':'');
@@ -2885,9 +2912,45 @@ function renderStaffListInto(boxId){
                   '<button class="sg-retire" data-i="'+i+'" title="退職にする">🏃</button>';
     }
     actionBtns+='<button class="sg-del" data-i="'+i+'" title="完全削除">×</button>';
-    return '<div class="'+cls+'"><span class="sg-nm" title="'+safe+'">'+safe+'</span>'+
+    return '<div class="'+cls+'"'+dragAttr+'>'+handle+'<span class="sg-nm" title="'+safe+'">'+safe+'</span>'+
            '<div class="sg-actions">'+actionBtns+'</div></div>';
   }).join('');
+  // ドラッグ&ドロップ並び替え（設定画面のみ、PC・タブレット用）
+  if(includeReorder){
+    var dragSrcIdx=null;
+    $$('#'+boxId+' .sg-item').forEach(function(item){
+      item.addEventListener('dragstart',function(e){
+        dragSrcIdx=parseInt(this.dataset.dragIdx,10);
+        this.classList.add('sg-dragging');
+        if(e.dataTransfer){e.dataTransfer.effectAllowed='move';
+          try{e.dataTransfer.setData('text/plain',String(dragSrcIdx))}catch(err){}}
+      });
+      item.addEventListener('dragend',function(){
+        this.classList.remove('sg-dragging');
+        $$('#'+boxId+' .sg-item').forEach(function(i){i.classList.remove('sg-drag-over')});
+        dragSrcIdx=null;
+      });
+      item.addEventListener('dragover',function(e){
+        e.preventDefault();
+        if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+        this.classList.add('sg-drag-over');
+      });
+      item.addEventListener('dragleave',function(){
+        this.classList.remove('sg-drag-over');
+      });
+      item.addEventListener('drop',function(e){
+        e.preventDefault();
+        var dstIdx=parseInt(this.dataset.dragIdx,10);
+        if(dragSrcIdx==null||isNaN(dstIdx)||dstIdx===dragSrcIdx)return;
+        var moving=D.staffs.splice(dragSrcIdx,1)[0];
+        D.staffs.splice(dstIdx,0,moving);
+        dragSrcIdx=null;
+        pushStaffsSync(); // サーバーへ新順序を即送信（snapshot 経由で全端末同期）
+        renderStaffList();
+        showToast('🔀 並び替えました');
+      });
+    });
+  }
   // 並び替えハンドラ（設定画面のみ）
   // 並び順は yomi 列に位置を埋め込んでサーバーへ送信 → 全端末で共有される
   if(includeReorder){
