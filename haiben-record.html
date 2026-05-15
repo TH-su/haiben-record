@@ -1442,6 +1442,9 @@ function _idxBuild(){
   if(!Array.isArray(D.records)){_recIdx={byRes:byRes,byResDate:byResDate};return}
   for(var i=0;i<D.records.length;i++){
     var r=D.records[i];if(!r||r.residentId==null)continue;
+    // snapshot record（職員データ専用）はインデックスから完全に除外
+    // → 一覧/時系列/履歴/下剤集計のすべてに出てこない
+    if(typeof isUserRec==='function'&&!isUserRec(r))continue;
     var rid=r.residentId;
     (byRes[rid]=byRes[rid]||[]).push(r);
     if(r.date){var k=rid+'|'+r.date;(byResDate[k]=byResDate[k]||[]).push(r)}
