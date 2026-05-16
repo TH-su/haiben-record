@@ -344,7 +344,8 @@ textarea{resize:vertical;min-height:76px}
 .staff-grid .sg-item.is-draggable:active{cursor:grabbing}
 .staff-grid .sg-item.sg-dragging{opacity:.35;transform:scale(.95)}
 .staff-grid .sg-item.sg-drag-over{box-shadow:inset 0 -3px 0 0 var(--pri);background:#e3f2fd}
-.staff-grid .sg-item .sg-handle{flex-shrink:0;color:var(--g4);font-size:14px;cursor:grab;user-select:none;padding:0 4px;line-height:1}
+.staff-grid .sg-item .sg-handle{flex-shrink:0;color:#1565c0;font-size:18px;font-weight:700;cursor:grab;user-select:none;padding:0 6px;line-height:1;background:#e3f2fd;border-radius:4px;border:1px solid #90caf9}
+.staff-grid .sg-item .sg-handle:hover{background:#bbdefb}
 .staff-grid .sg-item .sg-handle:active{cursor:grabbing}
 
 /* 💧 水分摂取入力 */
@@ -375,8 +376,8 @@ textarea{resize:vertical;min-height:76px}
 .water-mark svg{width:1.2em;height:1.2em}
 /* タイムライン内のセル：通常より少し大きめに表示してアイコンを読み取り可能に */
 .tl-info .water-mini{display:inline-flex;align-items:center;gap:2px;color:#0d47a1;font-weight:700;
-  vertical-align:middle}
-.tl-info .water-mini svg{width:1.3em;height:1.3em}
+  vertical-align:middle;font-size:11px;background:#e3f2fd;padding:1px 4px;border-radius:8px}
+.tl-info .water-mini svg{width:1.1em;height:1.1em}
 </style>
 </head>
 <body>
@@ -2079,7 +2080,7 @@ function renderTL(){const date=$('tlDate').value||today();
         if(r.type==='laxative'){info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'')}
         if(r.type==='none'){info+='誘導'}
         // 水分摂取マーク（排尿の 💧 と区別するため、円柱コップ SVG を採用）
-        if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'</span>'; }
+        if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'cc</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
       cells+='<td class="tl-c has'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+inner+'</td>'}
     // 最終排尿・排便の日付差 (表示中日付との差) ― マイナスのみ表示
@@ -2172,7 +2173,7 @@ function showFiveDay(rid,endDate){
         }
         if(r.type==='laxative')info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'');
         if(r.type==='none')info+='誘導';
-        if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'</span>'; }
+        if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'cc</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'');
       }).join('');
       cells+='<td class="tl-c has'+schCls+'" data-fdslot="'+date+'-'+s+'">'+schLbl5+inner+'</td>';
@@ -2890,7 +2891,7 @@ function renderStaffList(){
 function renderStaffListInto(boxId){
   var box=$(boxId);if(!box)return;
   var list=getStaffAll();
-  var includeReorder=(boxId==='staffList'); // 設定画面のみ並び替えボタン
+  var includeReorder=(boxId==='staffList'); // 並び替えは設定画面のみ（職員タブは閲覧・追加のみ）
   if(list.length===0){
     box.innerHTML='<div class="sg-empty">まだ職員が登録されていません。「＋ 追加」から登録してください。</div>';
     return;
@@ -3497,12 +3498,14 @@ function init(){
     submitRec();
   });
   // 記録者欄：タップでピッカー、ただし直接編集・削除も可能。
-  // 自動でフォーカス時にピッカー開くと編集できなくなるので、明示的なタップ・クリックのみで開く。
+  // 記録者セルをタップしたら必ず職員一覧ピッカーを開く（値が入っていても）
   if($('recStaff')){
-    // フィールド自体をタップしたとき：値が空ならピッカーを開く / 値があるなら編集を許可
     $('recStaff').addEventListener('click',function(e){
-      if(!this.value || !this.value.trim()){ openStaffPicker('recStaff'); }
-      // 値がある時は何もしない（直接編集できる）
+      openStaffPicker('recStaff');
+    });
+    // focus でも開く（タブキーで移動した場合も）
+    $('recStaff').addEventListener('focus',function(e){
+      openStaffPicker('recStaff');
     });
     $('recStaff').addEventListener('input',function(){ updateSubmitGate(); noteStaffActivity(); });
     $('recStaff').addEventListener('change',function(){ updateSubmitGate(); noteStaffActivity(); });
