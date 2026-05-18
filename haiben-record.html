@@ -255,11 +255,17 @@ textarea{resize:vertical;min-height:76px}
 .tg-i{background:var(--g1);color:var(--g7)}
 
 /* history table */
-.ht-w{overflow-x:auto;margin-top:8px}
-.ht{width:100%;border-collapse:collapse;font-size:11px}
-.ht th{background:var(--g1);padding:6px 5px;font-size:10px;font-weight:700;white-space:nowrap;border:1px solid var(--g2);color:var(--g7)}
-.ht td{padding:5px 5px;border:1px solid var(--g2);text-align:center;vertical-align:middle;white-space:nowrap}
-.ht tr:nth-child(even){background:var(--g0)}
+.ht-w{overflow:auto;margin-top:8px;max-height:55vh;border:1px solid var(--g2);border-radius:6px}
+/* 履歴モーダル：上部ヘッダ（氏名・ボタン）を固定し、表のみスクロール */
+#mHist .md{display:flex;flex-direction:column;max-height:85vh;padding:0;overflow:hidden}
+#mHist .md > div:first-child{padding:18px 22px 10px;flex-shrink:0;background:#fff;border-bottom:1px solid var(--g2);margin-bottom:0!important}
+#mHist #mHistC{flex:1;overflow-y:auto;padding:10px 22px 18px;min-height:0}
+#mHist .ht-w{max-height:none;border:none;margin-top:0}
+#mHist .ht thead th{top:0;background:var(--g1)}
+.ht{width:100%;border-collapse:separate;border-spacing:0;font-size:11px}
+.ht th{background:var(--g1);padding:6px 5px;font-size:10px;font-weight:700;white-space:nowrap;border:1px solid var(--g2);color:var(--g7);position:sticky;top:0;z-index:2}
+.ht td{padding:5px 5px;border:1px solid var(--g2);text-align:center;vertical-align:middle;white-space:nowrap;background:#fff}
+.ht tr:nth-child(even) td{background:var(--g0)}
 .ht .tp-u{color:var(--u);font-weight:700}.ht .tp-s{color:var(--s);font-weight:700}.ht .tp-b{color:#e91e63;font-weight:700}.ht .tp-l{color:#7b1fa2;font-weight:700}.ht .tp-n{color:#455a64;font-weight:700}
 .tl-nm-link{cursor:pointer;color:var(--pri);text-decoration:underline}
 
@@ -980,12 +986,21 @@ function customConfirm(msg){
 
 /* ═══════════ API ═══════════ */
 const API_KEY='hbcr_api_url';
-const API_KEY_BAK='hbcr_api_url_bak'; // 二重保存
-const API_COOKIE='hbcr_api_url'; // Cookie バックアップ
-/* GAS Web App URL の堅牢な保存／読み出し
-   - localStorage（主） + localStorage バックアップ + Cookie（1年）の3重化
-   - 起動時に「いずれか」から復元、見つかったら他にも書き戻し（ITP/容量逼迫対策）
-   - URL ハッシュ #api=... での明示復元にも対応 */
+const API_KEY_BAK='hbcr_api_url_bak';     // localStorage 二重保存
+const API_KEY_BAK2='hbcr_api_url_bak2';   // localStorage 3 重保存（別名で完全独立）
+const API_COOKIE='hbcr_api_url';
+const API_COOKIE_BAK='hbcr_api_url_bak';   // Cookie 別名でも保存
+const API_IDB_NAME='hbcr_api_db';          // IndexedDB（ITP に最も強い）
+const API_IDB_STORE='kv';
+const API_IDB_KEY='api_url';
+
+/* GAS Web App URL の堅牢な保存／読み出し（5層）
+   1. localStorage 主
+   2. localStorage バックアップ × 2
+   3. sessionStorage
+   4. Cookie（1年） × 2
+   5. IndexedDB（iOS Safari ITP 対策で最も信頼性が高い）
+   6. URL ハッシュ #api=... での明示復元 */
 function _setCookie(name,val,days){
   try{var d=new Date();d.setTime(d.getTime()+days*864e5);
     document.cookie=name+'='+encodeURIComponent(val)+'; expires='+d.toUTCString()+'; path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'');}catch(e){}
@@ -994,12 +1009,59 @@ function _getCookie(name){
   try{var m=document.cookie.match(new RegExp('(?:^|; )'+name.replace(/[.$?*|{}()[\]\\\/+^]/g,'\\$&')+'=([^;]*)'));return m?decodeURIComponent(m[1]):'';}catch(e){return''}
 }
 function _delCookie(name){try{document.cookie=name+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';}catch(e){}}
+/* IndexedDB ヘルパ（非同期） */
+function _idbOpen(){
+  return new Promise(function(resolve,reject){
+    try{
+      if(!window.indexedDB)return resolve(null);
+      var req=indexedDB.open(API_IDB_NAME,1);
+      req.onupgradeneeded=function(e){var db=e.target.result;if(!db.objectStoreNames.contains(API_IDB_STORE))db.createObjectStore(API_IDB_STORE)};
+      req.onsuccess=function(e){resolve(e.target.result)};
+      req.onerror=function(){resolve(null)};
+      req.onblocked=function(){resolve(null)};
+    }catch(e){resolve(null)}
+  });
+}
+function _idbSet(key,val){
+  return _idbOpen().then(function(db){
+    if(!db)return;
+    try{
+      var tx=db.transaction([API_IDB_STORE],'readwrite');
+      tx.objectStore(API_IDB_STORE).put(val,key);
+      return new Promise(function(res){tx.oncomplete=function(){res()};tx.onerror=function(){res()};tx.onabort=function(){res()}});
+    }catch(e){}
+  });
+}
+function _idbGet(key){
+  return _idbOpen().then(function(db){
+    if(!db)return null;
+    return new Promise(function(res){
+      try{
+        var tx=db.transaction([API_IDB_STORE],'readonly');
+        var req=tx.objectStore(API_IDB_STORE).get(key);
+        req.onsuccess=function(){res(req.result||null)};
+        req.onerror=function(){res(null)};
+      }catch(e){res(null)}
+    });
+  });
+}
+function _idbDel(key){
+  return _idbOpen().then(function(db){
+    if(!db)return;
+    try{var tx=db.transaction([API_IDB_STORE],'readwrite');tx.objectStore(API_IDB_STORE).delete(key);}catch(e){}
+  });
+}
+
 function saveApiUrl(url){
   if(!url)return;
   try{localStorage.setItem(API_KEY,url)}catch(e){console.warn('[hbcr] localStorage失敗:',e)}
   try{localStorage.setItem(API_KEY_BAK,url)}catch(e){}
+  try{localStorage.setItem(API_KEY_BAK2,url)}catch(e){}
   try{sessionStorage.setItem(API_KEY,url)}catch(e){}
   _setCookie(API_COOKIE,url,365);
+  _setCookie(API_COOKIE_BAK,url,365);
+  // IndexedDB（非同期だが await しない）
+  _idbSet(API_IDB_KEY,url);
   // 永続ストレージを要求（Safari/Chromeで容量逼迫時の eviction 防止）
   if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().catch(function(){})}
 }
@@ -1007,19 +1069,41 @@ function loadApiUrl(){
   var u='';
   try{u=localStorage.getItem(API_KEY)||''}catch(e){}
   if(!u){try{u=localStorage.getItem(API_KEY_BAK)||''}catch(e){}}
+  if(!u){try{u=localStorage.getItem(API_KEY_BAK2)||''}catch(e){}}
   if(!u){try{u=sessionStorage.getItem(API_KEY)||''}catch(e){}}
   if(!u){u=_getCookie(API_COOKIE)||''}
+  if(!u){u=_getCookie(API_COOKIE_BAK)||''}
   if(!u){var m=(location.hash||'').match(/[#&]api=([^&]+)/);if(m){try{u=decodeURIComponent(m[1])}catch(e){u=m[1]}}}
   // どこかから復元できたら他にも書き戻して再発防止
   if(u)saveApiUrl(u);
+  // 非同期で IndexedDB からの復旧も試みる（同期層が全滅していた場合の最終救済）
+  if(!u){
+    _idbGet(API_IDB_KEY).then(function(idbVal){
+      if(idbVal&&typeof idbVal==='string'){
+        saveApiUrl(idbVal);apiUrl=idbVal;
+        if($('cfgApi')&&!$('cfgApi').value)$('cfgApi').value=idbVal;
+        try{showToast('🔐 GAS URL を IndexedDB から復旧しました')}catch(e){}
+        if(typeof syncFromAPI==='function')syncFromAPI(false);
+      }
+    });
+  }
   return u;
 }
 function clearApiUrl(){
   try{localStorage.removeItem(API_KEY)}catch(e){}
   try{localStorage.removeItem(API_KEY_BAK)}catch(e){}
+  try{localStorage.removeItem(API_KEY_BAK2)}catch(e){}
   try{sessionStorage.removeItem(API_KEY)}catch(e){}
   _delCookie(API_COOKIE);
+  _delCookie(API_COOKIE_BAK);
+  _idbDel(API_IDB_KEY);
 }
+/* 定期的に URL を再保存（生存ハートビート） — 全層が同期され続けることを保証 */
+function _heartbeatApiUrl(){
+  if(apiUrl)saveApiUrl(apiUrl);
+}
+// 初回 + 5分ごとに heartbeat（apiUrl がある時だけ再保存）
+setInterval(_heartbeatApiUrl,5*60*1000);
 let apiUrl='';
 
 function apiSetStatus(st,msg){
