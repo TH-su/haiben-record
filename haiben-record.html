@@ -260,8 +260,10 @@ textarea{resize:vertical;min-height:76px}
 #mHist .md{display:flex;flex-direction:column;max-height:85vh;padding:0;overflow:hidden}
 #mHist .md > div:first-child{padding:18px 22px 10px;flex-shrink:0;background:#fff;border-bottom:1px solid var(--g2);margin-bottom:0!important}
 #mHist #mHistC{flex:1;overflow-y:auto;padding:10px 22px 18px;min-height:0}
-#mHist .ht-w{max-height:none;border:none;margin-top:0}
-#mHist .ht thead th{top:0;background:var(--g1)}
+/* ht-w の内蔵スクロールを無効化し、外側 mHistC をスクロール元にする
+   これで thead.sticky は mHistC を基準に top:0 で固定される */
+#mHist .ht-w{max-height:none;border:none;margin-top:0;overflow:visible}
+#mHist .ht thead th{top:0;background:var(--g1);box-shadow:0 1px 0 0 var(--g2)}
 .ht{width:100%;border-collapse:separate;border-spacing:0;font-size:11px}
 .ht th{background:var(--g1);padding:6px 5px;font-size:10px;font-weight:700;white-space:nowrap;border:1px solid var(--g2);color:var(--g7);position:sticky;top:0;z-index:2}
 .ht td{padding:5px 5px;border:1px solid var(--g2);text-align:center;vertical-align:middle;white-space:nowrap;background:#fff}
