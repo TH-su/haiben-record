@@ -848,6 +848,27 @@ textarea{resize:vertical;min-height:76px}
   <div class="md-f"><button class="bn bs" id="mResCancel">キャンセル</button><button class="bn bp" id="mResSave">保　存</button></div>
 </div></div>
 
+<!-- ── 入院管理モーダル ── -->
+<div class="mo" id="mHosp"><div class="md" style="max-width:520px">
+  <div class="md-t" id="mHospT">🏥 入院管理</div>
+  <div id="mHospResName" style="font-size:13px;color:var(--g7);margin-bottom:12px"></div>
+  <div id="mHospList" style="margin-bottom:14px"></div>
+  <div style="background:#fff8e1;border:1px solid #fbc02d;border-radius:6px;padding:10px 12px;margin-bottom:12px">
+    <div style="font-size:12px;font-weight:700;color:#5d4037;margin-bottom:6px">➕ 新規入院を登録</div>
+    <div class="fg" style="margin-bottom:6px"><label class="fl">入院日時</label>
+      <input type="datetime-local" id="mHospAdmit" style="width:100%;padding:8px;border:1px solid var(--g3);border-radius:6px"></div>
+    <div class="fg" style="margin-bottom:6px"><label class="fl">退院日時（任意・後で登録可）</label>
+      <input type="datetime-local" id="mHospDischarge" style="width:100%;padding:8px;border:1px solid var(--g3);border-radius:6px"></div>
+    <button class="bn bp bsm" id="mHospAdd" style="width:100%;background:#c62828">🏥 入院を登録</button>
+  </div>
+  <div style="font-size:11px;color:var(--g6);line-height:1.6;background:#f5f5f5;border-radius:6px;padding:8px 10px">
+    💡 入院日時を登録すると一覧・時系列に <span style="background:#c62828;color:#fff;padding:1px 6px;border-radius:3px;font-weight:700">入院</span> と表示され、その期間中の記録入力ができなくなります。<br>
+    💡 退院日時を登録すると <span style="background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-weight:700">退院</span> マーカーが表示され、入力が再開できます。<br>
+    💡 入院前の記録データは保持されます。
+  </div>
+  <div class="md-f"><button class="bn bs" id="mHospClose">閉じる</button></div>
+</div></div>
+
 <div class="mo" id="mDet"><div class="md">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:15px;flex-wrap:wrap">
     <div class="md-t" style="margin-bottom:0;flex:1;min-width:180px">📋 記録の詳細</div>
@@ -1659,17 +1680,113 @@ function updateDayNavHi(groupId,dateVal){
 function $(id){return document.getElementById(id)}
 function $$(sel,ctx){return(ctx||document).querySelectorAll(sel)}
 function showToast(m){var e=$('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2600)}
-function elH(dt){
+/* ════════ 入院管理（hospitalization） ════════
+   各入居者の hospitalizations 配列に {id, admissionAt, dischargeAt} を保持
+   - admissionAt: ISO-like 文字列 'YYYY-MM-DDTHH:MM'
+   - dischargeAt: 同 or null（入院継続中）
+   - 入院期間中は記録入力を不可とし、間隔計算を一時停止する */
+function getActiveHospAt(resident,datetimeStr){
+  if(!resident||!Array.isArray(resident.hospitalizations))return null;
+  var t=new Date(datetimeStr).getTime();if(isNaN(t))return null;
+  for(var i=0;i<resident.hospitalizations.length;i++){
+    var h=resident.hospitalizations[i];
+    if(!h||!h.admissionAt)continue;
+    var ad=new Date(h.admissionAt).getTime();if(isNaN(ad)||t<ad)continue;
+    if(h.dischargeAt){
+      var dc=new Date(h.dischargeAt).getTime();
+      if(!isNaN(dc)&&t>=dc)continue;
+    }
+    return h;
+  }
+  return null;
+}
+function isCurrentlyHospitalized(resident){
+  return !!getActiveHospAt(resident,new Date().toISOString());
+}
+/* 指定日にある入退院イベント（赤地/青地マーカーセル表示用） */
+function getHospEventsOnDate(resident,dateStr){
+  if(!resident||!Array.isArray(resident.hospitalizations))return[];
+  var events=[];
+  resident.hospitalizations.forEach(function(h){
+    if(!h)return;
+    if(h.admissionAt&&String(h.admissionAt).slice(0,10)===dateStr){
+      events.push({type:'admission',time:String(h.admissionAt).slice(11,16),datetime:h.admissionAt,h:h});
+    }
+    if(h.dischargeAt&&String(h.dischargeAt).slice(0,10)===dateStr){
+      events.push({type:'discharge',time:String(h.dischargeAt).slice(11,16),datetime:h.dischargeAt,h:h});
+    }
+  });
+  return events;
+}
+/* その日が「完全入院日」か（入院日翌日〜退院前日：一覧全行グレーアウト対象） */
+function isFullHospDay(resident,dateStr){
+  if(!resident||!Array.isArray(resident.hospitalizations))return false;
+  var dayStart=new Date(dateStr+'T00:00:00').getTime();
+  if(isNaN(dayStart))return false;
+  for(var i=0;i<resident.hospitalizations.length;i++){
+    var h=resident.hospitalizations[i];
+    if(!h||!h.admissionAt)continue;
+    var ad=new Date(h.admissionAt).getTime();if(isNaN(ad))continue;
+    var adDay=new Date(String(h.admissionAt).slice(0,10)+'T00:00:00').getTime();
+    var dc=h.dischargeAt?new Date(h.dischargeAt).getTime():Infinity;
+    var dcDay=h.dischargeAt?new Date(String(h.dischargeAt).slice(0,10)+'T00:00:00').getTime():Infinity;
+    // 「入院日翌日 〜 退院日前日」が完全入院日
+    if(dayStart>adDay&&dayStart<dcDay)return true;
+  }
+  return false;
+}
+/* タイムラインのスロットが入院期間中か（赤地後・退院セル前の灰色化対象） */
+function isSlotInHospPeriod(resident,dateStr,slotIdx){
+  if(!resident||!Array.isArray(resident.hospitalizations))return false;
+  // slot 0〜47 (30分刻み)。スロット中央時刻で判定
+  var slotHm=String(Math.floor(slotIdx/2)).padStart(2,'0')+':'+(slotIdx%2===0?'00':'30');
+  var slotT=new Date(dateStr+'T'+slotHm+':00').getTime();
+  if(isNaN(slotT))return false;
+  for(var i=0;i<resident.hospitalizations.length;i++){
+    var h=resident.hospitalizations[i];
+    if(!h||!h.admissionAt)continue;
+    var ad=new Date(h.admissionAt).getTime();if(isNaN(ad))continue;
+    var dc=h.dischargeAt?new Date(h.dischargeAt).getTime():Infinity;
+    // 入院セル自体は対象外（マーカー表示のため）→ slotT > ad のみ
+    // 退院セル自体も対象外 → slotT < dc のみ
+    if(slotT>ad&&slotT<dc)return true;
+  }
+  return false;
+}
+
+function elH(dt,rid){
   if(!dt)return null;
   // recordオブジェクトが渡された場合は tsUTC を最優先（格納済みなら絶対値で比較できTZ事故に強い）
   if(typeof dt==='object'&&dt!==null){
-    if(typeof dt.tsUTC==='number'&&!isNaN(dt.tsUTC))return(Date.now()-dt.tsUTC)/36e5;
+    if(!rid&&dt.residentId!=null)rid=dt.residentId;
+    if(typeof dt.tsUTC==='number'&&!isNaN(dt.tsUTC)){
+      return(_freezeIfHosp(rid)-dt.tsUTC)/36e5;
+    }
     dt=dt.datetime||(dt.date&&dt.time?(dt.date+'T'+dt.time):'');
     if(!dt)return null;
   }
   var t=new Date(dt).getTime();
   if(isNaN(t))return null;
-  return(Date.now()-t)/36e5}
+  // 🏥 入院中の場合は時間を入院日時で凍結（マイナス◯日表示の進行を止める）
+  return(_freezeIfHosp(rid)-t)/36e5}
+function _freezeIfHosp(rid){
+  if(rid==null)return Date.now();
+  var r=D.residents.find(function(x){return x.id===rid});
+  if(!r||!Array.isArray(r.hospitalizations))return Date.now();
+  // 現在入院中なら、admissionAt 時点を「現在」として返す
+  var now=Date.now();
+  for(var i=0;i<r.hospitalizations.length;i++){
+    var h=r.hospitalizations[i];
+    if(!h||!h.admissionAt)continue;
+    var ad=new Date(h.admissionAt).getTime();if(isNaN(ad)||now<ad)continue;
+    if(h.dischargeAt){
+      var dc=new Date(h.dischargeAt).getTime();
+      if(!isNaN(dc)&&now>=dc)continue;
+    }
+    return ad; // 入院中：入院日時で時間凍結
+  }
+  return now;
+}
 function fmtEl(h){if(h===null)return'未記録';if(h<1)return Math.round(h*60)+'分前';
   const d=Math.floor(h/24),hr=Math.floor(h%24),mn=Math.round((h%1)*60);
   if(d===0)return hr+'時間'+(mn>0?mn+'分':'')+'前';return d+'日'+(hr>0?hr+'時間':'')+'前'}
@@ -1909,6 +2026,16 @@ function submitRec(){
   var sv=$('resSel').value;
   ci.rid=sv?parseInt(sv):null;
   if(!ci.rid||isNaN(ci.rid)){showToast('⚠️ 入居者を選択してください');ci.rid=null;return}
+  // 🏥 入院期間中の入力をブロック（記録日時を基準に判定）
+  var _resForHosp=D.residents.find(function(x){return x.id===ci.rid});
+  var _recDtVal=$('recDT')&&$('recDT').value;
+  if(_resForHosp&&_recDtVal){
+    var _activeHosp=getActiveHospAt(_resForHosp,_recDtVal);
+    if(_activeHosp){
+      showToast('⚠️ '+_resForHosp.name+'さんは入院期間中（'+_activeHosp.admissionAt.replace('T',' ')+' 〜 '+(_activeHosp.dischargeAt?_activeHosp.dischargeAt.replace('T',' '):'退院未登録')+'）のため記録できません','err');
+      return;
+    }
+  }
   // 排泄種別 もしくは 水分摂取 のいずれかが必要
   var hasWater = Number(ci.waterCC) > 0;
   if(!ci.type && !hasWater){
@@ -2106,7 +2233,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
   const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   tb.innerHTML=res.map((re,i)=>{
     const lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
-    const uh=elH(lu||null),sh=elH(ls||null);
+    const uh=elH(lu||null,re.id),sh=elH(ls||null,re.id);
     const ub=badgeCls(uh,'u',re.id),sb=badgeCls(sh,'s',re.id);
     const du=dayR(re.id,date,'u'),ds=dayR(re.id,date,'s');
     const tU=du.reduce((s,r)=>s+(typeof r.urineAmt==='number'?r.urineAmt:0),0);
@@ -2158,12 +2285,26 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       if(t==='s')return base+'background:var(--s-bg);color:var(--s);border:1px solid #a1887f';
       return base+'background:var(--u-bg);color:var(--u);border:1px solid #81d4fa';
     }
-    var uOffHtml=(lu&&uDiff<0)?'<div><span style="'+offStyle(ub,'u')+'">'+fmtDayOff(uDiff)+'日</span></div>':'';
-    var sOffHtml=(ls&&sDiff<0)?'<div><span style="'+offStyle(sb,'s')+'">'+fmtDayOff(sDiff)+'日</span></div>':'';
+    // 🏥 入院判定（表示中の date 基準）
+    var hospEventsToday=getHospEventsOnDate(re,date);
+    var admissionEvent=hospEventsToday.find(function(ev){return ev.type==='admission'});
+    var dischargeEvent=hospEventsToday.find(function(ev){return ev.type==='discharge'});
+    var isFullHosp=isFullHospDay(re,date);
+    // 間隔表示は入院中は無効化（マイナス◯日表示しない）
+    var hideDiff=isFullHosp||(admissionEvent&&!dischargeEvent);
+    var uOffHtml=(!hideDiff&&lu&&uDiff<0)?'<div><span style="'+offStyle(ub,'u')+'">'+fmtDayOff(uDiff)+'日</span></div>':'';
+    var sOffHtml=(!hideDiff&&ls&&sDiff<0)?'<div><span style="'+offStyle(sb,'s')+'">'+fmtDayOff(sDiff)+'日</span></div>':'';
     let rc=i%2===1?'ev':'';if(ub==='eb-ng'||sb==='eb-ng')rc+=' rd';else if(ub==='eb-w'||sb==='eb-w')rc+=' rw';
-    return'<tr class="'+rc+'">'+
+    // 入院期間中（完全入院日）は行全体をグレーアウト
+    var rowStyle=isFullHosp?'background:#eceff1;color:#9e9e9e':'';
+    // 入院/退院マーカー（氏名セルに表示）
+    var hospMarker='';
+    if(admissionEvent)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院 '+admissionEvent.time+'</div>';
+    if(dischargeEvent)hospMarker+='<div style="margin-top:4px;background:#1565c0;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 退院 '+dischargeEvent.time+'</div>';
+    if(isFullHosp)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>';
+    return'<tr class="'+rc+'"'+(rowStyle?' style="'+rowStyle+'"':'')+'>'+
       '<td><strong>'+re.room+'</strong></td>'+
-      '<td style="text-align:left;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+re.id+'">'+re.name+'</span></td>'+
+      '<td style="text-align:left;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+re.id+'">'+re.name+'</span>'+hospMarker+'</td>'+
       '<td style="white-space:nowrap">'+(lu?'<b>'+fmtLast(lu,date)+'</b>':'<span class="nr">未記録</span>')+'</td>'+
       '<td><span class="eb '+ub+'">'+fmtEl(uh)+'</span>'+uOffHtml+'</td>'+
       '<td>'+du.length+'回'+(tU>0?'<div style="font-size:10px;color:var(--u)">'+tU+'ml</div>':'')+(tU===0&&du.some(r=>typeof r.urineAmt==='string'&&r.urineAmt)?'<div style="font-size:10px;color:var(--u)">'+du.filter(r=>typeof r.urineAmt==='string'&&r.urineAmt).map(r=>r.urineAmt).join('・')+'</div>':'')+'</td>'+
@@ -2221,10 +2362,32 @@ function renderTL(){const date=$('tlDate').value||today();
     const bk={};dr.forEach(r=>{const p=r.time.split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);
       const slot=h*2+(m>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
     var schSet=schedSet(re);
+    // 🏥 入院イベント取得（赤地/青地マーカー＆灰色化用）
+    var hospEvents=getHospEventsOnDate(re,date);
+    // 各イベントが入るスロット番号を計算
+    var hospBySlot={};
+    hospEvents.forEach(function(ev){
+      var p=ev.time.split(':'),hh=parseInt(p[0],10)||0,mm=parseInt(p[1],10)||0;
+      var slot=hh*2+(mm>=30?1:0);
+      hospBySlot[slot]=ev;
+    });
     let cells='';
     for(let s=0;s<48;s++){const recs=bk[s]||[];
       var schCls=schSet[s]?' sched':'';
       var schLbl=schSet[s]?'<span class="sch-lbl">'+schSet[s]+'</span>':'';
+      // 🏥 入院マーカーセル（赤地/青地 太い白文字）
+      if(hospBySlot[s]){
+        var ev=hospBySlot[s];
+        var bg=ev.type==='admission'?'#c62828':'#1565c0';
+        var label=ev.type==='admission'?'入院':'退院';
+        cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'" style="background:'+bg+';color:#fff;font-weight:700;font-size:11px;text-align:center;padding:2px 1px"><span style="display:block">'+label+'</span><span style="display:block;font-size:9px;opacity:.9">'+ev.time+'</span></td>';
+        continue;
+      }
+      // 🏥 入院期間中のセル（赤地後・退院前）はグレーアウト
+      if(isSlotInHospPeriod(re,date,s)){
+        cells+='<td class="tl-c'+schCls+'" data-slot="'+re.id+'-'+s+'" style="background:#bdbdbd;color:#757575;pointer-events:none;opacity:.6">'+schLbl+'</td>';
+        continue;
+      }
       if(!recs.length){cells+='<td class="tl-c'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+'</td>';continue}
       let inner=recs.map(r=>{
         const dot=tlMarks(r);
@@ -2237,7 +2400,6 @@ function renderTL(){const date=$('tlDate').value||today();
         }
         if(r.type==='laxative'){info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'')}
         if(r.type==='none'){info+='誘導'}
-        // 水分摂取マーク（排尿の 💧 と区別するため、円柱コップ SVG を採用）
         if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'cc</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
       cells+='<td class="tl-c has'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+inner+'</td>'}
@@ -2245,7 +2407,7 @@ function renderTL(){const date=$('tlDate').value||today();
     var lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
     var uDiff=lu?dayDiff(lu.date,date):null;
     var sDiff=ls?dayDiff(ls.date,date):null;
-    var uh_tl=elH(lu||null),sh_tl=elH(ls||null);
+    var uh_tl=elH(lu||null,re.id),sh_tl=elH(ls||null,re.id);
     var ub_tl=badgeCls(uh_tl,'u',re.id),sb_tl=badgeCls(sh_tl,'s',re.id);
     function tlOffStyle(badge,def){
       if(badge==='eb-ng')return'background:var(--ng-l);color:var(--ng);font-weight:700;border:1px solid var(--ng)';
@@ -2683,18 +2845,22 @@ function renderCfg(){
       var badges='';
       if(isInactive)badges+='<span style="background:#9e9e9e;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-right:4px">退去済</span>';
       if(isHidden&&!isInactive)badges+='<span style="background:#fb8c00;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-right:4px">非表示</span>';
+      // 🏥 現在入院中ならバッジ表示
+      if(!isInactive&&isCurrentlyHospitalized(r))badges+='<span style="background:#c62828;color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">🏥 入院中</span>';
       var histBtn=isInactive?'<button class="bn bs bsm res-hist" data-id="'+r.id+'">履歴</button>':'';
       var toggleLabel=isInactive?'在籍へ戻す':'退去';
       var toggleCls=isInactive?'res-restore':'res-leave';
       var hideLabel=isHidden?'表示':'非表示';
       var hideCls=isHidden?'res-unhide':'res-hide';
-      // 退去済には非表示ボタン不要（既に非表示扱い）
+      // 退去済には非表示・入院ボタン不要
       var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+r.id+'">'+hideLabel+'</button>';
-      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+r.name+'</b> <span style="font-size:12px;color:var(--g5)">'+r.room+'号室 / '+(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'">'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
+      var hospBtn=isInactive?'':'<button class="bn bs bsm res-hosp" data-id="'+r.id+'" style="background:#ffebee;border-color:#c62828;color:#c62828">🏥 入院</button>';
+      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+r.name+'</b> <span style="font-size:12px;color:var(--g5)">'+r.room+'号室 / '+(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'">'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
     '<div style="margin-top:8px;font-size:12px;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
   // ボタンイベント
   $$('.res-edit').forEach(b=>b.addEventListener('click',function(){editRes(parseInt(this.dataset.id))}));
   $$('.res-del').forEach(b=>b.addEventListener('click',function(){delRes(parseInt(this.dataset.id))}));
+  $$('.res-hosp').forEach(b=>b.addEventListener('click',function(){openHospModal(parseInt(this.dataset.id))}));
   $$('.res-leave').forEach(b=>b.addEventListener('click',function(){toggleResActive(parseInt(this.dataset.id),false)}));
   $$('.res-restore').forEach(b=>b.addEventListener('click',function(){toggleResActive(parseInt(this.dataset.id),true)}));
   $$('.res-hide').forEach(b=>b.addEventListener('click',function(){toggleResHidden(parseInt(this.dataset.id),true)}));
@@ -3543,6 +3709,83 @@ function editRes(id){const r=D.residents.find(x=>x.id===id);if(!r)return;editRes
   if($('mRSW')){$('mRSW').value=(rc.stoolWarnD!=null?rc.stoolWarnD:'');$('mRSW').placeholder='全体設定: '+D.cfg.stoolWarnD}
   if($('mRSD')){$('mRSD').value=(rc.stoolDangerD!=null?rc.stoolDangerD:'');$('mRSD').placeholder='全体設定: '+D.cfg.stoolDangerD}
   $('mRes').classList.add('on')}
+/* ════════ 入院管理モーダル ════════ */
+var _hospEditRid=null;
+function openHospModal(rid){
+  var r=D.residents.find(function(x){return x.id===rid});
+  if(!r)return;
+  _hospEditRid=rid;
+  $('mHospT').textContent='🏥 入院管理';
+  $('mHospResName').textContent=r.name+'（'+r.room+'号室）';
+  renderHospList(r);
+  // 新規入力欄をクリア（デフォルトは今）
+  function pad(n){return(n<10?'0':'')+n}
+  var now=new Date();
+  var nowStr=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'T'+pad(now.getHours())+':'+pad(now.getMinutes());
+  $('mHospAdmit').value=nowStr;
+  $('mHospDischarge').value='';
+  $('mHosp').classList.add('on');
+}
+function renderHospList(r){
+  var list=$('mHospList');if(!list)return;
+  if(!Array.isArray(r.hospitalizations)||r.hospitalizations.length===0){
+    list.innerHTML='<div style="font-size:12px;color:var(--g5);padding:8px;background:var(--g0);border-radius:6px;text-align:center">入院履歴はありません</div>';
+    return;
+  }
+  // 新しい順
+  var sorted=r.hospitalizations.slice().sort(function(a,b){return(b.admissionAt||'').localeCompare(a.admissionAt||'')});
+  list.innerHTML='<div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--g7)">📋 入院履歴</div>'+
+    sorted.map(function(h){
+      var isOngoing=!h.dischargeAt;
+      var bg=isOngoing?'#ffebee':'#f5f5f5';
+      var badge=isOngoing?'<span style="background:#c62828;color:#fff;font-weight:700;padding:1px 6px;border-radius:3px;font-size:11px">入院中</span>':'<span style="background:#1565c0;color:#fff;font-weight:700;padding:1px 6px;border-radius:3px;font-size:11px">退院済</span>';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:4px;background:'+bg+';border-radius:6px;font-size:12px;flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:180px">'+badge+'<br>'+
+        '<div style="margin-top:4px"><b>入院</b>: '+(h.admissionAt||'-').replace('T',' ')+'</div>'+
+        (h.dischargeAt?'<div><b>退院</b>: '+h.dischargeAt.replace('T',' ')+'</div>':'<div style="color:#c62828"><b>退院未登録</b></div>')+
+        '</div>'+
+        (isOngoing?'<button class="bn bp bsm hosp-discharge" data-hid="'+h.id+'" style="background:#1565c0">📝 退院日時を登録</button>':'')+
+        '<button class="bn br bsm hosp-del" data-hid="'+h.id+'" title="この入院履歴を削除">🗑️</button>'+
+      '</div>';
+    }).join('');
+  // 退院登録ボタン
+  $$('#mHospList .hosp-discharge').forEach(function(b){
+    b.addEventListener('click',function(){
+      var hid=this.dataset.hid;
+      var hsp=r.hospitalizations.find(function(x){return x.id===hid});
+      if(!hsp)return;
+      function pad(n){return(n<10?'0':'')+n}
+      var now=new Date();
+      var defaultStr=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'T'+pad(now.getHours())+':'+pad(now.getMinutes());
+      customPrompt({title:'退院日時を入力',message:'入院: '+hsp.admissionAt.replace('T',' '),value:defaultStr,type:'datetime-local'}).then(function(v){
+        if(!v)return;
+        if(new Date(v).getTime()<=new Date(hsp.admissionAt).getTime()){showToast('⚠️ 退院は入院より後の日時を入力してください','err');return}
+        hsp.dischargeAt=v;
+        save();apiPush('saveRes',{resident:r});
+        renderHospList(r);renderCfg();
+        if(typeof renderBoard==='function')renderBoard();
+        if(typeof renderTL==='function')renderTL();
+        showToast('✅ 退院日時を登録しました');
+      });
+    });
+  });
+  // 削除ボタン
+  $$('#mHospList .hosp-del').forEach(function(b){
+    b.addEventListener('click',function(){
+      var hid=this.dataset.hid;
+      customConfirm('この入院履歴を削除しますか？\n（記録データは保持されます）').then(function(ok){
+        if(!ok)return;
+        r.hospitalizations=r.hospitalizations.filter(function(x){return x.id!==hid});
+        save();apiPush('saveRes',{resident:r});
+        renderHospList(r);renderCfg();
+        if(typeof renderBoard==='function')renderBoard();
+        if(typeof renderTL==='function')renderTL();
+        showToast('🗑️ 削除しました');
+      });
+    });
+  });
+}
+
 async function delRes(id){var r=D.residents.find(function(x){return x.id===id});if(!r)return;
   var ok=await customConfirm(r.name+' を削除しますか？\n（記録データは保持されます）');
   if(!ok)return;
@@ -3995,6 +4238,29 @@ function init(){
     $('mRes').classList.add('on')});
   $('mResCancel').addEventListener('click',function(){$('mRes').classList.remove('on');editResId=null});
   $('mResSave').addEventListener('click',saveRes);
+  // 入院管理モーダル
+  if($('mHospClose'))$('mHospClose').addEventListener('click',function(){$('mHosp').classList.remove('on');_hospEditRid=null});
+  if($('mHospAdd'))$('mHospAdd').addEventListener('click',function(){
+    if(_hospEditRid==null)return;
+    var r=D.residents.find(function(x){return x.id===_hospEditRid});
+    if(!r)return;
+    var ad=$('mHospAdmit').value;
+    if(!ad){showToast('⚠️ 入院日時を入力してください','err');return}
+    var dc=$('mHospDischarge').value||null;
+    if(dc&&new Date(dc).getTime()<=new Date(ad).getTime()){showToast('⚠️ 退院は入院より後の日時にしてください','err');return}
+    if(!Array.isArray(r.hospitalizations))r.hospitalizations=[];
+    // 重複防止：同じ admissionAt があれば上書き確認
+    var existing=r.hospitalizations.find(function(h){return h.admissionAt===ad});
+    if(existing){showToast('⚠️ 同じ入院日時の履歴が既に存在します','err');return}
+    r.hospitalizations.push({id:'hosp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),admissionAt:ad,dischargeAt:dc});
+    save();apiPush('saveRes',{resident:r});
+    renderHospList(r);renderCfg();
+    if(typeof renderBoard==='function')renderBoard();
+    if(typeof renderTL==='function')renderTL();
+    showToast('✅ 入院を登録しました');
+    // 新規入力欄をクリア
+    $('mHospAdmit').value='';$('mHospDischarge').value='';
+  });
   if($('cfgShowInactive'))$('cfgShowInactive').addEventListener('change',renderCfg);
   $('btnSaveCfg').addEventListener('click',function(){D.cfg={
     urineWarnH:parseInt($('cfgUW').value)||6,urineDangerH:parseInt($('cfgUD').value)||8,
