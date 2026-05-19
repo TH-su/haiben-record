@@ -1261,7 +1261,7 @@ async function syncFromAPI(showLoader,opts){
     var mergedRes=[];
     // クライアント側のみで保持するフィールド（サーバーが返さない）はローカル値を保持
     var localResById={};localRes.forEach(function(r){if(r&&r.id!=null)localResById[toNum(r.id)]=r});
-    var clientOnly=['schedule','cfg','laxNote'];
+    var clientOnly=['schedule','cfg','laxNote','hospitalizations'];
     // APIを先に入れる（勝者）
     apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){
       var lr=localResById[k];
@@ -1302,6 +1302,8 @@ async function syncFromAPI(showLoader,opts){
     // 職員リストを「room=_staff_ の隠し入居者」から復元（ローカル限定の未送信職員はマージで保持）
     var hadStaffs=Array.isArray(D.staffs)?D.staffs.length:0;
     var extracted=extractStaffsFromCfg({union:true});
+    // 入院データを snapshot から復元（複数端末同期）
+    if(typeof extractHospsFromSnapshot==='function')extractHospsFromSnapshot();
     // 注: 起動時の自動 push は廃止（サンプル/古いデータがサーバーを上書きする事故を防ぐ）。
     // 職員リストの同期は「職員タブ → 全員を受信」または UI 操作（追加/編集/削除）時のみ。
     cleanData();save();
@@ -1592,6 +1594,8 @@ function load(){
       D.staffs=D.cfg._staffs.map(function(s){return s&&s.name?{name:String(s.name).trim(),active:s.active!==false}:null}).filter(Boolean);
     }
   }
+  // 起動時に snapshot から入院データも復元（複数端末同期）
+  if(typeof extractHospsFromSnapshot==='function')extractHospsFromSnapshot();
   var beforeR=D.residents.length,beforeC=D.records.length;
   cleanData();
   // データが変化した場合、または初回のみ保存（不要な上書きを防止）
@@ -2288,19 +2292,18 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     // 🏥 入院判定（表示中の date 基準）
     var hospEventsToday=getHospEventsOnDate(re,date);
     var admissionEvent=hospEventsToday.find(function(ev){return ev.type==='admission'});
-    var dischargeEvent=hospEventsToday.find(function(ev){return ev.type==='discharge'});
+    // 退院マーカーは表示しない（仕様変更）— ただし isFullHospDay 計算には使う
     var isFullHosp=isFullHospDay(re,date);
     // 間隔表示は入院中は無効化（マイナス◯日表示しない）
-    var hideDiff=isFullHosp||(admissionEvent&&!dischargeEvent);
+    var hideDiff=isFullHosp||(admissionEvent);
     var uOffHtml=(!hideDiff&&lu&&uDiff<0)?'<div><span style="'+offStyle(ub,'u')+'">'+fmtDayOff(uDiff)+'日</span></div>':'';
     var sOffHtml=(!hideDiff&&ls&&sDiff<0)?'<div><span style="'+offStyle(sb,'s')+'">'+fmtDayOff(sDiff)+'日</span></div>':'';
     let rc=i%2===1?'ev':'';if(ub==='eb-ng'||sb==='eb-ng')rc+=' rd';else if(ub==='eb-w'||sb==='eb-w')rc+=' rw';
-    // 入院期間中（完全入院日）は行全体をグレーアウト
-    var rowStyle=isFullHosp?'background:#eceff1;color:#9e9e9e':'';
-    // 入院/退院マーカー（氏名セルに表示）
+    // 入院期間中（完全入院日）は行全体をグレーアウト（暗めのグレー）
+    var rowStyle=isFullHosp?'background:#9e9e9e;color:#424242':'';
+    // 入院マーカー（氏名セルに表示）— 退院は表示しない
     var hospMarker='';
     if(admissionEvent)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院 '+admissionEvent.time+'</div>';
-    if(dischargeEvent)hospMarker+='<div style="margin-top:4px;background:#1565c0;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 退院 '+dischargeEvent.time+'</div>';
     if(isFullHosp)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>';
     return'<tr class="'+rc+'"'+(rowStyle?' style="'+rowStyle+'"':'')+'>'+
       '<td><strong>'+re.room+'</strong></td>'+
@@ -2375,17 +2378,15 @@ function renderTL(){const date=$('tlDate').value||today();
     for(let s=0;s<48;s++){const recs=bk[s]||[];
       var schCls=schSet[s]?' sched':'';
       var schLbl=schSet[s]?'<span class="sch-lbl">'+schSet[s]+'</span>':'';
-      // 🏥 入院マーカーセル（赤地/青地 太い白文字）
-      if(hospBySlot[s]){
+      // 🏥 入院マーカーセル — 入院のみ表示（退院マーカーは表示しない仕様）
+      if(hospBySlot[s]&&hospBySlot[s].type==='admission'){
         var ev=hospBySlot[s];
-        var bg=ev.type==='admission'?'#c62828':'#1565c0';
-        var label=ev.type==='admission'?'入院':'退院';
-        cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'" style="background:'+bg+';color:#fff;font-weight:700;font-size:11px;text-align:center;padding:2px 1px"><span style="display:block">'+label+'</span><span style="display:block;font-size:9px;opacity:.9">'+ev.time+'</span></td>';
+        cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size:11px;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size:9px;opacity:.9">'+ev.time+'</span></td>';
         continue;
       }
-      // 🏥 入院期間中のセル（赤地後・退院前）はグレーアウト
+      // 🏥 入院期間中のセル（入院後・退院前）はより濃いグレーアウト
       if(isSlotInHospPeriod(re,date,s)){
-        cells+='<td class="tl-c'+schCls+'" data-slot="'+re.id+'-'+s+'" style="background:#bdbdbd;color:#757575;pointer-events:none;opacity:.6">'+schLbl+'</td>';
+        cells+='<td class="tl-c'+schCls+'" data-slot="'+re.id+'-'+s+'" style="background:#757575;color:#bdbdbd;pointer-events:none">'+schLbl+'</td>';
         continue;
       }
       if(!recs.length){cells+='<td class="tl-c'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+'</td>';continue}
@@ -2425,7 +2426,14 @@ function renderTL(){const date=$('tlDate').value||today();
       ?'<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+uPill+'<span style="margin-left:auto">'+sPill+'</span></div>'
       :'';
     var fdBtn='<button class="bn bs fd-btn" data-fd="'+re.id+'" title="5日間の排泄パターン" style="padding:2px 6px;margin-left:4px;font-size:10px;min-height:22px;min-width:0;vertical-align:middle">📊5日</button>';
-    return'<tr><td class="tl-nm"><span style="color:var(--g5)">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'">'+re.name+'</span>'+fdBtn+offHtml+'</td>'+cells+'</tr>'}).join('');
+    // 🏥 完全入院日（入院翌日〜退院前日）は氏名セルもグレーアウトし、排泄カウントの代わりに「入院中」表示
+    var isFullHospTL=isFullHospDay(re,date);
+    var nmCellStyle=isFullHospTL?' style="background:#9e9e9e;color:#424242"':'';
+    var nmContent=isFullHospTL
+      ?'<span style="color:#424242">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'" style="color:#212121;text-decoration-color:#212121">'+re.name+'</span>'+fdBtn+
+        '<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>'
+      :'<span style="color:var(--g5)">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'">'+re.name+'</span>'+fdBtn+offHtml;
+    return'<tr><td class="tl-nm"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
   $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
   setupTopScroll();
   // セルクリック→詳細（記録あり） / 予定編集モーダル（記録なし）
@@ -2660,6 +2668,14 @@ function showDetMulti(recs){
    - 1000 件以上でもサクサク開く */
 var _histState=null; // {rid, recs, rendered, rowsHtmlBuilder}
 function _histRowHtml(r,_wsvgSm){
+  // 🏥 入退院イベントの仮想行（_hospEvent type で識別）
+  if(r&&r._hospEvent){
+    var bg=r._hospEvent==='admission'?'#c62828':'#1565c0';
+    var label=r._hospEvent==='admission'?'🏥 入院':'🏥 退院';
+    return'<tr style="background:'+bg+';color:#fff;font-weight:700">'+
+      '<td style="color:#fff">'+r.date+'</td><td style="color:#fff">'+r.time+'</td>'+
+      '<td colspan="9" style="text-align:center;color:#fff;font-weight:700;font-size:13px;padding:8px">'+label+'</td></tr>';
+  }
   var tc=r.type==='urine'?'tp-u':r.type==='stool'?'tp-s':r.type==='laxative'?'tp-l':r.type==='none'?'tp-n':r.type==='water'?'tp-w':'tp-b';
   var tl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導'}[r.type]
           || (r.type==='water' ? ('<span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分のみ</span>') : r.type);
@@ -2697,7 +2713,28 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
   $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
   // 上限撤廃：全件取得（仮想チャンクで描画）
-  const recs=recsByRes(rid).filter(isUserRec).slice().sort((a,b)=>b.datetime.localeCompare(a.datetime));
+  var baseRecs=recsByRes(rid).filter(isUserRec).slice();
+  // 🏥 入退院イベントを仮想レコードとして注入
+  if(Array.isArray(res.hospitalizations)){
+    res.hospitalizations.forEach(function(h){
+      if(!h)return;
+      if(h.admissionAt){
+        baseRecs.push({
+          id:'_hosp_a_'+h.id,_hospEvent:'admission',
+          date:String(h.admissionAt).slice(0,10),time:String(h.admissionAt).slice(11,16),
+          datetime:h.admissionAt
+        });
+      }
+      if(h.dischargeAt){
+        baseRecs.push({
+          id:'_hosp_d_'+h.id,_hospEvent:'discharge',
+          date:String(h.dischargeAt).slice(0,10),time:String(h.dischargeAt).slice(11,16),
+          datetime:h.dischargeAt
+        });
+      }
+    });
+  }
+  const recs=baseRecs.sort((a,b)=>(b.datetime||'').localeCompare(a.datetime||''));
   if(!recs.length){$('mHistC').innerHTML='<p style="color:var(--g5);font-size:13px">記録がありません</p>';_histState=null}
   else{
     const _wsvgSm=waterSvg('1.15em');
@@ -3084,8 +3121,18 @@ function pushStaffsSnapshot(){
   var arr=(D.staffs||[]).map(function(s,i){
     return {n:String(s.name||''),a:(s.active!==false)?1:0,o:i};
   }).filter(function(x){return!!x.n});
+  // 入院データも同梱（GASスキーマに無いため snapshot 経由で複数端末同期）
+  var hosps=[];
+  (D.residents||[]).forEach(function(r){
+    if(!r||!Array.isArray(r.hospitalizations)||r.hospitalizations.length===0)return;
+    var rid=toNum(r.id);if(rid===null)return;
+    var list=r.hospitalizations.filter(function(h){return h&&h.admissionAt}).map(function(h){
+      return{i:String(h.id||''),a:String(h.admissionAt||''),d:h.dischargeAt?String(h.dischargeAt):null};
+    });
+    if(list.length>0)hosps.push({r:rid,h:list});
+  });
   // payload に魔法のマーカー文字列を含める → 万が一 id/medicine が変わっても notes で識別可
-  var payload=JSON.stringify({_mark:'__SYS_STAFFS_SNAPSHOT__',staffs:arr,ts:Date.now()});
+  var payload=JSON.stringify({_mark:'__SYS_STAFFS_SNAPSHOT__',staffs:arr,hosps:hosps,ts:Date.now()});
   // 最終防壁：独立 localStorage キーに保存（D.records とは独立）
   _saveSnapshotLocal(payload);
   if(!apiUrl)return; // 送信は apiUrl がある場合のみ
@@ -3125,25 +3172,62 @@ function pushStaffsSnapshot(){
     _staffApiPush('saveRecord',{record:snap});
   }
 }
-function readStaffsSnapshot(){
-  // 1次：D.records から
+/* snapshot payload を JSON でパースして返す（D.records 優先・localStorage フォールバック） */
+function _readSnapshotPayload(){
   var snap=_findStaffSnapshot();
   if(snap&&snap.notes){
-    try{
-      var p=JSON.parse(snap.notes);
-      if(p&&Array.isArray(p.staffs))return p.staffs;
-    }catch(e){}
+    try{var p=JSON.parse(snap.notes);if(p&&typeof p==='object')return p;}catch(e){}
   }
-  // 2次：独立 localStorage（最終防壁）から
   var local=_loadSnapshotLocal();
   if(local){
-    try{
-      var p2=JSON.parse(local);
-      if(p2&&Array.isArray(p2.staffs))return p2.staffs;
-    }catch(e){}
+    try{var p2=JSON.parse(local);if(p2&&typeof p2==='object')return p2;}catch(e){}
   }
   return null;
 }
+function readStaffsSnapshot(){
+  var p=_readSnapshotPayload();
+  if(p&&Array.isArray(p.staffs))return p.staffs;
+  return null;
+}
+function readHospsSnapshot(){
+  var p=_readSnapshotPayload();
+  if(p&&Array.isArray(p.hosps))return p.hosps;
+  return null;
+}
+/* snapshot の入院データを D.residents にマージ。サーバー側に hosps が無くてもローカルを保持する。
+   server 側 hosps が新しい場合は上書き、ローカルにしか無いものは保持。 */
+function extractHospsFromSnapshot(){
+  var hospsData=readHospsSnapshot();
+  if(!Array.isArray(D.residents))return false;
+  // snapshot 側で完全置換（snapshot が単一の真実のソース）
+  // ローカルに無い rid は無視、ある rid は snapshot で差し替え
+  var byRid={};
+  (hospsData||[]).forEach(function(x){
+    if(!x||x.r==null)return;
+    var rid=toNum(x.r);if(rid===null)return;
+    var arr=(Array.isArray(x.h)?x.h:[]).map(function(h){
+      if(!h||!h.a)return null;
+      return{id:String(h.i||('hosp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6))),
+        admissionAt:String(h.a),dischargeAt:h.d?String(h.d):null};
+    }).filter(Boolean);
+    byRid[rid]=arr;
+  });
+  // hosps snapshot が存在する場合のみ反映（無ければローカル維持）
+  if(hospsData===null)return false;
+  D.residents.forEach(function(r){
+    if(!r||r.id==null)return;
+    var rid=toNum(r.id);if(rid===null)return;
+    if(byRid.hasOwnProperty(rid)){
+      r.hospitalizations=byRid[rid];
+    }else{
+      // snapshot に rid が無い → 全端末で削除済み or 一度も登録されていない
+      r.hospitalizations=[];
+    }
+  });
+  return true;
+}
+
+
 
 /* システム入居者を UI から除外（room マーカーで判定） */
 function isUserRes(r){
@@ -3762,6 +3846,8 @@ function renderHospList(r){
         if(new Date(v).getTime()<=new Date(hsp.admissionAt).getTime()){showToast('⚠️ 退院は入院より後の日時を入力してください','err');return}
         hsp.dischargeAt=v;
         save();apiPush('saveRes',{resident:r});
+        // snapshot 経由で複数端末同期
+        if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
         renderHospList(r);renderCfg();
         if(typeof renderBoard==='function')renderBoard();
         if(typeof renderTL==='function')renderTL();
@@ -3777,6 +3863,8 @@ function renderHospList(r){
         if(!ok)return;
         r.hospitalizations=r.hospitalizations.filter(function(x){return x.id!==hid});
         save();apiPush('saveRes',{resident:r});
+        // snapshot 経由で複数端末同期
+        if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
         renderHospList(r);renderCfg();
         if(typeof renderBoard==='function')renderBoard();
         if(typeof renderTL==='function')renderTL();
@@ -4254,6 +4342,8 @@ function init(){
     if(existing){showToast('⚠️ 同じ入院日時の履歴が既に存在します','err');return}
     r.hospitalizations.push({id:'hosp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),admissionAt:ad,dischargeAt:dc});
     save();apiPush('saveRes',{resident:r});
+    // snapshot 経由で複数端末同期
+    if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
     renderHospList(r);renderCfg();
     if(typeof renderBoard==='function')renderBoard();
     if(typeof renderTL==='function')renderTL();
