@@ -154,6 +154,10 @@ textarea{resize:vertical;min-height:76px}
 .bt tr.ev td:nth-child(1),.bt tr.ev td:nth-child(2){background:#fafafa}
 .bt tr.rd td:first-child{border-left:4px solid #c62828}
 .bt tr.rw td:first-child{border-left:4px solid #f9a825}
+/* 🏥 入院中の行: 名前セル〜右端まですべてグレーアウト（cell-level bg を上書き） */
+.bt tr.hosp-full td{background:#757575 !important;color:#bdbdbd !important}
+.bt tr.hosp-full td .eb,.bt tr.hosp-full td .tg,.bt tr.hosp-full td .nr{opacity:.55}
+.bt tr.hosp-full td [data-hist]{color:#fff !important;text-decoration-color:#fff !important}
 
 .eb{display:inline-block;padding:2px 7px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
 .eb-ok{background:var(--ok-l);color:var(--ok)}
@@ -1280,12 +1284,23 @@ async function syncFromAPI(showLoader,opts){
       return false;
     }
     var localSnap=localRec.find(_isSnapshotRec);
+    function _snapTs(rec){
+      if(rec&&typeof rec.notes==='string'){
+        try{var p=JSON.parse(rec.notes);if(p&&typeof p.ts==='number')return p.ts;}catch(e){}
+      }
+      return 0;
+    }
     apiRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){
-      // snapshot の場合、server 版が壊れていれば local の notes/medicine を保護
+      // snapshot の場合、server 版が壊れていれば local の notes/medicine を保護。
+      // さらに、local snapshot.ts が server より新しい場合は local を優先（未同期の入院変更を保護）
       if(_isSnapshotRec(r)&&localSnap){
         var sNotesOk=(typeof r.notes==='string'&&r.notes.indexOf('"staffs":')>=0);
         if(!sNotesOk&&localSnap.notes){r.notes=localSnap.notes}
         if(!r.medicine&&localSnap.medicine)r.medicine=localSnap.medicine;
+        if(_snapTs(localSnap)>_snapTs(r)){
+          r.notes=localSnap.notes;
+          r.updatedAt=localSnap.updatedAt||r.updatedAt;
+        }
       }
       mergedRec.push(r);seenRecId[r.id]=true
     }}});
@@ -2299,8 +2314,9 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     var uOffHtml=(!hideDiff&&lu&&uDiff<0)?'<div><span style="'+offStyle(ub,'u')+'">'+fmtDayOff(uDiff)+'日</span></div>':'';
     var sOffHtml=(!hideDiff&&ls&&sDiff<0)?'<div><span style="'+offStyle(sb,'s')+'">'+fmtDayOff(sDiff)+'日</span></div>':'';
     let rc=i%2===1?'ev':'';if(ub==='eb-ng'||sb==='eb-ng')rc+=' rd';else if(ub==='eb-w'||sb==='eb-w')rc+=' rw';
-    // 入院期間中（完全入院日）は行全体をグレーアウト（暗めのグレー）
-    var rowStyle=isFullHosp?'background:#9e9e9e;color:#424242':'';
+    // 入院期間中（完全入院日）は行全体をグレーアウト（CSS の .hosp-full クラスで全セル背景上書き）
+    if(isFullHosp)rc+=' hosp-full';
+    var rowStyle='';
     // 入院マーカー（氏名セルに表示）— 退院は表示しない
     var hospMarker='';
     if(admissionEvent)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院 '+admissionEvent.time+'</div>';
@@ -2668,13 +2684,19 @@ function showDetMulti(recs){
    - 1000 件以上でもサクサク開く */
 var _histState=null; // {rid, recs, rendered, rowsHtmlBuilder}
 function _histRowHtml(r,_wsvgSm){
-  // 🏥 入退院イベントの仮想行（_hospEvent type で識別）
+  // 🏥 入退院イベントの仮想行（_hospEvent type で識別）— 日付/時刻は通常セルで表示、他のセルは🏥
   if(r&&r._hospEvent){
     var bg=r._hospEvent==='admission'?'#c62828':'#1565c0';
-    var label=r._hospEvent==='admission'?'🏥 入院':'🏥 退院';
+    var label=r._hospEvent==='admission'?'入院':'退院';
+    var tdSt='color:#fff;background:'+bg+';font-weight:700;text-align:center;font-size:16px';
+    var labelTd='<td style="'+tdSt+';font-size:13px;letter-spacing:0.05em">🏥 '+label+'</td>';
+    var iconTd='<td style="'+tdSt+'">🏥</td>';
     return'<tr style="background:'+bg+';color:#fff;font-weight:700">'+
-      '<td style="color:#fff">'+r.date+'</td><td style="color:#fff">'+r.time+'</td>'+
-      '<td colspan="9" style="text-align:center;color:#fff;font-weight:700;font-size:13px;padding:8px">'+label+'</td></tr>';
+      '<td style="color:#fff;background:'+bg+';font-weight:700">'+r.date+'</td>'+
+      '<td style="color:#fff;background:'+bg+';font-weight:700">'+r.time+'</td>'+
+      labelTd+
+      iconTd+iconTd+iconTd+iconTd+iconTd+iconTd+iconTd+iconTd+
+      '</tr>';
   }
   var tc=r.type==='urine'?'tp-u':r.type==='stool'?'tp-s':r.type==='laxative'?'tp-l':r.type==='none'?'tp-n':r.type==='water'?'tp-w':'tp-b';
   var tl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導'}[r.type]
@@ -3099,14 +3121,27 @@ var SYS_STAFF_SNAPSHOT_MARKER='_SYS_STAFFS_SNAPSHOT_';
 var SYS_STAFF_SNAPSHOT_LOCAL_KEY='hbcr_staffs_snapshot'; // 独立 localStorage キー（最終防壁）
 function _findStaffSnapshot(){
   if(!Array.isArray(D.records))return null;
-  return D.records.find(function(r){
+  // GAS が ID 変換や行重複を起こした場合に備えて、複数 snapshot が存在しても
+  // payload.ts が最大のもの（最新）を返す。これにより複数端末同期の信頼性を担保。
+  var candidates=D.records.filter(function(r){
     if(!r)return false;
-    // 複数の判定基準（GAS による id 変換・medicine 削除のいずれにも対応）
     if(r.id===SYS_STAFF_SNAPSHOT_ID)return true;
     if(r.medicine===SYS_STAFF_SNAPSHOT_MARKER)return true;
     if(typeof r.notes==='string'&&r.notes.indexOf('"__SYS_STAFFS_SNAPSHOT__"')>=0)return true;
     return false;
-  })||null;
+  });
+  if(candidates.length===0)return null;
+  if(candidates.length===1)return candidates[0];
+  // ts ベースで最新を選択（payload.ts → updatedAt → createdAt の順）
+  function _tsOf(r){
+    if(r&&typeof r.notes==='string'){
+      try{var p=JSON.parse(r.notes);if(p&&typeof p.ts==='number')return p.ts;}catch(e){}
+    }
+    if(r&&r.updatedAt){var t1=new Date(r.updatedAt).getTime();if(!isNaN(t1))return t1;}
+    if(r&&r.createdAt){var t2=new Date(r.createdAt).getTime();if(!isNaN(t2))return t2;}
+    return 0;
+  }
+  return candidates.slice().sort(function(a,b){return _tsOf(b)-_tsOf(a)})[0];
 }
 /* localStorage に直接保存（D.records とは独立した最終バックアップ）
    sync の merge で D.records の snapshot が空 notes に上書きされても、ここが残れば復旧可 */
