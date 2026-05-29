@@ -1615,8 +1615,22 @@ function load(){
   cleanData();
   // データが変化した場合、または初回のみ保存（不要な上書きを防止）
   if(isNew||D.residents.length!==beforeR||D.records.length!==beforeC)save()}
-// 保存（書き込み前にバックアップ、エラー時は通知）
-function save(){
+/* ════════ 保存（コアレッシング＆遅延書き込み — UI ブロック回避） ════════
+   LZString 圧縮は大規模データ（数千〜数万件）で 1〜2 秒かかり、同期実行すると
+   記録ボタン押下直後に画面が固まる。そこで:
+   ① メモリ上の D 更新とインデックス失効は save() 内で即時実施（描画は常に最新を反映）
+   ② localStorage への JSON 化＋圧縮＋書き込みは次タスクへ遅延し、短時間に連続する
+      save() 呼び出しを 1 回の書き込みに集約（コアレッシング）
+   データ保護:
+   ・ページ離脱（pagehide / visibilitychange:hidden / beforeunload）で同期フラッシュ
+   ・各記録は apiPush によりサーバ側にも送信されるため冗長性を確保
+   ・書き込み前バックアップ（hbcr_v2_bak）は従来どおり維持 */
+var _saveTimer=null, _saveDirty=false;
+var _SAVE_DELAY_MS=300;
+function _persistNow(){
+  _saveTimer=null;
+  if(!_saveDirty)return;
+  _saveDirty=false;
   try{
     var json=JSON.stringify(D);
     // 現状のデータを上書き前にバックアップとして保持（圧縮形式そのままコピー）
@@ -1625,10 +1639,22 @@ function save(){
     _storageSet('hbcr_v2',json);
   }catch(e){
     console.error('[hbcr] 保存失敗:',e);
+    // 書き込み失敗時は dirty を戻し、次回フラッシュで再試行
+    _saveDirty=true;
     try{showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'))}catch(e2){}
   }
-  // インデックスを失効（次回読み出し時に再構築）— A: パフォーマンス最適化
+}
+function save(){
+  // インデックス／参照キャッシュを即時失効（次回描画は再構築後の最新を反映）
   _recIdx=null;
+  _saveDirty=true;
+  // 連続呼び出しを集約：保留中タイマがあれば再利用（多重 setTimeout を張らない）
+  if(_saveTimer==null)_saveTimer=setTimeout(_persistNow,_SAVE_DELAY_MS);
+}
+/* 離脱前など、確実に書き込みたい場面での同期フラッシュ */
+function flushSave(){
+  if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}
+  if(_saveDirty)_persistNow();
 }
 
 /* ════════ 記録のインデックス（A: パフォーマンス最適化） ════════
@@ -1823,7 +1849,8 @@ function lastR(rid,t){
   // 排便: 「少量」のみの記録は間隔リセットしない。最初の少量から24時間以内に4回連続で少量が
   // 続いた場合、その4回目を排便1回分（リセット）として扱う。中等量・多量は従来どおり1件で
   // リセット扱い。stoolAmtが空欄の場合も従来どおりリセット扱い。
-  arr.sort(function(a,b){return(a.datetime||'').localeCompare(b.datetime||'')});
+  // arr は recsByRes（datetime 昇順済みインデックス）から順序を保って抽出済みのため
+  // 再ソート不要（重複ソートを排除し描画コストを削減）。
   var lastReset=null,chainStart=null,chainCount=0;
   for(var i=0;i<arr.length;i++){
     var r=arr[i];
@@ -3963,6 +3990,10 @@ function init(){
   function tick(){const n=new Date();$('hDate').textContent=n.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
     $('hTime').textContent=n.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}
   tick();setInterval(tick,1e4);
+  // 遅延保存の確実な書き込み保証：ページ離脱・バックグラウンド遷移時に同期フラッシュ
+  window.addEventListener('pagehide',flushSave);
+  window.addEventListener('beforeunload',flushSave);
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flushSave()});
   setNow();buildResSel();
   // 入力日時欄: フォーカス時に max を現在時刻に更新（未来入力防止）
   if($('recDT'))$('recDT').addEventListener('focus',function(){var v=nowLocalDTStr();this.max=v;this.setAttribute('max',v)});
@@ -4399,7 +4430,10 @@ function init(){
     customConfirm('全データを削除しますか？\nこの操作は取り消せません。').then(function(ok){
       if(!ok)return;
       customConfirm('本当に削除してよいですか？（2回目の確認）').then(function(ok2){
-        if(!ok2)return;localStorage.removeItem('hbcr_v2');location.reload()})})});
+        if(!ok2)return;
+        // 保留中の遅延保存をキャンセルしてから削除（削除後に上書きされるのを防ぐ）
+        _saveDirty=false;if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}
+        localStorage.removeItem('hbcr_v2');location.reload()})})});
 
   // 詳細モーダル
   $('mDetDel').addEventListener('click',function(){if(!curRecId)return;
