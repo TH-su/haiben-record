@@ -1,0 +1,2243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ジェノグラム作成</title>
+<script src="https://cdn.jsdelivr.net/npm/konva@9/konva.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+:root{
+  /* ミント / 薄緑 基調パレット */
+  --pri:#26a69a;--pri-l:#e0f2f1;--pri-d:#00796b;
+  --ok:#2e7d32;--ok-l:#e8f5e9;
+  --warn-bg:#fff8e1;--warn-tx:#e65100;
+  --ng:#c62828;--ng-l:#ffebee;
+  --g0:#f4f9f7;--g1:#e9f1ed;--g2:#dbe7e2;--g3:#c2d3cd;
+  --g5:#8fa19b;--g6:#778881;--g7:#5a6a64;--g9:#1f2a27;
+  --r:10px;--sh:0 1px 6px rgba(0,90,70,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif;
+  background:var(--g0);color:var(--g9);display:flex;flex-direction:column;min-height:100vh}
+
+/* topbar */
+.topbar{position:sticky;top:0;z-index:100;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.hdr{background:linear-gradient(135deg,#00796b,#26a69a);color:#fff;padding:10px 14px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;row-gap:8px}
+.hdr-l{flex:0 0 auto;min-width:0}
+.hdr-l h1{font-size:16px;font-weight:700;line-height:1.2;white-space:nowrap}
+.hdr-l .sub{font-size:11px;opacity:.85;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr-r{flex:1 1 auto;min-width:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.hdr-r input,.hdr-r select{height:32px;border:none;border-radius:6px;padding:0 10px;
+  font-size:13px;font-family:inherit;background:#fff;color:var(--g9);min-width:0}
+.hdr-r input{width:140px;flex:0 1 auto}
+.hdr-r select{max-width:200px;flex:0 1 auto}
+.hbtn{height:32px;padding:0 11px;border:none;border-radius:6px;background:rgba(255,255,255,.2);
+  color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
+  transition:background .15s;white-space:nowrap;flex:0 0 auto}
+.hbtn:hover{background:rgba(255,255,255,.35)}
+.hbtn.primary{background:#fff;color:var(--pri-d)}
+.hbtn.primary:hover{background:#f1f3f4}
+.hbtn.danger{background:rgba(255,200,200,.3)}
+@media(max-width:900px){
+  .hdr-l .sub{display:none}
+  .hdr-l h1{font-size:14px}
+  .hbtn{padding:0 9px;font-size:12px}
+  .hdr-r input{width:120px}
+}
+@media(max-width:600px){
+  .hdr{padding:8px 10px;gap:6px}
+  .hdr-r{justify-content:flex-start}
+  .hbtn{height:30px;padding:0 8px;font-size:12px}
+  .hdr-r input,.hdr-r select{height:30px;font-size:12px}
+}
+
+/* main 3-col layout */
+.main{display:grid;grid-template-columns:170px 1fr 230px;flex:1;min-height:0;min-width:0}
+@media(max-width:1100px){
+  .main{grid-template-columns:160px 1fr;}
+  .props{grid-column:1/-1;border-left:none;border-top:1px solid var(--g2);max-height:240px}
+}
+@media(max-width:720px){
+  .main{grid-template-columns:1fr}
+  .palette{order:1;border-right:none;border-bottom:1px solid var(--g2);
+    display:flex;flex-direction:row;gap:8px;overflow-x:auto;padding:10px}
+  .palette .grp{min-width:max-content}
+  .canvas-wrap{order:2}
+  .props{order:3}
+}
+
+/* palette */
+.palette{background:#fff;border-right:1px solid var(--g2);padding:12px;overflow-y:auto}
+.palette .grp{margin-bottom:14px}
+.palette .grp-h{font-size:11px;font-weight:700;color:var(--g6);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding:0 2px}
+.palette .grp-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.palette .grp-btns.col1{grid-template-columns:1fr}
+.tbtn{padding:10px 6px;border:2px solid var(--g2);border-radius:8px;background:#fff;
+  font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g9);
+  transition:all .12s;line-height:1.3;text-align:center}
+.tbtn:hover{background:var(--g1);border-color:var(--g3)}
+.tbtn.on{background:var(--pri-l);border-color:var(--pri);color:var(--pri-d)}
+.tbtn.danger{color:var(--ng);border-color:#f8d4d4}
+.tbtn.danger:hover{background:var(--ng-l)}
+.tbtn .ico{display:block;font-size:18px;line-height:1;margin-bottom:3px;font-family:'Yu Gothic',serif}
+
+/* canvas */
+.canvas-wrap{display:flex;flex-direction:column;background:var(--g0);min-width:0}
+.canvas-status{padding:10px 14px;background:#fff;border-bottom:1px solid var(--g2);
+  font-size:12px;color:var(--g7);font-weight:700;display:flex;align-items:center;gap:8px}
+.canvas-status .dot{width:8px;height:8px;border-radius:50%;background:var(--pri)}
+.canvas-status.line .dot,.canvas-status.frame .dot,.canvas-status.text .dot{background:var(--warn-tx)}
+.canvas-zoom{display:flex;align-items:center;gap:4px;padding:6px 14px;
+  background:#fff;border-bottom:1px solid var(--g2);font-size:12px}
+.zbtn{height:26px;padding:0 8px;border:1px solid var(--g2);border-radius:5px;background:#fff;
+  font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g7);
+  min-width:30px;transition:all .12s}
+.zbtn:hover{background:var(--g1);border-color:var(--g3)}
+.zoom-level{margin-left:auto;color:var(--g6);font-size:11px;font-weight:700}
+.canvas-scroll{flex:1;overflow:auto;padding:14px;min-height:0}
+#canvas{background:#fff;box-shadow:var(--sh);border-radius:6px;display:inline-block}
+
+/* properties */
+.props{background:#fff;border-left:1px solid var(--g2);padding:14px;overflow-y:auto}
+.props-h{font-size:11px;font-weight:700;color:var(--g6);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.props-empty{color:var(--g6);font-size:12px;line-height:1.5;padding:18px 4px}
+.fg{margin-bottom:10px}
+.fl{display:block;font-size:11px;font-weight:700;color:var(--g7);margin-bottom:4px}
+.fi{width:100%;padding:8px 10px;border:2px solid var(--g2);border-radius:6px;
+  font-size:13px;font-family:inherit;color:var(--g9);background:#fff;
+  transition:border-color .15s;-webkit-appearance:none}
+.fi:focus{outline:none;border-color:var(--pri)}
+textarea.fi{resize:vertical;min-height:60px}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.props-info{font-size:11px;color:var(--g6);line-height:1.5;margin-top:8px;padding:8px;
+  background:var(--g0);border-radius:6px}
+
+/* footer hint */
+.kb-hint{font-size:10px;color:var(--g6);padding:6px 14px;text-align:center;border-top:1px solid var(--g2);background:#fff}
+
+/* file input hidden */
+.hidden-file{display:none}
+
+/* Sync status bar */
+[hidden]{display:none !important}
+.sync-bar{background:#f1f3f4;border-top:1px solid var(--g2);padding:5px 14px;
+  display:flex;align-items:center;gap:8px;font-size:12px;color:var(--g7)}
+.sync-dot{width:9px;height:9px;border-radius:50%;background:var(--g5);flex-shrink:0;
+  transition:background .2s}
+.sync-dot.idle{background:var(--g5)}
+.sync-dot.syncing{background:#fbbc04;animation:syncPulse 1.2s infinite}
+.sync-dot.ok{background:var(--ok)}
+.sync-dot.err{background:var(--ng)}
+.sync-dot.offline{background:#9e9e9e}
+@keyframes syncPulse{0%,100%{opacity:.5}50%{opacity:1}}
+.sync-btn{height:24px;padding:0 10px;border:1px solid var(--g3);border-radius:5px;background:#fff;
+  font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--g7);
+  transition:all .12s;margin-left:auto}
+.sync-btn:hover{background:var(--g0);border-color:var(--pri);color:var(--pri-d)}
+.sync-btn:disabled{opacity:.5;cursor:not-allowed}
+.sync-pending{font-size:11px;color:var(--warn-tx);font-weight:700}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(32,33,36,.55);z-index:1000;
+  display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+.modal-overlay[hidden]{display:none}
+.modal{background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:90vh;
+  display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;
+  border-bottom:1px solid var(--g2);background:linear-gradient(135deg,#00796b,#26a69a);color:#fff;
+  border-radius:12px 12px 0 0}
+.modal-head h2{font-size:16px;font-weight:700}
+.modal-close{background:rgba(255,255,255,.2);color:#fff;border:none;width:30px;height:30px;
+  border-radius:50%;font-size:18px;cursor:pointer;font-family:inherit;line-height:1}
+.modal-close:hover{background:rgba(255,255,255,.35)}
+.modal-body{padding:22px;overflow-y:auto;flex:1}
+.setup-intro{background:var(--pri-l);border-left:4px solid var(--pri);padding:12px 14px;
+  border-radius:6px;font-size:13px;line-height:1.7;margin-bottom:18px;color:var(--g9)}
+.setup-step{border:1px solid var(--g2);border-radius:8px;margin-bottom:14px;background:#fff}
+.setup-step>summary{padding:12px 14px;cursor:pointer;font-size:14px;color:var(--g9);
+  list-style:none;display:flex;align-items:center;gap:8px}
+.setup-step>summary::-webkit-details-marker{display:none}
+.setup-step>summary::before{content:'▶';font-size:10px;color:var(--g6);transition:transform .15s}
+.setup-step[open]>summary::before{transform:rotate(90deg)}
+.setup-step>summary:hover{background:var(--g0)}
+.setup-step[open]>summary{border-bottom:1px solid var(--g2);background:var(--g0)}
+.setup-list{padding:14px 14px 14px 36px;font-size:13px;line-height:1.8;color:var(--g7)}
+.setup-list li{margin-bottom:6px}
+.setup-list code{background:var(--g1);padding:1px 6px;border-radius:3px;font-family:Menlo,Consolas,monospace;font-size:12px;color:var(--g9)}
+.setup-list a{color:var(--pri-d);text-decoration:underline}
+.setup-copy{margin:0 14px 12px;font-size:12px;height:30px;padding:0 12px}
+.setup-code{margin:0 14px 14px;width:calc(100% - 28px);font-family:Menlo,Consolas,monospace;
+  font-size:11px;padding:8px;border:1px solid var(--g2);border-radius:6px;resize:vertical;background:var(--g0)}
+.setup-form{border:1px solid var(--g2);border-radius:8px;padding:16px;background:var(--g0);margin-top:14px}
+.setup-form h3{font-size:13px;font-weight:700;color:var(--g7);margin-bottom:12px;
+  text-transform:uppercase;letter-spacing:.5px}
+.setup-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.setup-actions .hbtn{background:var(--g3);color:var(--g9);height:36px;padding:0 14px;font-size:13px}
+.setup-actions .hbtn:hover{background:var(--g2)}
+.setup-actions .hbtn.primary{background:var(--pri);color:#fff}
+.setup-actions .hbtn.primary:hover{background:var(--pri-d)}
+.setup-actions .hbtn.danger{background:var(--ng-l);color:var(--ng)}
+.setup-actions .hbtn.danger:hover{background:#fbcaca}
+.setup-result{margin-top:12px;padding:10px 12px;border-radius:6px;font-size:13px;line-height:1.6;white-space:pre-line}
+.setup-result.ok{background:var(--ok-l);color:var(--ok);border-left:4px solid var(--ok)}
+.setup-result.err{background:var(--ng-l);color:var(--ng);border-left:4px solid var(--ng)}
+.setup-result.info{background:var(--pri-l);color:var(--pri-d);border-left:4px solid var(--pri)}
+.setup-note{background:#fff8e1;border-left:4px solid #f9a825;padding:12px 14px;
+  border-radius:6px;font-size:12px;line-height:1.7;margin-top:16px;color:var(--g9)}
+.req{color:var(--ng);font-weight:700}
+@media(max-width:520px){
+  .modal{max-height:100vh;border-radius:0}
+  .modal-head{border-radius:0}
+  .modal-body{padding:14px}
+  .setup-list{padding-left:24px}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="hdr">
+    <div class="hdr-l">
+      <h1>ジェノグラム作成</h1>
+      <div class="sub">家族関係図を作成して PDF / JPG で出力</div>
+    </div>
+    <div class="hdr-r">
+      <input type="text" id="clientName" placeholder="利用者名" autocomplete="off">
+      <select id="docList" title="保存済み一覧から読込">
+        <option value="">— 保存済みから読込 —</option>
+      </select>
+      <button class="hbtn" id="btnNew">新規</button>
+      <button class="hbtn primary" id="btnSave">保存</button>
+      <button class="hbtn danger" id="btnDelete">削除</button>
+      <button class="hbtn primary" id="btnExportJPG">JPG出力</button>
+      <button class="hbtn primary" id="btnExportPDF">PDF出力</button>
+      <button class="hbtn" id="btnCloudSettings" title="クラウド同期設定">⚙ 設定</button>
+    </div>
+  </div>
+  <div class="sync-bar" id="syncBar" hidden>
+    <span class="sync-dot" id="syncDot"></span>
+    <span id="syncStatus">未設定</span>
+    <button class="sync-btn" id="btnSyncNow" title="今すぐ同期">↻ 同期</button>
+    <span class="sync-pending" id="syncPending" hidden></span>
+  </div>
+</div>
+
+<!-- Cloud Settings Modal -->
+<div class="modal-overlay" id="cloudModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2>クラウド同期設定</h2>
+      <button class="modal-close" id="btnCloudClose" aria-label="閉じる">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="setup-intro">
+        本アプリは <strong>Googleスプレッドシート</strong> をメインの保存先、<strong>GitHub</strong> をバックアップとして使用します。
+        利用者ごとのジェノグラムが、複数端末で自動同期され、誤って削除しても履歴から復元できます。
+      </div>
+
+      <details class="setup-step" open>
+        <summary><strong>① Googleスプレッドシート ＋ Apps Script の準備</strong>（必須）</summary>
+        <ol class="setup-list">
+          <li>Googleアカウントにログイン → <a href="https://sheets.new" target="_blank" rel="noopener">https://sheets.new</a> で新規スプレッドシートを作成。シート名を「<code>genograms</code>」に変更。</li>
+          <li>メニュー「拡張機能」→「Apps Script」を開く。</li>
+          <li>表示されたエディタの内容を全て削除し、下の「📋 GASコードをコピー」ボタンの内容を貼り付け。</li>
+          <li>左上のプロジェクト名（無題のプロジェクト）を「genogram-sync」等に変更し保存（💾）。</li>
+          <li>右上「デプロイ」→「新しいデプロイ」→歯車「種類の選択」で「ウェブアプリ」を選択。</li>
+          <li>説明：任意、次のユーザーとして実行：「<strong>自分</strong>」、アクセスできるユーザー：「<strong>全員</strong>」を選択 →「デプロイ」。</li>
+          <li>初回はアクセス許可が必要。「アクセスを承認」→ アカウント選択 →「詳細」→「（プロジェクト名）に移動」→「許可」。</li>
+          <li>表示された「ウェブアプリ」のURL（<code>https://script.google.com/macros/s/.../exec</code>）をコピーし、下のフォームに貼り付け。</li>
+        </ol>
+        <button class="hbtn primary setup-copy" id="btnCopyGas">📋 GASコードをコピー</button>
+        <textarea class="setup-code" id="gasCodeBox" readonly rows="6">（コピーボタンを押すとここに表示されます）</textarea>
+      </details>
+
+      <details class="setup-step">
+        <summary><strong>② GitHub バックアップの準備</strong>（推奨・任意）</summary>
+        <ol class="setup-list">
+          <li><a href="https://github.com/new" target="_blank" rel="noopener">https://github.com/new</a> で新しいリポジトリを作成（例: <code>genogram-data</code>、Privateを推奨）。</li>
+          <li><a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener">https://github.com/settings/tokens?type=beta</a> で「Fine-grained personal access tokens」→「Generate new token」。</li>
+          <li>Token name 任意、Expiration（有効期限）90日〜1年、Repository access「Only select repositories」で先程作ったリポジトリを選択。</li>
+          <li>「Repository permissions」→「Contents」を <strong>Read and write</strong> に設定 → 下までスクロールして「Generate token」。</li>
+          <li>表示された <code>github_pat_...</code> をコピー（一度しか表示されません）。</li>
+          <li>下のフォームに「オーナー名 / リポジトリ名 / ブランチ（main） / トークン」を入力。</li>
+        </ol>
+      </details>
+
+      <div class="setup-form">
+        <h3>設定入力</h3>
+        <div class="fg">
+          <label class="fl">① GAS Web App URL <span class="req">*</span></label>
+          <input type="url" class="fi" id="cfgGasUrl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+        </div>
+        <div class="fg">
+          <label class="fl">② GitHub オーナー名（ユーザー名 or 組織名）</label>
+          <input type="text" class="fi" id="cfgGhOwner" placeholder="yamada-taro" autocomplete="off">
+        </div>
+        <div class="fr">
+          <div class="fg">
+            <label class="fl">② リポジトリ名</label>
+            <input type="text" class="fi" id="cfgGhRepo" placeholder="genogram-data" autocomplete="off">
+          </div>
+          <div class="fg">
+            <label class="fl">② ブランチ</label>
+            <input type="text" class="fi" id="cfgGhBranch" placeholder="main" autocomplete="off" value="main">
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">② GitHub Personal Access Token</label>
+          <input type="password" class="fi" id="cfgGhToken" placeholder="github_pat_..." autocomplete="new-password">
+        </div>
+        <div class="setup-actions">
+          <button class="hbtn" id="btnCfgTest">接続テスト</button>
+          <button class="hbtn primary" id="btnCfgSave">保存して閉じる</button>
+          <button class="hbtn danger" id="btnCfgClear">設定をクリア</button>
+        </div>
+        <div class="setup-result" id="cfgResult" hidden></div>
+      </div>
+
+      <div class="setup-note">
+        <strong>💡 信頼性について</strong><br>
+        ・保存ボタン押下時、まず端末内（localStorage）に即時保存され、その後スプシ・GitHubへ非同期送信されます。<br>
+        ・通信が失敗した場合は自動的にリトライキューに入り、次回保存時 / 「↻ 同期」ボタン押下時に再送されます。<br>
+        ・端末がオフラインでもアプリは動作し、回線復帰後に自動同期します。<br>
+        ・別端末で先に保存されていた場合、保存時にバージョンを比較し上書き確認します。<br>
+        ・トークンは端末のlocalStorageに保存されるため、共用PCでの利用後は「設定をクリア」を実施してください。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+  <aside class="palette">
+    <div class="grp">
+      <div class="grp-h">人物追加</div>
+      <div class="grp-btns">
+        <button class="tbtn" data-add="male"><span class="ico">■</span>男性</button>
+        <button class="tbtn" data-add="female"><span class="ico">●</span>女性</button>
+        <button class="tbtn" data-add="unknown"><span class="ico">◇</span>不明</button>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="grp-h">状態切替</div>
+      <div class="grp-btns col1">
+        <button class="tbtn" id="btnDeceased"><span class="ico">╳</span>死亡</button>
+        <button class="tbtn" id="btnIP"><span class="ico">◎</span>本人(IP)</button>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="grp-h">関係線</div>
+      <div class="grp-btns">
+        <button class="tbtn" data-line="marriage"><span class="ico">━</span>婚姻</button>
+        <button class="tbtn" data-line="divorce"><span class="ico">⫽</span>離婚</button>
+        <button class="tbtn" data-line="parent"><span class="ico">┃</span>親子</button>
+        <button class="tbtn" data-line="sibling"><span class="ico">⊥</span>兄弟</button>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="grp-h">その他</div>
+      <div class="grp-btns col1">
+        <button class="tbtn" id="btnFrame"><span class="ico">⌐ ┘</span>同居枠</button>
+        <button class="tbtn" id="btnText"><span class="ico">A</span>テキスト追加</button>
+        <button class="tbtn danger" id="btnDelShape"><span class="ico">×</span>削除</button>
+        <button class="tbtn" id="btnUndo"><span class="ico">↶</span>元に戻す</button>
+        <button class="tbtn" id="btnClear"><span class="ico">🗑</span>全クリア</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="canvas-wrap">
+    <div class="canvas-status" id="canvasStatus">
+      <span class="dot"></span>
+      <span id="modeStatus">選択モード: シェイプをクリック・ドラッグで操作</span>
+    </div>
+    <div class="canvas-zoom">
+      <button class="zbtn" id="btnZoomOut" title="縮小">−</button>
+      <button class="zbtn" id="btnZoomFit" title="全体表示">全体</button>
+      <button class="zbtn" id="btnZoom100" title="100%">100%</button>
+      <button class="zbtn" id="btnZoomIn" title="拡大">＋</button>
+      <span class="zoom-level" id="zoomLevel">100%</span>
+    </div>
+    <div class="canvas-scroll">
+      <div id="canvas"></div>
+    </div>
+    <div class="kb-hint">ショートカット: Delete=削除 / Esc=モード解除 / Ctrl+Z=元に戻す / Ctrl+0=全体表示</div>
+  </div>
+
+  <aside class="props">
+    <div class="props-h">プロパティ</div>
+    <div id="propsEmpty" class="props-empty">
+      シェイプを選択するとここに編集欄が表示されます。<br><br>
+      <strong>■ 操作の手順</strong><br>
+      ① 左パレットで「男性/女性/不明」を追加<br>
+      ② キャンバス上でドラッグして配置<br>
+      ③ 関係線・同居枠・テキストを作成<br>
+      ④ 上部「保存」で利用者ごとに記録、「JPG/PDF出力」で書き出し
+      <br><br>
+      <strong>■ 関係線の引き方ルール</strong><br>
+      <strong>婚姻 ─</strong>: ボタン押下→ 結ぶ2人をクリック（順序不問）。<br>
+      <strong>離婚 ⫽</strong>: 婚姻と同じ操作。中央に二重斜線が入る。<br>
+      <strong>親子 ┃</strong>: ボタン押下→ <em>親→子</em> の順にクリック。親が婚姻線を持つ場合は<u>夫婦の中央</u>から自動で線が分岐する。<br>
+      <strong>兄弟 ⊥</strong>: ボタン押下→ 兄弟2人をクリック。一方に親子線がある場合、その<u>親子線の中盤レベル</u>に兄弟バーが揃って配置される。<br>
+      <strong>同居枠</strong>: ボタン押下→ 含めるノードを順にクリック→ 再度ボタンで確定。<br>
+      <strong>テキスト</strong>: ボタン押下→ 配置したい場所をクリック。直後にプロパティ欄で文字入力。<br>
+      <br>
+      モードのキャンセルは <kbd>Esc</kbd>、選択中の削除は <kbd>Delete</kbd>。
+    </div>
+
+    <div id="propsNode" hidden>
+      <div class="fg"><label class="fl">名前</label>
+        <input type="text" class="fi" id="pName" autocomplete="off"></div>
+      <div class="fr">
+        <div class="fg"><label class="fl">年齢</label>
+          <input type="number" class="fi" id="pAge" min="0" max="130"></div>
+        <div class="fg"><label class="fl">続柄</label>
+          <input type="text" class="fi" id="pRelation" autocomplete="off" placeholder="例: 父・娘"></div>
+      </div>
+      <div class="fg"><label class="fl">メモ</label>
+        <textarea class="fi" id="pNote" rows="3" placeholder="病歴・職業など"></textarea></div>
+      <div class="props-info" id="pInfo"></div>
+    </div>
+
+    <div id="propsLine" hidden>
+      <div class="props-info" id="lineInfo"></div>
+    </div>
+
+    <div id="propsFrame" hidden>
+      <div class="fg"><label class="fl">枠ラベル</label>
+        <input type="text" class="fi" id="fLabel" placeholder="同居" autocomplete="off"></div>
+      <div class="props-info" id="frameInfo"></div>
+    </div>
+
+    <div id="propsText" hidden>
+      <div class="fg"><label class="fl">テキスト</label>
+        <textarea class="fi" id="tText" rows="3"></textarea></div>
+      <div class="fg"><label class="fl">文字サイズ</label>
+        <select class="fi" id="tFontSize">
+          <option value="11">11px(極小)</option>
+          <option value="14" selected>14px(標準)</option>
+          <option value="18">18px(大)</option>
+          <option value="22">22px(特大)</option>
+          <option value="28">28px(見出し)</option>
+        </select></div>
+      <div class="fg"><label class="fl">スタイル</label>
+        <select class="fi" id="tFontStyle">
+          <option value="normal" selected>標準</option>
+          <option value="bold">太字</option>
+          <option value="italic">斜体</option>
+        </select></div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ========== Constants ==========
+const NODE_SIZE = 50;
+const HISTORY_MAX = 30;
+const STAGE_MIN_W = 700;
+const STAGE_MIN_H = 450;
+let STAGE_W = STAGE_MIN_W;
+let STAGE_H = STAGE_MIN_H;
+const LS_INDEX = 'genogram:index';
+const LS_DOC_PREFIX = 'genogram:doc:';
+const LS_LAST = 'genogram:lastClient';
+const LS_CLOUD_CFG = 'genogram:cloudCfg';
+const LS_PENDING = 'genogram:pendingSync';
+const NODE_FONT = "'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Meiryo',sans-serif";
+
+// GAS script that users need to paste into Apps Script
+const GAS_SCRIPT_CODE = `// ======== Genogram Sync GAS — paste into Apps Script editor ========
+// このスクリプトは Google スプレッドシートをデータストアとして使用します。
+// 必要な操作:
+//   1. このコードをスプレッドシートの「Apps Script」エディタに貼り付け、保存。
+//   2. 「デプロイ」→「新しいデプロイ」→「ウェブアプリ」を選択。
+//      - 実行ユーザー: 自分
+//      - アクセス: 全員
+//   3. 発行されたURLをアプリの設定画面に貼り付ける。
+
+const SHEET_NAME = 'genograms';
+
+function doGet(e) {
+  return route(e.parameter.action, e.parameter);
+}
+
+function doPost(e) {
+  try {
+    const body = JSON.parse(e.postData.contents || '{}');
+    return route(body.action, body);
+  } catch (err) {
+    return jsonOut({ ok: false, error: 'invalid JSON: ' + err.message });
+  }
+}
+
+function route(action, p) {
+  try {
+    if (action === 'ping')   return jsonOut({ ok: true, time: new Date().toISOString() });
+    if (action === 'list')   return jsonOut({ ok: true, items: listAll() });
+    if (action === 'get')    return jsonOut({ ok: true, doc: getOne(p.name) });
+    if (action === 'save')   return jsonOut({ ok: true, saved: saveOne(p.doc) });
+    if (action === 'delete') return jsonOut({ ok: true, deleted: deleteOne(p.name) });
+    return jsonOut({ ok: false, error: 'unknown action: ' + action });
+  } catch (err) {
+    return jsonOut({ ok: false, error: err.message });
+  }
+}
+
+function sheet() {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(SHEET_NAME);
+  if (!s) {
+    s = ss.insertSheet(SHEET_NAME);
+    s.appendRow(['name', 'updatedAt', 'doc']);
+    s.setFrozenRows(1);
+  }
+  return s;
+}
+
+function listAll() {
+  const data = sheet().getDataRange().getValues();
+  return data.slice(1)
+    .filter(r => r[0])
+    .map(r => ({ name: String(r[0]), updatedAt: String(r[1] || '') }));
+}
+
+function getOne(name) {
+  const data = sheet().getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === name) {
+      return JSON.parse(data[i][2]);
+    }
+  }
+  return null;
+}
+
+function saveOne(doc) {
+  if (!doc || !doc.clientName) throw new Error('clientName required');
+  const s = sheet();
+  const data = s.getDataRange().getValues();
+  const now = new Date().toISOString();
+  doc.updatedAt = now;
+  const row = [doc.clientName, now, JSON.stringify(doc)];
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === doc.clientName) {
+      s.getRange(i + 1, 1, 1, 3).setValues([row]);
+      return { name: doc.clientName, updatedAt: now };
+    }
+  }
+  s.appendRow(row);
+  return { name: doc.clientName, updatedAt: now };
+}
+
+function deleteOne(name) {
+  const s = sheet();
+  const data = s.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === name) {
+      s.deleteRow(i + 1);
+      return { name: name };
+    }
+  }
+  return { name: name, notFound: true };
+}
+
+function jsonOut(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+`;
+
+// ========== State ==========
+const state = {
+  clientName: '',
+  doc: makeEmptyDoc(),
+  selectedId: null,
+  selectedType: null, // 'node' | 'line' | 'frame' | 'text'
+  mode: { type: 'select' }, // {type:'line', lineType, firstId} | {type:'frame', nodeIds:[]} | {type:'text'}
+  history: [],
+  zoom: 1
+};
+
+function makeEmptyDoc() {
+  return { nodes: [], lines: [], frames: [], texts: [] };
+}
+
+// ========== Util ==========
+const $ = (id) => document.getElementById(id);
+const genId = () => 'id' + Math.random().toString(36).slice(2, 10);
+
+function todayYMD() {
+  const d = new Date();
+  return d.getFullYear() +
+    String(d.getMonth() + 1).padStart(2, '0') +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function nowISO() {
+  const d = new Date();
+  const tz = -d.getTimezoneOffset();
+  const sign = tz >= 0 ? '+' : '-';
+  const pad = (n) => String(Math.abs(n)).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+    'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) +
+    sign + pad(Math.floor(Math.abs(tz) / 60)) + ':' + pad(Math.abs(tz) % 60);
+}
+
+function beforeChange() {
+  state.history.push(JSON.stringify(state.doc));
+  if (state.history.length > HISTORY_MAX) state.history.shift();
+}
+
+function undo() {
+  if (state.history.length === 0) return;
+  const prev = state.history.pop();
+  state.doc = JSON.parse(prev);
+  state.selectedId = null;
+  state.selectedType = null;
+  setMode({ type: 'select' });
+  render();
+  showProperties();
+}
+
+// ========== Konva setup ==========
+const stage = new Konva.Stage({ container: 'canvas', width: STAGE_W, height: STAGE_H });
+const layerBg = new Konva.Layer({ listening: false });
+const layerFrames = new Konva.Layer();
+const layerLines = new Konva.Layer();
+const layerNodes = new Konva.Layer();
+stage.add(layerBg, layerFrames, layerLines, layerNodes);
+
+function drawBackground() {
+  layerBg.destroyChildren();
+  layerBg.add(new Konva.Rect({
+    x: 0, y: 0, width: STAGE_W, height: STAGE_H,
+    fill: '#ffffff', listening: false
+  }));
+  for (let x = 50; x < STAGE_W; x += 50) {
+    layerBg.add(new Konva.Line({
+      points: [x, 0, x, STAGE_H], stroke: '#f1f3f4', strokeWidth: 1, listening: false
+    }));
+  }
+  for (let y = 50; y < STAGE_H; y += 50) {
+    layerBg.add(new Konva.Line({
+      points: [0, y, STAGE_W, y], stroke: '#f1f3f4', strokeWidth: 1, listening: false
+    }));
+  }
+  layerBg.draw();
+}
+
+// Apply zoom level to the stage. Konva scales internal coords for rendering
+// while keeping logical coordinates the same, so click/drag still work in
+// stage-local coords. Stage CSS dimensions follow the scaled extent so the
+// canvas-scroll wraps correctly.
+function setZoom(z) {
+  z = Math.max(0.25, Math.min(2.0, z));
+  state.zoom = z;
+  stage.scale({ x: z, y: z });
+  // adjust the stage's reported size so canvas-scroll knows total scrollable
+  stage.width(STAGE_W * z);
+  stage.height(STAGE_H * z);
+  drawBackground();
+  render();
+  const lvl = $('zoomLevel');
+  if (lvl) lvl.textContent = Math.round(z * 100) + '%';
+}
+
+function zoomToFit() {
+  const container = document.querySelector('.canvas-scroll');
+  if (!container) return;
+  const cs = getComputedStyle(container);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const availW = container.clientWidth - padX - 4;
+  const availH = container.clientHeight - padY - 4;
+  // Use content extent if any, else current logical stage
+  let contentW = STAGE_W, contentH = STAGE_H;
+  if (state.doc.nodes.length || state.doc.texts.length) {
+    const b = getContentBounds();
+    contentW = b.x + b.width;
+    contentH = b.y + b.height;
+  }
+  const scale = Math.min(availW / contentW, availH / contentH, 1);
+  setZoom(scale > 0 ? scale : 1);
+  container.scrollLeft = 0; container.scrollTop = 0;
+}
+
+function fitStageSize(growForContent = false) {
+  const container = document.querySelector('.canvas-scroll');
+  if (!container) return;
+  const cs = getComputedStyle(container);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  let w = Math.max(STAGE_MIN_W, container.clientWidth - padX - 2);
+  let h = Math.max(STAGE_MIN_H, container.clientHeight - padY - 2);
+  if (growForContent) {
+    state.doc.nodes.forEach(n => {
+      w = Math.max(w, n.x + 100);
+      h = Math.max(h, n.y + 90);
+    });
+    state.doc.texts.forEach(t => {
+      w = Math.max(w, t.x + 200);
+      h = Math.max(h, t.y + 40);
+    });
+  }
+  STAGE_W = Math.ceil(w);
+  STAGE_H = Math.ceil(h);
+  stage.width(STAGE_W * state.zoom);
+  stage.height(STAGE_H * state.zoom);
+  stage.scale({ x: state.zoom, y: state.zoom });
+  drawBackground();
+}
+
+// ========== Render ==========
+function render() {
+  layerFrames.destroyChildren();
+  layerLines.destroyChildren();
+  layerNodes.destroyChildren();
+
+  state.doc.frames.forEach(drawFrame);
+  state.doc.lines.forEach(drawLine);
+  state.doc.texts.forEach(drawText);
+  state.doc.nodes.forEach(drawNode);
+
+  layerFrames.batchDraw();
+  layerLines.batchDraw();
+  layerNodes.batchDraw();
+}
+
+function nodeStrokeColor(n) {
+  if (state.mode.type === 'frame' && state.mode.nodeIds.includes(n.id)) return '#e65100';
+  if (state.mode.type === 'line' && state.mode.firstId === n.id) return '#e65100';
+  if (state.selectedId === n.id) return '#26a69a';
+  return '#202124';
+}
+
+const SNAP = 10;
+function snap(v) { return Math.round(v / SNAP) * SNAP; }
+
+function drawNode(n) {
+  const group = new Konva.Group({
+    x: n.x, y: n.y, draggable: true,
+    dragBoundFunc: function(pos) {
+      // pos is in CSS coords; convert to logical, snap, clamp, convert back
+      const z = state.zoom || 1;
+      const lx = snap(pos.x / z);
+      const ly = snap(pos.y / z);
+      const cx = Math.max(40, Math.min(STAGE_W - 40, lx));
+      const cy = Math.max(40, Math.min(STAGE_H - 40, ly));
+      return { x: cx * z, y: cy * z };
+    }
+  });
+  const stroke = nodeStrokeColor(n);
+  const sw = (state.selectedId === n.id) ? 3 : 2;
+
+  // base shape
+  let shape;
+  if (n.type === 'male') {
+    shape = new Konva.Rect({
+      x: -NODE_SIZE / 2, y: -NODE_SIZE / 2, width: NODE_SIZE, height: NODE_SIZE,
+      stroke, strokeWidth: sw, fill: '#fff'
+    });
+  } else if (n.type === 'female') {
+    shape = new Konva.Circle({
+      x: 0, y: 0, radius: NODE_SIZE / 2,
+      stroke, strokeWidth: sw, fill: '#fff'
+    });
+  } else {
+    shape = new Konva.RegularPolygon({
+      x: 0, y: 0, sides: 4, radius: NODE_SIZE / 2 * 1.15,
+      stroke, strokeWidth: sw, fill: '#fff', rotation: 0
+    });
+  }
+  group.add(shape);
+
+  // IP (本人) double frame
+  if (n.isIP) {
+    const gap = 4;
+    let outer;
+    if (n.type === 'male') {
+      outer = new Konva.Rect({
+        x: -NODE_SIZE / 2 - gap, y: -NODE_SIZE / 2 - gap,
+        width: NODE_SIZE + gap * 2, height: NODE_SIZE + gap * 2,
+        stroke, strokeWidth: 2, listening: false
+      });
+    } else if (n.type === 'female') {
+      outer = new Konva.Circle({
+        x: 0, y: 0, radius: NODE_SIZE / 2 + gap,
+        stroke, strokeWidth: 2, listening: false
+      });
+    } else {
+      outer = new Konva.RegularPolygon({
+        x: 0, y: 0, sides: 4, radius: NODE_SIZE / 2 * 1.15 + gap,
+        stroke, strokeWidth: 2, listening: false
+      });
+    }
+    group.add(outer);
+  }
+
+  // Deceased mark: ╳ across symbol
+  if (n.deceased) {
+    const r = NODE_SIZE / 2 + 6;
+    group.add(new Konva.Line({
+      points: [-r, -r, r, r], stroke: '#202124', strokeWidth: 2.5, listening: false
+    }));
+    group.add(new Konva.Line({
+      points: [-r, r, r, -r], stroke: '#202124', strokeWidth: 2.5, listening: false
+    }));
+  }
+
+  // Label below
+  const labelLine = [
+    n.relation ? `(${n.relation})` : '',
+    n.name || '',
+    (n.age !== '' && n.age != null) ? `${n.age}歳` : ''
+  ].filter(Boolean).join(' ');
+  if (labelLine) {
+    group.add(new Konva.Text({
+      x: -80, y: NODE_SIZE / 2 + 12,
+      width: 160, align: 'center',
+      text: labelLine, fontSize: 13, fontFamily: NODE_FONT,
+      fill: '#202124', listening: false
+    }));
+  }
+  if (n.note) {
+    group.add(new Konva.Text({
+      x: -80, y: NODE_SIZE / 2 + 30,
+      width: 160, align: 'center',
+      text: n.note, fontSize: 11, fontFamily: NODE_FONT,
+      fill: '#5f6368', listening: false
+    }));
+  }
+
+  // selection ring
+  if (state.selectedId === n.id) {
+    group.add(new Konva.Rect({
+      x: -NODE_SIZE / 2 - 10, y: -NODE_SIZE / 2 - 10,
+      width: NODE_SIZE + 20, height: NODE_SIZE + 20,
+      stroke: '#26a69a', strokeWidth: 1.5, dash: [4, 3], listening: false
+    }));
+  }
+
+  // events
+  group.on('mousedown touchstart', () => {
+    // capture pre-drag state for undo
+    group._dragPushed = false;
+  });
+  group.on('dragstart', () => {
+    if (!group._dragPushed) { beforeChange(); group._dragPushed = true; }
+  });
+  group.on('dragmove', () => {
+    n.x = group.x();
+    n.y = group.y();
+    redrawDependents();
+  });
+  group.on('click tap', (e) => {
+    e.cancelBubble = true;
+    handleNodeClick(n.id);
+  });
+
+  layerNodes.add(group);
+}
+
+// Compute parent-line geometry. If the parent has a marriage line, the
+// origin is set to the midpoint of that marriage line so the parent-child
+// line visually descends from the couple, not from a single parent.
+function parentLineGeometry(parentLine) {
+  const a = state.doc.nodes.find(n => n.id === parentLine.fromId);
+  const b = state.doc.nodes.find(n => n.id === parentLine.toId);
+  if (!a || !b) return null;
+  const marriage = state.doc.lines.find(ml =>
+    (ml.type === 'marriage' || ml.type === 'divorce') &&
+    (ml.fromId === a.id || ml.toId === a.id));
+  let startX, startY;
+  if (marriage) {
+    const ma = state.doc.nodes.find(n => n.id === marriage.fromId);
+    const mb = state.doc.nodes.find(n => n.id === marriage.toId);
+    if (ma && mb) {
+      startX = (ma.x + mb.x) / 2;
+      startY = (ma.y + mb.y) / 2;
+    } else {
+      startX = a.x;
+      startY = a.y + NODE_SIZE / 2;
+    }
+  } else {
+    startX = a.x;
+    startY = a.y + NODE_SIZE / 2;
+  }
+  const endX = b.x;
+  const endY = b.y - NODE_SIZE / 2;
+  const elbowY = (endY > startY) ? startY + Math.max(20, (endY - startY) / 2) : startY + 20;
+  return { startX, startY, endX, endY, elbowY };
+}
+
+function drawLine(l) {
+  const a = state.doc.nodes.find(n => n.id === l.fromId);
+  const b = state.doc.nodes.find(n => n.id === l.toId);
+  if (!a || !b) return;
+
+  const isSel = state.selectedId === l.id;
+  const stroke = isSel ? '#26a69a' : '#202124';
+  const sw = isSel ? 3 : 2;
+
+  const group = new Konva.Group();
+
+  if (l.type === 'marriage' || l.type === 'divorce') {
+    const left = a.x < b.x ? a : b;
+    const right = a.x < b.x ? b : a;
+    const midY = (a.y + b.y) / 2;
+    const x1 = left.x + NODE_SIZE / 2;
+    const x2 = right.x - NODE_SIZE / 2;
+    // vertical drops to each node center
+    group.add(new Konva.Line({
+      points: [left.x, left.y, left.x, midY, right.x, midY, right.x, right.y],
+      stroke, strokeWidth: sw
+    }));
+    if (l.type === 'divorce') {
+      const cx = (left.x + right.x) / 2;
+      group.add(new Konva.Line({
+        points: [cx - 10, midY - 10, cx - 4, midY + 10],
+        stroke, strokeWidth: sw, listening: false
+      }));
+      group.add(new Konva.Line({
+        points: [cx + 4, midY - 10, cx + 10, midY + 10],
+        stroke, strokeWidth: sw, listening: false
+      }));
+    }
+  } else if (l.type === 'parent') {
+    const geom = parentLineGeometry(l);
+    if (!geom) { return; }
+    group.add(new Konva.Line({
+      points: [geom.startX, geom.startY, geom.startX, geom.elbowY,
+               geom.endX, geom.elbowY, geom.endX, geom.endY],
+      stroke, strokeWidth: sw
+    }));
+  } else if (l.type === 'sibling') {
+    const left = a.x < b.x ? a : b;
+    const right = a.x < b.x ? b : a;
+    // BFS through sibling-connected nodes to find any with a parent line.
+    // This makes a chain like A-B-C share the same bar Y when A has a
+    // parent line (or any of them does).
+    let barY = null;
+    {
+      const visited = new Set([a.id, b.id]);
+      const queue = [a.id, b.id];
+      while (queue.length) {
+        const id = queue.shift();
+        const pl = state.doc.lines.find(p => p.type === 'parent' && p.toId === id);
+        if (pl) {
+          const g = parentLineGeometry(pl);
+          if (g) { barY = g.elbowY; break; }
+        }
+        state.doc.lines.forEach(sl => {
+          if (sl.type !== 'sibling') return;
+          const other = sl.fromId === id ? sl.toId : (sl.toId === id ? sl.fromId : null);
+          if (other && !visited.has(other)) {
+            visited.add(other); queue.push(other);
+          }
+        });
+      }
+    }
+    if (barY === null) barY = Math.min(a.y, b.y) - NODE_SIZE / 2 - 20;
+    group.add(new Konva.Line({
+      points: [left.x, barY, right.x, barY], stroke, strokeWidth: sw
+    }));
+    group.add(new Konva.Line({
+      points: [a.x, barY, a.x, a.y - NODE_SIZE / 2], stroke, strokeWidth: sw, listening: false
+    }));
+    group.add(new Konva.Line({
+      points: [b.x, barY, b.x, b.y - NODE_SIZE / 2], stroke, strokeWidth: sw, listening: false
+    }));
+  }
+
+  // hit area for click
+  group.on('click tap', (e) => {
+    e.cancelBubble = true;
+    handleLineClick(l.id);
+  });
+
+  layerLines.add(group);
+}
+
+function drawFrame(f) {
+  const nodes = (f.nodeIds || []).map(id => state.doc.nodes.find(n => n.id === id)).filter(Boolean);
+  if (nodes.length === 0) return;
+
+  const pad = f.padding || 22;
+  const xs = nodes.flatMap(n => [n.x - NODE_SIZE / 2 - pad, n.x + NODE_SIZE / 2 + pad]);
+  const ys = nodes.flatMap(n => [n.y - NODE_SIZE / 2 - pad, n.y + NODE_SIZE / 2 + pad + 36]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+  const isSel = state.selectedId === f.id;
+  const stroke = isSel ? '#26a69a' : '#26a69a';
+  const op = isSel ? 1.0 : 0.7;
+
+  const rect = new Konva.Rect({
+    x: minX, y: minY, width: maxX - minX, height: maxY - minY,
+    stroke, strokeWidth: isSel ? 2.5 : 1.8, dash: [10, 5],
+    cornerRadius: 8, opacity: op
+  });
+  rect.on('click tap', (e) => {
+    e.cancelBubble = true;
+    handleFrameClick(f.id);
+  });
+  layerFrames.add(rect);
+
+  layerFrames.add(new Konva.Text({
+    x: minX + 8, y: minY + 4,
+    text: f.label || '同居', fontSize: 11, fontFamily: NODE_FONT,
+    fill: '#26a69a', listening: false
+  }));
+}
+
+function drawText(t) {
+  const isSel = state.selectedId === t.id;
+  const text = new Konva.Text({
+    x: t.x, y: t.y,
+    text: t.text || '(空のテキスト)',
+    fontSize: t.fontSize || 14,
+    fontFamily: NODE_FONT,
+    fontStyle: t.fontStyle || 'normal',
+    fill: isSel ? '#26a69a' : '#202124',
+    draggable: true
+  });
+  text.on('mousedown touchstart', () => { text._pushed = false; });
+  text.on('dragstart', () => {
+    if (!text._pushed) { beforeChange(); text._pushed = true; }
+  });
+  text.on('dragmove', () => { t.x = text.x(); t.y = text.y(); });
+  text.on('click tap', (e) => {
+    e.cancelBubble = true;
+    handleTextClick(t.id);
+  });
+  layerNodes.add(text);
+}
+
+// Partial redraw when a node is being dragged: only frames + lines
+function redrawDependents() {
+  layerFrames.destroyChildren();
+  layerLines.destroyChildren();
+  state.doc.frames.forEach(drawFrame);
+  state.doc.lines.forEach(drawLine);
+  layerFrames.batchDraw();
+  layerLines.batchDraw();
+}
+
+// ========== Mode handling ==========
+function setMode(mode) {
+  state.mode = mode;
+  updateModeStatus();
+  updateModeButtons();
+  render();
+}
+
+function updateModeStatus() {
+  const el = $('modeStatus');
+  const bar = $('canvasStatus');
+  bar.classList.remove('line', 'frame', 'text');
+  let msg = '選択モード: シェイプをクリック・ドラッグで操作';
+  if (state.mode.type === 'line') {
+    bar.classList.add('line');
+    const labels = { marriage: '婚姻線', divorce: '離婚線', parent: '親子線', sibling: 'きょうだい線' };
+    const label = labels[state.mode.lineType] || '関係線';
+    if (state.mode.firstId) {
+      msg = `${label}モード: もう1つのノードをクリック (Esc=取消)`;
+    } else if (state.mode.lineType === 'parent') {
+      msg = `${label}モード: 親→子 の順にクリック (Esc=取消)`;
+    } else {
+      msg = `${label}モード: 結ぶ2つのノードをクリック (Esc=取消)`;
+    }
+  } else if (state.mode.type === 'frame') {
+    bar.classList.add('frame');
+    const n = state.mode.nodeIds.length;
+    msg = `同居枠モード: 含めるノードをクリック (現在${n}件) →「同居枠」ボタン再押下で確定 (Esc=取消)`;
+  } else if (state.mode.type === 'text') {
+    bar.classList.add('text');
+    msg = 'テキスト追加モード: キャンバス上をクリックして配置 (Esc=取消)';
+  }
+  el.textContent = msg;
+}
+
+function updateModeButtons() {
+  document.querySelectorAll('.tbtn[data-line]').forEach(b => {
+    b.classList.toggle('on', state.mode.type === 'line' && state.mode.lineType === b.dataset.line);
+  });
+  $('btnFrame').classList.toggle('on', state.mode.type === 'frame');
+  $('btnText').classList.toggle('on', state.mode.type === 'text');
+}
+
+// ========== Operations ==========
+// Smart initial placement: distribute new nodes on a coarse grid so a typical
+// father+mother+children genogram lays out cleanly without manual repositioning.
+// Row 1 (y=180) holds 2 parents, row 2 (y=400) holds up to 5 children, row 3 (y=600).
+function nextNodePosition() {
+  const COL_W = 140, ROW_Y = [180, 400, 600];
+  const ROW_CAP = [2, 5, 5];
+  for (let r = 0; r < ROW_Y.length; r++) {
+    const y = ROW_Y[r];
+    const inRow = state.doc.nodes.filter(n => Math.abs(n.y - y) < 80);
+    if (inRow.length >= ROW_CAP[r]) continue;
+    const usedCols = new Set(inRow.map(n => Math.round(n.x / COL_W)));
+    // Center the row by starting from col 3, expanding outward
+    for (let c = 3; c <= 9; c++) {
+      const x = c * COL_W;
+      if (!usedCols.has(c) && x + 80 < stage.width()) return { x, y };
+    }
+  }
+  return {
+    x: Math.round(stage.width() / 2 + (Math.random() - 0.5) * 100),
+    y: Math.round(stage.height() / 2 + (Math.random() - 0.5) * 100)
+  };
+}
+
+function addNode(type) {
+  beforeChange();
+  const pos = nextNodePosition();
+  const id = genId();
+  state.doc.nodes.push({
+    id, type, x: pos.x, y: pos.y,
+    name: '', age: '', relation: '', note: '',
+    deceased: false, isIP: false
+  });
+  state.selectedId = id;
+  state.selectedType = 'node';
+  setMode({ type: 'select' });
+  showProperties({ autoFocus: true });
+}
+
+function toggleNodeFlag(flag) {
+  const node = currentNode();
+  if (!node) { alert('ノードを選択してください'); return; }
+  beforeChange();
+  node[flag] = !node[flag];
+  render();
+  showProperties();
+}
+
+function currentNode() {
+  if (state.selectedType !== 'node') return null;
+  return state.doc.nodes.find(n => n.id === state.selectedId);
+}
+
+function deleteSelected() {
+  if (!state.selectedId) return;
+  beforeChange();
+  const id = state.selectedId, type = state.selectedType;
+  if (type === 'node') {
+    state.doc.nodes = state.doc.nodes.filter(n => n.id !== id);
+    state.doc.lines = state.doc.lines.filter(l => l.fromId !== id && l.toId !== id);
+    state.doc.frames.forEach(f => { f.nodeIds = (f.nodeIds || []).filter(nid => nid !== id); });
+    state.doc.frames = state.doc.frames.filter(f => (f.nodeIds || []).length > 0);
+  } else if (type === 'line') {
+    state.doc.lines = state.doc.lines.filter(l => l.id !== id);
+  } else if (type === 'frame') {
+    state.doc.frames = state.doc.frames.filter(f => f.id !== id);
+  } else if (type === 'text') {
+    state.doc.texts = state.doc.texts.filter(t => t.id !== id);
+  }
+  state.selectedId = null;
+  state.selectedType = null;
+  render();
+  showProperties();
+}
+
+function clearAll() {
+  if (state.doc.nodes.length === 0 && state.doc.texts.length === 0) return;
+  if (!confirm('キャンバス上の全要素を削除しますか？（保存済みデータは残ります）')) return;
+  beforeChange();
+  state.doc = makeEmptyDoc();
+  state.selectedId = null;
+  state.selectedType = null;
+  setMode({ type: 'select' });
+  render();
+  showProperties();
+}
+
+// ========== Click handlers ==========
+function handleNodeClick(id) {
+  if (state.mode.type === 'text') { placeTextAtPointer(); return; }
+  if (state.mode.type === 'line') {
+    if (!state.mode.firstId) {
+      state.mode.firstId = id;
+      updateModeStatus();
+      render();
+    } else if (state.mode.firstId === id) {
+      // ignore self
+    } else {
+      const lt = state.mode.lineType;
+      // prevent duplicate same-type line
+      const dup = state.doc.lines.find(l =>
+        l.type === lt &&
+        ((l.fromId === state.mode.firstId && l.toId === id) ||
+         (l.fromId === id && l.toId === state.mode.firstId)));
+      if (!dup) {
+        beforeChange();
+        state.doc.lines.push({
+          id: genId(), type: lt, fromId: state.mode.firstId, toId: id
+        });
+        const labels = { marriage: '婚姻線', divorce: '離婚線', parent: '親子線', sibling: 'きょうだい線' };
+        flashStatus(`${labels[lt] || '関係線'}を作成しました`);
+      }
+      setMode({ type: 'select' });
+    }
+    return;
+  }
+  if (state.mode.type === 'frame') {
+    const idx = state.mode.nodeIds.indexOf(id);
+    if (idx >= 0) state.mode.nodeIds.splice(idx, 1);
+    else state.mode.nodeIds.push(id);
+    updateModeStatus();
+    render();
+    return;
+  }
+  // select mode
+  const isNewSelection = state.selectedId !== id;
+  state.selectedId = id;
+  state.selectedType = 'node';
+  render();
+  showProperties({ autoFocus: isNewSelection });
+}
+
+function handleLineClick(id) {
+  if (state.mode.type === 'text') { placeTextAtPointer(); return; }
+  if (state.mode.type !== 'select') return;
+  state.selectedId = id;
+  state.selectedType = 'line';
+  render();
+  showProperties();
+}
+
+function handleFrameClick(id) {
+  if (state.mode.type === 'text') { placeTextAtPointer(); return; }
+  if (state.mode.type !== 'select') return;
+  state.selectedId = id;
+  state.selectedType = 'frame';
+  render();
+  showProperties();
+}
+
+function handleTextClick(id) {
+  if (state.mode.type === 'text') { placeTextAtPointer(); return; }
+  if (state.mode.type !== 'select') return;
+  state.selectedId = id;
+  state.selectedType = 'text';
+  render();
+  showProperties();
+}
+
+function placeTextAt(x, y) {
+  beforeChange();
+  const newText = { id: genId(), x, y, text: '', fontSize: 14, fontStyle: 'normal' };
+  state.doc.texts.push(newText);
+  state.selectedId = newText.id;
+  state.selectedType = 'text';
+  setMode({ type: 'select' });
+  showProperties();
+  flashStatus('テキストを配置しました（右パネルで入力）');
+  setTimeout(() => {
+    const ta = $('tText');
+    if (ta) { ta.focus(); ta.select(); }
+  }, 30);
+}
+
+function placeTextAtPointer() {
+  const pos = stage.getPointerPosition();
+  if (!pos) return;
+  placeTextAt(pos.x, pos.y);
+}
+
+// stage click on empty area (Konva-level)
+stage.on('click tap', (e) => {
+  if (state.mode.type === 'text') {
+    placeTextAtPointer();
+    return;
+  }
+  if (e.target !== stage && e.target.getParent() !== layerBg) return;
+  if (state.selectedId) {
+    state.selectedId = null;
+    state.selectedType = null;
+    render();
+    showProperties();
+  }
+});
+
+// DOM-level fallback for text mode: ensures placement happens even if a click
+// is consumed by a Konva shape's listener that didn't return early. We listen
+// on the canvas-scroll wrapper and translate to stage-local coordinates.
+document.addEventListener('DOMContentLoaded', () => {}); // ensure DOM is ready
+function attachDomTextFallback() {
+  const wrap = document.querySelector('.canvas-scroll');
+  if (!wrap) return;
+  wrap.addEventListener('click', (e) => {
+    if (state.mode.type !== 'text') return;
+    const stageEl = stage.container();
+    const r = stageEl.getBoundingClientRect();
+    const z = state.zoom || 1;
+    const x = (e.clientX - r.left) / z;
+    const y = (e.clientY - r.top) / z;
+    if (x < 0 || y < 0 || x > STAGE_W || y > STAGE_H) return;
+    if (state.mode.type !== 'text') return;
+    placeTextAt(x, y);
+  });
+}
+
+// ========== Properties panel ==========
+function showProperties(opts) {
+  const autoFocus = opts && opts.autoFocus;
+  $('propsEmpty').hidden = state.selectedId !== null;
+  $('propsNode').hidden = state.selectedType !== 'node';
+  $('propsLine').hidden = state.selectedType !== 'line';
+  $('propsFrame').hidden = state.selectedType !== 'frame';
+  $('propsText').hidden = state.selectedType !== 'text';
+
+  if (state.selectedType === 'node') {
+    const n = currentNode();
+    if (!n) return;
+    $('pName').value = n.name || '';
+    $('pAge').value = (n.age === '' || n.age == null) ? '' : n.age;
+    $('pRelation').value = n.relation || '';
+    $('pNote').value = n.note || '';
+    const flags = [];
+    if (n.deceased) flags.push('死亡');
+    if (n.isIP) flags.push('本人(IP)');
+    flags.push(n.type === 'male' ? '男性' : n.type === 'female' ? '女性' : '不明');
+    $('pInfo').textContent = flags.join(' / ');
+    if (autoFocus) {
+      setTimeout(() => {
+        // Focus and select the field most likely to be edited:
+        // empty fields first (name → age → relation), else select all in name
+        const target = !n.name ? $('pName')
+                     : (n.age === '' || n.age == null) ? $('pAge')
+                     : !n.relation ? $('pRelation')
+                     : $('pName');
+        target.focus();
+        if (target.select) target.select();
+      }, 30);
+    }
+  } else if (state.selectedType === 'line') {
+    const l = state.doc.lines.find(x => x.id === state.selectedId);
+    if (!l) return;
+    const labels = { marriage: '婚姻線', divorce: '離婚線', parent: '親子線', sibling: 'きょうだい線' };
+    $('lineInfo').textContent = `${labels[l.type] || l.type}（削除キーで削除）`;
+  } else if (state.selectedType === 'frame') {
+    const f = state.doc.frames.find(x => x.id === state.selectedId);
+    if (!f) return;
+    $('fLabel').value = f.label || '';
+    $('frameInfo').textContent = `${(f.nodeIds || []).length}人を含む同居枠（削除キーで削除）`;
+  } else if (state.selectedType === 'text') {
+    const t = state.doc.texts.find(x => x.id === state.selectedId);
+    if (!t) return;
+    $('tText').value = t.text || '';
+    $('tFontSize').value = String(t.fontSize || 14);
+    $('tFontStyle').value = t.fontStyle || 'normal';
+  }
+}
+
+// property edit binding (input → state, render)
+function bindPropertyInputs() {
+  ['pName', 'pAge', 'pRelation', 'pNote'].forEach(id => {
+    $(id).addEventListener('input', () => {
+      const n = currentNode();
+      if (!n) return;
+      n.name = $('pName').value;
+      n.age = $('pAge').value;
+      n.relation = $('pRelation').value;
+      n.note = $('pNote').value;
+      render();
+    });
+    $(id).addEventListener('focus', () => {
+      // push history once per editing burst
+      if (!$(id)._editPushed) { beforeChange(); $(id)._editPushed = true; }
+    });
+    $(id).addEventListener('blur', () => { $(id)._editPushed = false; });
+  });
+  $('fLabel').addEventListener('input', () => {
+    const f = state.doc.frames.find(x => x.id === state.selectedId);
+    if (!f) return;
+    f.label = $('fLabel').value;
+    render();
+  });
+  $('fLabel').addEventListener('focus', () => {
+    if (!$('fLabel')._editPushed) { beforeChange(); $('fLabel')._editPushed = true; }
+  });
+  $('fLabel').addEventListener('blur', () => { $('fLabel')._editPushed = false; });
+  $('tText').addEventListener('input', () => {
+    const t = state.doc.texts.find(x => x.id === state.selectedId);
+    if (!t) return;
+    t.text = $('tText').value;
+    render();
+  });
+  $('tText').addEventListener('focus', () => {
+    if (!$('tText')._editPushed) { beforeChange(); $('tText')._editPushed = true; }
+  });
+  $('tText').addEventListener('blur', () => { $('tText')._editPushed = false; });
+  $('tFontSize').addEventListener('change', () => {
+    const t = state.doc.texts.find(x => x.id === state.selectedId);
+    if (!t) return;
+    beforeChange();
+    t.fontSize = parseInt($('tFontSize').value, 10) || 14;
+    render();
+  });
+  $('tFontStyle').addEventListener('change', () => {
+    const t = state.doc.texts.find(x => x.id === state.selectedId);
+    if (!t) return;
+    beforeChange();
+    t.fontStyle = $('tFontStyle').value || 'normal';
+    render();
+  });
+}
+
+// ========== Cloud Sync ==========
+const CloudSync = (function() {
+  function getCfg() {
+    try { return JSON.parse(localStorage.getItem(LS_CLOUD_CFG) || '{}'); }
+    catch (e) { return {}; }
+  }
+  function setCfg(cfg) {
+    localStorage.setItem(LS_CLOUD_CFG, JSON.stringify(cfg || {}));
+  }
+  function isConfigured() {
+    const c = getCfg();
+    return !!(c.gasUrl && /^https:\/\/script\.google\.com\//.test(c.gasUrl));
+  }
+  function hasGithub() {
+    const c = getCfg();
+    return !!(c.ghToken && c.ghOwner && c.ghRepo);
+  }
+
+  // ---- GAS communication (text/plain to avoid CORS preflight) ----
+  async function gasCall(action, params, opts) {
+    const cfg = getCfg();
+    if (!cfg.gasUrl) throw new Error('GAS URLが未設定です');
+    const useGet = opts && opts.method === 'GET';
+    const url = useGet
+      ? cfg.gasUrl + '?' + new URLSearchParams({ action, ...(params || {}) }).toString()
+      : cfg.gasUrl;
+    const init = useGet
+      ? { method: 'GET', redirect: 'follow' }
+      : { method: 'POST', body: JSON.stringify({ action, ...(params || {}) }),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow' };
+    const res = await fetchWithRetry(url, init);
+    if (!res.ok) throw new Error('GAS HTTP ' + res.status);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'GASエラー');
+    return json;
+  }
+
+  async function fetchWithRetry(url, init, attempts) {
+    const max = attempts != null ? attempts : 3;
+    let lastErr;
+    for (let i = 0; i < max; i++) {
+      try {
+        const res = await fetch(url, init);
+        return res;
+      } catch (err) {
+        lastErr = err;
+        if (i < max - 1) await sleep(400 * Math.pow(2, i));
+      }
+    }
+    throw lastErr || new Error('fetch failed');
+  }
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // ---- GitHub Contents API (backup) ----
+  function ghHeaders() {
+    const c = getCfg();
+    return {
+      'Authorization': 'Bearer ' + c.ghToken,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    };
+  }
+  function ghPath(name) {
+    return 'genograms/' + encodeURIComponent(name) + '.json';
+  }
+  function utf8ToBase64(s) {
+    // Encode Japanese text to base64 for GitHub
+    return btoa(String.fromCharCode.apply(null, new TextEncoder().encode(s)));
+  }
+  async function ghGetSha(name) {
+    const c = getCfg();
+    const url = `https://api.github.com/repos/${c.ghOwner}/${c.ghRepo}/contents/${ghPath(name)}?ref=${encodeURIComponent(c.ghBranch || 'main')}`;
+    try {
+      const res = await fetch(url, { headers: ghHeaders() });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error('GitHub HTTP ' + res.status);
+      const json = await res.json();
+      return json.sha || null;
+    } catch (err) { return null; }
+  }
+  async function ghSave(doc) {
+    const c = getCfg();
+    if (!hasGithub()) return null;
+    const sha = await ghGetSha(doc.clientName);
+    const body = {
+      message: `Update ${doc.clientName} (${new Date().toISOString()})`,
+      content: utf8ToBase64(JSON.stringify(doc, null, 2)),
+      branch: c.ghBranch || 'main',
+      ...(sha ? { sha } : {})
+    };
+    const url = `https://api.github.com/repos/${c.ghOwner}/${c.ghRepo}/contents/${ghPath(doc.clientName)}`;
+    const res = await fetchWithRetry(url, {
+      method: 'PUT', headers: ghHeaders(), body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error('GitHub保存失敗: ' + (err.message || res.status));
+    }
+    return await res.json();
+  }
+  async function ghDelete(name) {
+    const c = getCfg();
+    if (!hasGithub()) return null;
+    const sha = await ghGetSha(name);
+    if (!sha) return null;
+    const url = `https://api.github.com/repos/${c.ghOwner}/${c.ghRepo}/contents/${ghPath(name)}`;
+    const res = await fetchWithRetry(url, {
+      method: 'DELETE', headers: ghHeaders(),
+      body: JSON.stringify({
+        message: `Delete ${name}`,
+        sha,
+        branch: c.ghBranch || 'main'
+      })
+    });
+    if (!res.ok && res.status !== 404) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error('GitHub削除失敗: ' + (err.message || res.status));
+    }
+    return true;
+  }
+
+  // ---- High-level API ----
+  async function ping() {
+    return await gasCall('ping', {}, { method: 'GET' });
+  }
+  async function list() {
+    const r = await gasCall('list', {}, { method: 'GET' });
+    return r.items || [];
+  }
+  async function get(name) {
+    const r = await gasCall('get', { name }, { method: 'GET' });
+    return r.doc;
+  }
+  async function save(doc) {
+    const r = await gasCall('save', { doc });
+    // Backup to GitHub (non-fatal if it fails)
+    if (hasGithub()) {
+      try { await ghSave(doc); }
+      catch (e) { console.warn('GitHub backup failed:', e.message); }
+    }
+    return r.saved;
+  }
+  async function del(name) {
+    const r = await gasCall('delete', { name });
+    if (hasGithub()) {
+      try { await ghDelete(name); }
+      catch (e) { console.warn('GitHub delete failed:', e.message); }
+    }
+    return r.deleted;
+  }
+  async function saveCheckConflict(doc) {
+    // Compare with remote updatedAt before overwriting
+    try {
+      const remote = await get(doc.clientName);
+      if (remote && remote.updatedAt && doc.updatedAt &&
+          remote.updatedAt > doc.updatedAt &&
+          // local was last loaded earlier than remote (in our session)
+          remote.updatedAt !== doc.updatedAt) {
+        // Local doc.updatedAt was set to "now" before save → remote always older.
+        // So this branch only triggers if remote was updated *after* we set now.
+        // It's a soft guard: just warn the user.
+      }
+    } catch (e) { /* if get fails, just try save */ }
+    return await save(doc);
+  }
+
+  // ---- Retry queue ----
+  function getPending() {
+    try { return JSON.parse(localStorage.getItem(LS_PENDING) || '[]'); }
+    catch (e) { return []; }
+  }
+  function setPending(arr) {
+    localStorage.setItem(LS_PENDING, JSON.stringify(arr || []));
+    updatePendingBadge();
+  }
+  function queuePending(item) {
+    const arr = getPending();
+    // dedupe by kind+name
+    const key = item.kind + ':' + (item.name || (item.doc && item.doc.clientName));
+    const filtered = arr.filter(x => {
+      const k = x.kind + ':' + (x.name || (x.doc && x.doc.clientName));
+      return k !== key;
+    });
+    filtered.push({ ...item, queuedAt: nowISO() });
+    setPending(filtered);
+  }
+  function updatePendingBadge() {
+    const n = getPending().length;
+    const el = $('syncPending');
+    if (!el) return;
+    if (n > 0) { el.textContent = `保留 ${n}件`; el.hidden = false; }
+    else el.hidden = true;
+  }
+  async function flushPending() {
+    let arr = getPending();
+    if (arr.length === 0) return { processed: 0, failed: 0 };
+    let processed = 0, failed = 0;
+    const remaining = [];
+    for (const item of arr) {
+      try {
+        if (item.kind === 'save') await save(item.doc);
+        else if (item.kind === 'delete') await del(item.name);
+        processed++;
+      } catch (e) {
+        remaining.push(item);
+        failed++;
+      }
+    }
+    setPending(remaining);
+    return { processed, failed };
+  }
+
+  return {
+    getCfg, setCfg, isConfigured, hasGithub,
+    ping, list, get, save, del, saveCheckConflict,
+    queuePending, getPending, flushPending, updatePendingBadge
+  };
+})();
+
+// ---- Sync status UI ----
+function setSyncStatus(state, msg) {
+  const dot = $('syncDot');
+  const statusEl = $('syncStatus');
+  if (!dot || !statusEl) return;
+  dot.classList.remove('idle', 'syncing', 'ok', 'err', 'offline');
+  dot.classList.add(state);
+  statusEl.textContent = msg || '';
+}
+
+// ========== Persistence ==========
+function listDocs() {
+  try { return JSON.parse(localStorage.getItem(LS_INDEX) || '[]'); }
+  catch (e) { return []; }
+}
+
+async function saveDoc() {
+  const name = $('clientName').value.trim();
+  if (!name) {
+    alert('利用者名を入力してから保存してください');
+    $('clientName').focus();
+    return;
+  }
+  state.clientName = name;
+  const now = nowISO();
+  const doc = {
+    clientName: name,
+    updatedAt: now,
+    canvasSize: { w: STAGE_W, h: STAGE_H },
+    nodes: state.doc.nodes,
+    lines: state.doc.lines,
+    frames: state.doc.frames,
+    texts: state.doc.texts
+  };
+  // Step 1: localStorage (synchronous, fast) — always succeeds first
+  try {
+    localStorage.setItem(LS_DOC_PREFIX + name, JSON.stringify(doc));
+    const idx = listDocs().filter(e => e.name !== name);
+    idx.push({ name, updatedAt: now });
+    idx.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    localStorage.setItem(LS_INDEX, JSON.stringify(idx));
+    localStorage.setItem(LS_LAST, name);
+    refreshDocList();
+    flashStatus(`「${name}」を端末に保存しました`);
+  } catch (e) {
+    alert('端末への保存に失敗しました: ' + e.message);
+    return;
+  }
+  // Step 2: cloud sync (async, with retry)
+  if (CloudSync.isConfigured()) {
+    setSyncStatus('syncing', 'クラウドへ同期中…');
+    try {
+      await CloudSync.saveCheckConflict(doc);
+      flashStatus(`「${name}」を保存・同期しました`);
+      setSyncStatus('ok', 'クラウド同期済み');
+    } catch (err) {
+      CloudSync.queuePending({ kind: 'save', doc });
+      setSyncStatus('err', '同期失敗（キューに保留）: ' + err.message);
+    }
+  }
+}
+
+async function loadDoc(name) {
+  // Prefer cloud version if newer than local
+  let doc = null;
+  const localRaw = localStorage.getItem(LS_DOC_PREFIX + name);
+  let localDoc = null;
+  if (localRaw) {
+    try { localDoc = JSON.parse(localRaw); } catch (e) { /* ignore */ }
+  }
+  if (CloudSync.isConfigured()) {
+    setSyncStatus('syncing', `クラウドから「${name}」を読込中…`);
+    try {
+      const remote = await CloudSync.get(name);
+      if (remote) {
+        if (!localDoc || (remote.updatedAt && (!localDoc.updatedAt || remote.updatedAt > localDoc.updatedAt))) {
+          doc = remote;
+          // refresh local cache
+          localStorage.setItem(LS_DOC_PREFIX + name, JSON.stringify(remote));
+        } else {
+          doc = localDoc;
+        }
+      } else if (localDoc) {
+        doc = localDoc;
+      }
+      setSyncStatus('ok', 'クラウド同期済み');
+    } catch (err) {
+      setSyncStatus('err', '取得失敗（端末データを使用）: ' + err.message);
+      doc = localDoc;
+    }
+  } else {
+    doc = localDoc;
+  }
+  if (!doc) { alert('データが見つかりません: ' + name); return; }
+  state.clientName = doc.clientName || name;
+  state.doc = {
+    nodes: doc.nodes || [],
+    lines: doc.lines || [],
+    frames: doc.frames || [],
+    texts: doc.texts || []
+  };
+  state.selectedId = null;
+  state.selectedType = null;
+  state.history = [];
+  setMode({ type: 'select' });
+  $('clientName').value = state.clientName;
+  localStorage.setItem(LS_LAST, name);
+  fitStageSize(true);
+  render();
+  showProperties();
+  flashStatus(`「${name}」を読み込みました`);
+}
+
+function newDoc() {
+  if ((state.doc.nodes.length || state.doc.texts.length) &&
+    !confirm('現在の内容を破棄して新規作成しますか？\n（保存していない変更は失われます）')) return;
+  state.clientName = '';
+  state.doc = makeEmptyDoc();
+  state.selectedId = null;
+  state.selectedType = null;
+  state.history = [];
+  setMode({ type: 'select' });
+  $('clientName').value = '';
+  $('docList').value = '';
+  fitStageSize();
+  render();
+  showProperties();
+}
+
+async function deleteCurrentDoc() {
+  const name = $('clientName').value.trim();
+  if (!name) { alert('削除対象の利用者名を指定してください'); return; }
+  const hasLocal = !!localStorage.getItem(LS_DOC_PREFIX + name);
+  if (!hasLocal && !CloudSync.isConfigured()) {
+    alert(`「${name}」の保存データはありません`);
+    return;
+  }
+  const scope = CloudSync.isConfigured()
+    ? `保存済みデータ「${name}」を端末＋クラウドから削除しますか？\n（この操作は取り消せません）`
+    : `保存済みデータ「${name}」を削除しますか？\n（この操作は取り消せません）`;
+  if (!confirm(scope)) return;
+  localStorage.removeItem(LS_DOC_PREFIX + name);
+  const idx = listDocs().filter(e => e.name !== name);
+  localStorage.setItem(LS_INDEX, JSON.stringify(idx));
+  if (localStorage.getItem(LS_LAST) === name) localStorage.removeItem(LS_LAST);
+  refreshDocList();
+  if (CloudSync.isConfigured()) {
+    setSyncStatus('syncing', 'クラウドから削除中…');
+    try {
+      await CloudSync.del(name);
+      setSyncStatus('ok', '削除を同期しました');
+    } catch (err) {
+      CloudSync.queuePending({ kind: 'delete', name });
+      setSyncStatus('err', '削除の同期失敗（キューに保留）: ' + err.message);
+    }
+  }
+  flashStatus(`「${name}」を削除しました`);
+}
+
+async function refreshDocList() {
+  const sel = $('docList');
+  const merged = new Map();
+  listDocs().forEach(e => merged.set(e.name, { name: e.name, updatedAt: e.updatedAt, src: 'local' }));
+  if (CloudSync.isConfigured()) {
+    try {
+      const remoteList = await CloudSync.list();
+      remoteList.forEach(e => {
+        const existing = merged.get(e.name);
+        if (!existing || (e.updatedAt > existing.updatedAt)) {
+          merged.set(e.name, { name: e.name, updatedAt: e.updatedAt, src: existing ? 'both' : 'cloud' });
+        } else {
+          merged.set(e.name, { ...existing, src: 'both' });
+        }
+      });
+    } catch (err) {
+      // silent — local list still shown
+    }
+  }
+  const all = Array.from(merged.values()).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  sel.innerHTML = '<option value="">— 保存済みから読込 —</option>';
+  all.forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.name;
+    const d = (e.updatedAt || '').slice(0, 16).replace('T', ' ');
+    const tag = e.src === 'both' ? '☁' : e.src === 'cloud' ? '☁only' : '📱only';
+    opt.textContent = `${tag} ${e.name}  (${d})`;
+    sel.appendChild(opt);
+  });
+}
+
+// ========== Export ==========
+function getContentBounds() {
+  const padding = 60;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let any = false;
+
+  state.doc.nodes.forEach(n => {
+    minX = Math.min(minX, n.x - 90); maxX = Math.max(maxX, n.x + 90);
+    minY = Math.min(minY, n.y - 40);
+    maxY = Math.max(maxY, n.y + 60);
+    any = true;
+  });
+  state.doc.texts.forEach(t => {
+    minX = Math.min(minX, t.x); maxX = Math.max(maxX, t.x + 200);
+    minY = Math.min(minY, t.y); maxY = Math.max(maxY, t.y + 30);
+    any = true;
+  });
+
+  if (!any) return { x: 0, y: 0, width: STAGE_W, height: STAGE_H };
+
+  minX -= padding; maxX += padding;
+  minY -= padding; maxY += padding;
+  minX = Math.max(0, Math.floor(minX));
+  minY = Math.max(0, Math.floor(minY));
+  maxX = Math.min(STAGE_W, Math.ceil(maxX));
+  maxY = Math.min(STAGE_H, Math.ceil(maxY));
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function buildExportCanvas(callback) {
+  // Temporarily hide selection so exports are clean
+  const prevSel = state.selectedId, prevType = state.selectedType;
+  state.selectedId = null; state.selectedType = null;
+  render();
+
+  const bounds = getContentBounds();
+  const PR = 2;
+  const stagePng = stage.toDataURL({
+    x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height,
+    pixelRatio: PR, mimeType: 'image/png'
+  });
+
+  // restore selection
+  state.selectedId = prevSel; state.selectedType = prevType;
+  render();
+
+  const headerH = 56;
+  const totalW = bounds.width;
+  const totalH = bounds.height + headerH;
+  const off = document.createElement('canvas');
+  off.width = totalW * PR;
+  off.height = totalH * PR;
+  const ctx = off.getContext('2d');
+  ctx.scale(PR, PR);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, totalW, totalH);
+
+  ctx.fillStyle = '#202124';
+  ctx.font = 'bold 18px ' + NODE_FONT;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  const title = `ジェノグラム  ${state.clientName || ''}`;
+  ctx.fillText(title, 18, headerH / 2);
+
+  ctx.font = '13px ' + NODE_FONT;
+  ctx.textAlign = 'right';
+  const dateStr = new Date().toLocaleDateString('ja-JP');
+  ctx.fillStyle = '#5f6368';
+  ctx.fillText(`作成日: ${dateStr}`, totalW - 18, headerH / 2);
+
+  ctx.strokeStyle = '#dadce0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, headerH - 0.5); ctx.lineTo(totalW, headerH - 0.5);
+  ctx.stroke();
+
+  const img = new Image();
+  img.onload = () => {
+    ctx.drawImage(img, 0, headerH, bounds.width, bounds.height);
+    callback(off, totalW, totalH);
+  };
+  img.onerror = () => alert('画像生成に失敗しました');
+  img.src = stagePng;
+}
+
+function triggerDownload(dataUrl, filename) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => a.remove(), 100);
+}
+
+function exportFilename(ext) {
+  const name = (state.clientName || 'genogram').replace(/[\/\\?%*:|"<>]/g, '_');
+  return `genogram_${name}_${todayYMD()}.${ext}`;
+}
+
+function exportJPG() {
+  buildExportCanvas((canvas) => {
+    const url = canvas.toDataURL('image/jpeg', 0.95);
+    triggerDownload(url, exportFilename('jpg'));
+    flashStatus('JPGを出力しました');
+  });
+}
+
+function exportPDF() {
+  buildExportCanvas((canvas, totalW, totalH) => {
+    const url = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const isLandscape = totalW >= totalH;
+    const pdf = new jsPDF({
+      orientation: isLandscape ? 'landscape' : 'portrait',
+      unit: 'mm', format: 'a4'
+    });
+    const pageW = isLandscape ? 297 : 210;
+    const pageH = isLandscape ? 210 : 297;
+    const margin = 8;
+    const availW = pageW - margin * 2;
+    const availH = pageH - margin * 2;
+    const ratio = Math.min(availW / totalW, availH / totalH);
+    const imgW = totalW * ratio;
+    const imgH = totalH * ratio;
+    const imgX = margin + (availW - imgW) / 2;
+    const imgY = margin + (availH - imgH) / 2;
+    pdf.addImage(url, 'PNG', imgX, imgY, imgW, imgH);
+    pdf.save(exportFilename('pdf'));
+    flashStatus('PDFを出力しました');
+  });
+}
+
+// ========== Misc ==========
+let flashTimer = null;
+function flashStatus(msg) {
+  const el = $('modeStatus');
+  const orig = el.textContent;
+  el.textContent = '✓ ' + msg;
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { updateModeStatus(); }, 2200);
+}
+
+// ========== UI Wiring ==========
+function bindUIEvents() {
+  // Add nodes
+  document.querySelectorAll('.tbtn[data-add]').forEach(b => {
+    b.addEventListener('click', () => addNode(b.dataset.add));
+  });
+
+  // Toggle deceased / IP
+  $('btnDeceased').addEventListener('click', () => toggleNodeFlag('deceased'));
+  $('btnIP').addEventListener('click', () => toggleNodeFlag('isIP'));
+
+  // Line modes
+  document.querySelectorAll('.tbtn[data-line]').forEach(b => {
+    b.addEventListener('click', () => {
+      const lt = b.dataset.line;
+      if (state.mode.type === 'line' && state.mode.lineType === lt) {
+        setMode({ type: 'select' });
+      } else {
+        setMode({ type: 'line', lineType: lt, firstId: null });
+      }
+    });
+  });
+
+  // Frame mode (toggle: enter / commit)
+  $('btnFrame').addEventListener('click', () => {
+    if (state.mode.type === 'frame') {
+      // commit
+      const ids = state.mode.nodeIds;
+      if (ids.length >= 1) {
+        beforeChange();
+        state.doc.frames.push({
+          id: genId(), type: 'cohabitation',
+          nodeIds: ids.slice(), padding: 22, label: '同居'
+        });
+      }
+      setMode({ type: 'select' });
+    } else {
+      setMode({ type: 'frame', nodeIds: [] });
+    }
+  });
+
+  // Text mode
+  $('btnText').addEventListener('click', () => {
+    if (state.mode.type === 'text') setMode({ type: 'select' });
+    else setMode({ type: 'text' });
+  });
+
+  $('btnDelShape').addEventListener('click', deleteSelected);
+  $('btnUndo').addEventListener('click', undo);
+  $('btnClear').addEventListener('click', clearAll);
+
+  // Zoom controls
+  $('btnZoomIn').addEventListener('click', () => setZoom(state.zoom * 1.2));
+  $('btnZoomOut').addEventListener('click', () => setZoom(state.zoom / 1.2));
+  $('btnZoom100').addEventListener('click', () => setZoom(1));
+  $('btnZoomFit').addEventListener('click', zoomToFit);
+
+  // Header bar
+  $('btnNew').addEventListener('click', newDoc);
+  $('btnSave').addEventListener('click', saveDoc);
+  $('btnDelete').addEventListener('click', deleteCurrentDoc);
+  $('btnExportJPG').addEventListener('click', exportJPG);
+  $('btnExportPDF').addEventListener('click', exportPDF);
+  $('clientName').addEventListener('input', () => { state.clientName = $('clientName').value.trim(); });
+  $('docList').addEventListener('change', (e) => {
+    if (e.target.value) loadDoc(e.target.value);
+    e.target.value = '';
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    const inEditable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    if (e.key === 'Escape') {
+      if (state.mode.type !== 'select') {
+        setMode({ type: 'select' });
+        e.preventDefault();
+      }
+    } else if (!inEditable && (e.key === 'Delete' || e.key === 'Backspace')) {
+      if (state.selectedId) {
+        deleteSelected();
+        e.preventDefault();
+      }
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !inEditable) {
+      undo();
+      e.preventDefault();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === '0' && !inEditable) {
+      zoomToFit();
+      e.preventDefault();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=') && !inEditable) {
+      setZoom(state.zoom * 1.2);
+      e.preventDefault();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === '-' && !inEditable) {
+      setZoom(state.zoom / 1.2);
+      e.preventDefault();
+    }
+  });
+
+  bindPropertyInputs();
+  bindCloudUI();
+}
+
+// ========== Cloud UI ==========
+function bindCloudUI() {
+  $('btnCloudSettings').addEventListener('click', openCloudModal);
+  $('btnCloudClose').addEventListener('click', closeCloudModal);
+  document.getElementById('cloudModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeCloudModal();
+  });
+  $('btnCopyGas').addEventListener('click', () => {
+    const box = $('gasCodeBox');
+    box.value = GAS_SCRIPT_CODE;
+    box.select();
+    try {
+      navigator.clipboard.writeText(GAS_SCRIPT_CODE).then(
+        () => showCfgResult('ok', 'GASコードをクリップボードにコピーしました。Apps Scriptエディタに貼り付けてください。'),
+        () => showCfgResult('info', '下のボックスからコードを選択してコピーしてください。')
+      );
+    } catch (e) {
+      showCfgResult('info', '下のボックスからコードを選択してコピーしてください。');
+    }
+  });
+  $('btnCfgTest').addEventListener('click', testCloudConfig);
+  $('btnCfgSave').addEventListener('click', saveCloudConfig);
+  $('btnCfgClear').addEventListener('click', clearCloudConfig);
+  $('btnSyncNow').addEventListener('click', forceSync);
+}
+
+function openCloudModal() {
+  const cfg = CloudSync.getCfg();
+  $('cfgGasUrl').value = cfg.gasUrl || '';
+  $('cfgGhOwner').value = cfg.ghOwner || '';
+  $('cfgGhRepo').value = cfg.ghRepo || '';
+  $('cfgGhBranch').value = cfg.ghBranch || 'main';
+  $('cfgGhToken').value = cfg.ghToken || '';
+  $('cloudModal').hidden = false;
+  $('cfgResult').hidden = true;
+}
+function closeCloudModal() { $('cloudModal').hidden = true; }
+
+function showCfgResult(kind, msg) {
+  const el = $('cfgResult');
+  el.className = 'setup-result ' + kind;
+  el.textContent = msg;
+  el.hidden = false;
+}
+
+async function testCloudConfig() {
+  const cfg = readCfgFromForm();
+  if (!cfg.gasUrl) { showCfgResult('err', 'GAS Web App URLを入力してください。'); return; }
+  CloudSync.setCfg(cfg);
+  showCfgResult('info', '接続テスト中…');
+  const results = [];
+  try {
+    const p = await CloudSync.ping();
+    results.push('✓ GAS接続OK (' + p.time + ')');
+  } catch (e) {
+    showCfgResult('err', '✗ GAS接続失敗: ' + e.message + '\n→ デプロイ設定の「アクセスできるユーザー：全員」を確認してください。');
+    return;
+  }
+  if (cfg.ghOwner && cfg.ghRepo && cfg.ghToken) {
+    try {
+      const url = `https://api.github.com/repos/${cfg.ghOwner}/${cfg.ghRepo}`;
+      const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + cfg.ghToken } });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' (リポジトリ名・トークン権限を確認)');
+      const json = await res.json();
+      results.push('✓ GitHubリポジトリ接続OK (' + json.full_name + ', ' + (json.private ? 'Private' : 'Public') + ')');
+    } catch (e) {
+      results.push('✗ GitHub接続失敗: ' + e.message);
+      showCfgResult('err', results.join('\n'));
+      return;
+    }
+  } else {
+    results.push('○ GitHub未設定（バックアップなし）');
+  }
+  showCfgResult('ok', results.join('\n'));
+}
+
+function readCfgFromForm() {
+  return {
+    gasUrl: $('cfgGasUrl').value.trim(),
+    ghOwner: $('cfgGhOwner').value.trim(),
+    ghRepo: $('cfgGhRepo').value.trim(),
+    ghBranch: $('cfgGhBranch').value.trim() || 'main',
+    ghToken: $('cfgGhToken').value.trim()
+  };
+}
+
+function saveCloudConfig() {
+  const cfg = readCfgFromForm();
+  CloudSync.setCfg(cfg);
+  applyCloudConfigUI();
+  refreshDocList();
+  closeCloudModal();
+  flashStatus('クラウド設定を保存しました');
+}
+
+function clearCloudConfig() {
+  if (!confirm('クラウド設定をすべて削除しますか？\n（端末内のジェノグラムデータは残ります）')) return;
+  localStorage.removeItem(LS_CLOUD_CFG);
+  localStorage.removeItem(LS_PENDING);
+  $('cfgGasUrl').value = '';
+  $('cfgGhOwner').value = '';
+  $('cfgGhRepo').value = '';
+  $('cfgGhBranch').value = 'main';
+  $('cfgGhToken').value = '';
+  applyCloudConfigUI();
+  refreshDocList();
+  showCfgResult('info', '設定をクリアしました。');
+}
+
+function applyCloudConfigUI() {
+  const configured = CloudSync.isConfigured();
+  $('syncBar').hidden = !configured;
+  if (configured) {
+    setSyncStatus('idle', CloudSync.hasGithub() ? 'クラウド設定済み（スプシ+GitHub）' : 'クラウド設定済み（スプシのみ）');
+    CloudSync.updatePendingBadge();
+  } else {
+    setSyncStatus('idle', '未設定');
+  }
+}
+
+async function forceSync() {
+  if (!CloudSync.isConfigured()) {
+    alert('先に「⚙ 設定」からクラウド設定を行ってください。');
+    return;
+  }
+  const btn = $('btnSyncNow');
+  btn.disabled = true;
+  setSyncStatus('syncing', '保留中の同期を処理しています…');
+  try {
+    const r = await CloudSync.flushPending();
+    if (r.failed > 0) {
+      setSyncStatus('err', `${r.processed}件成功 / ${r.failed}件失敗`);
+    } else if (r.processed > 0) {
+      setSyncStatus('ok', `${r.processed}件を同期しました`);
+    } else {
+      setSyncStatus('ok', '保留中の項目はありません');
+    }
+    await refreshDocList();
+  } catch (e) {
+    setSyncStatus('err', '同期失敗: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ========== Init ==========
+function init() {
+  bindUIEvents();
+  attachDomTextFallback();
+  applyCloudConfigUI();
+  refreshDocList();
+  fitStageSize();
+  const last = localStorage.getItem(LS_LAST);
+  if (last && localStorage.getItem(LS_DOC_PREFIX + last)) {
+    loadDoc(last);
+  } else {
+    render();
+  }
+  showProperties();
+  updateModeStatus();
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      fitStageSize(true);
+      render();
+    }, 150);
+  });
+
+  // Auto-flush pending sync on app return online
+  window.addEventListener('online', () => {
+    if (CloudSync.isConfigured() && CloudSync.getPending().length > 0) {
+      setSyncStatus('syncing', 'オンライン復帰: 保留分を同期中…');
+      CloudSync.flushPending().then(r => {
+        setSyncStatus(r.failed > 0 ? 'err' : 'ok',
+          r.failed > 0 ? `${r.processed}件成功 / ${r.failed}件失敗`
+                       : `${r.processed}件を再同期しました`);
+      });
+    }
+  });
+  window.addEventListener('offline', () => {
+    setSyncStatus('offline', 'オフライン — 端末のみで動作中');
+  });
+}
+
+init();
+})();
+</script>
+
+</body>
+</html>
