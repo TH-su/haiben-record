@@ -123,6 +123,8 @@ input,select,textarea{font-family:inherit; font-size:15px}
   .sheet{border:2px solid #000; page-break-inside:avoid}
   .sheet .sec{border-top:1px solid #000}
   .cell{border-color:#999}
+  .geno-box{border:none !important; cursor:default !important}
+  .geno-hint{display:none !important}
   @page{size:A4; margin:10mm}
 }
 .loading{text-align:center; color:var(--g5); padding:30px}
@@ -242,6 +244,19 @@ var CFG={url:'', token:''};
 var DEVICE_KEY='su_device_role';
 function getDeviceRole(){try{return localStorage.getItem(DEVICE_KEY)||'office'}catch(e){return'office'}}
 function setDeviceRole(v){try{localStorage.setItem(DEVICE_KEY,v)}catch(e){}}
+
+/* ── ジェノグラム（家系図）連携 ──
+   家系図アプリが保存した画像を同一オリジンの共有キー su_genograms（{[masterId]:{image,updatedAt}}）
+   から読み、マスタの表示欄に出す。欄クリックで家系図アプリ（resident=masterId 付き）へ遷移し作成/編集。 */
+var SU_GENO_KEY='su_genograms';
+var GENOGRAM_APP='genogram.html'; // 家系図アプリのパス（用意でき次第ここを合わせる）
+function getGenogram(id){
+  try{var raw=localStorage.getItem(SU_GENO_KEY);if(!raw)return null;var m=JSON.parse(raw);var g=m&&m[String(id)];return(g&&g.image)?g.image:null}catch(e){return null}
+}
+function openGenogram(id,name){
+  if(id==null)return;
+  location.href=GENOGRAM_APP+'?resident='+encodeURIComponent(id)+(name?'&name='+encodeURIComponent(name):'');
+}
 
 /* ── ユーティリティ ── */
 function $(id){return document.getElementById(id)}
@@ -426,17 +441,32 @@ function renderView(r){
     '<div class="cell" style="border-right:none"><span class="lab">入居前状況</span><div class="fulltext">'+esc(r.preAdmission||'　')+'</div></div>'+
     '<div class="cell" style="border-right:none;border-bottom:none"><span class="lab">退去後状況（行き先等）</span><div class="fulltext">'+esc(r.postDischarge||'　')+'</div></div></div></div>';
   // 家族情報
-  h+='<div class="sec"><div class="sec-lbl">家族情報</div><div class="sec-body"><div class="row-cells">'+
-    '<div class="cell" style="flex:1.2"><span class="lab">ご家族氏名</span><div class="fulltext">'+esc(famName||'　')+'</div></div>'+
-    '<div class="cell" style="flex:1.5"><span class="lab">住所</span><div class="fulltext">'+esc(famAddr||'　')+'</div></div>'+
-    '<div class="cell"><span class="lab">電話番号</span><div class="fulltext">'+esc(famTel||'　')+'</div></div>'+
-    '<div class="cell" style="border-right:none"><span class="lab">緊急連絡先</span><div class="fulltext">'+esc(emg||'　')+'</div></div>'+
-  '</div></div></div>';
-  // 事業所
-  h+='<div class="sec"><div class="sec-lbl">事業所</div><div class="sec-body">'+
-    '<div class="row-cells">'+cell('居宅介護支援事業所',r.careOffice)+cell('介護支援専門員',r.careManager)+cell('電話番号',r.careOfficeTel)+cell('FAX番号',r.careOfficeFax)+'</div>'+
-    '<div class="row-cells">'+cell('福祉用具',r.welfareEquip)+cell('担当者',r.welfareEquipStaff)+cell('電話番号',r.welfareEquipTel)+'<div class="cell" style="flex:1;border-right:none"><span class="lab">生活リズム</span><div class="rhythm">'+(rh||'　')+'</div></div></div>'+
-  '</div></div>';
+  // 家族情報＋事業所（左 2/3）と ジェノグラム欄（右 1/3）を横並び
+  var genoImg=getGenogram(r.id);
+  var genoInner=genoImg
+    ? '<img src="'+esc(genoImg)+'" alt="ジェノグラム" style="max-width:100%;max-height:100%;object-fit:contain">'
+    : '<div class="geno-hint" style="text-align:center;color:var(--g6);font-size:13px;padding:10px"><div style="font-size:40px;line-height:1.1">🧬</div>クリックして<br>ジェノグラムを作成<br><span style="font-size:11px">（家系図アプリへ）</span></div>';
+  h+='<div style="display:flex;align-items:stretch;border-top:1px solid var(--g9)">'+
+    // 左 2/3：家族情報＋事業所
+    '<div style="flex:2;min-width:0;display:flex;flex-direction:column">'+
+      // 家族情報（行内境界は row 側で付与するため border-top なし）
+      '<div style="display:flex;flex:0 0 auto"><div class="sec-lbl">家族情報</div><div class="sec-body"><div class="row-cells">'+
+        '<div class="cell" style="flex:1.2"><span class="lab">ご家族氏名</span><div class="fulltext">'+esc(famName||'　')+'</div></div>'+
+        '<div class="cell" style="flex:1.5"><span class="lab">住所</span><div class="fulltext">'+esc(famAddr||'　')+'</div></div>'+
+        '<div class="cell"><span class="lab">電話番号</span><div class="fulltext">'+esc(famTel||'　')+'</div></div>'+
+        '<div class="cell" style="border-right:none"><span class="lab">緊急連絡先</span><div class="fulltext">'+esc(emg||'　')+'</div></div>'+
+      '</div></div></div>'+
+      // 事業所
+      '<div style="display:flex;flex:1;border-top:1px solid var(--g9)"><div class="sec-lbl">事業所</div><div class="sec-body">'+
+        '<div class="row-cells">'+cell('居宅介護支援事業所',r.careOffice)+cell('介護支援専門員',r.careManager)+cell('電話番号',r.careOfficeTel)+cell('FAX番号',r.careOfficeFax)+'</div>'+
+        '<div class="row-cells">'+cell('福祉用具',r.welfareEquip)+cell('担当者',r.welfareEquipStaff)+cell('電話番号',r.welfareEquipTel)+'<div class="cell" style="flex:1;border-right:none"><span class="lab">生活リズム</span><div class="rhythm">'+(rh||'　')+'</div></div></div>'+
+      '</div></div>'+
+    '</div>'+
+    // 右 1/3：ジェノグラム（クリックで作成／家系図アプリへ）
+    '<div style="flex:1;min-width:0;display:flex;border-left:1px solid var(--g9)"><div class="sec-lbl">家系図</div><div class="sec-body" style="display:flex;padding:6px">'+
+      '<div class="geno-box" data-geno="'+esc(r.id)+'" data-name="'+esc(r.name||'')+'" title="クリックでジェノグラム作成／編集" style="flex:1;min-height:300px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--g0);border:1px dashed var(--g3);border-radius:8px;overflow:hidden">'+genoInner+'</div>'+
+    '</div></div>'+
+  '</div>';
   // 医療情報
   h+='<div class="sec"><div class="sec-lbl">医療情報</div><div class="sec-body">'+
     '<div class="row-cells">'+cell('かかりつけ病院',r.hospital)+cell('主治医',r.doctor)+cell('電話番号',r.hospitalTel)+cell('FAX番号',r.hospitalFax)+'</div>'+
@@ -476,6 +506,9 @@ function renderView(r){
   h+='<div class="sec"><div class="sec-lbl">対象</div><div class="sec-body"><div class="cell" style="border-right:none;border-bottom:none"><span class="lab">対象アプリ</span><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">'+tBadges+'</div></div></div></div>';
   h+='</div>';
   $('viewBox').innerHTML=h;
+  // ジェノグラム欄クリック → 家系図アプリで作成/編集
+  var gb=$('viewBox').querySelector('.geno-box');
+  if(gb)gb.addEventListener('click',function(){openGenogram(this.getAttribute('data-geno'),this.getAttribute('data-name'))});
 }
 
 /* ═══════════ 編集フォーム ═══════════ */
