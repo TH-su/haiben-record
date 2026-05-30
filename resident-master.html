@@ -264,7 +264,9 @@ var SECTIONS={
   family:['family'],
   office:['careOffice','careManager','careOfficeTel','careOfficeFax','welfareEquip','welfareEquipStaff','welfareEquipTel','rhythm'],
   medical:['hospital','doctor','hospitalTel','hospitalFax','emergencyHospital','pharmacy','pharmacyTel','pharmacyFax',
-           'allergy','currentDiseases','sideEffects','pastHistory','medsRegular','medsNotes','problemBehavior']
+           'allergy','currentDiseases','sideEffects','pastHistory','medsRegular','medsNotes','problemBehavior'],
+  meal:['mealStaple','mealSide','mealNote'],
+  support:['supportLog']
 };
 // 対象アプリ（各ケアアプリに表示・記録する対象者かのフラグ）
 // 既定は全てON（介護現場では対象者の取りこぼしを避けるため。対象外を明示的に外す運用）
@@ -276,7 +278,8 @@ var ALLOWED_KEYS=['id','name','kana','room','gender','careLevel','active','updat
   'preAdmission','postDischarge','family','careOffice','careManager','careOfficeTel','careOfficeFax',
   'welfareEquip','welfareEquipStaff','welfareEquipTel','rhythm',
   'hospital','doctor','hospitalTel','hospitalFax','emergencyHospital','pharmacy','pharmacyTel','pharmacyFax',
-  'allergy','currentDiseases','sideEffects','pastHistory','medsRegular','medsNotes','problemBehavior','xref'];
+  'allergy','currentDiseases','sideEffects','pastHistory','medsRegular','medsNotes','problemBehavior',
+  'mealStaple','mealSide','mealNote','supportLog','xref'];
 var RHYTHM_KEYS=[['wake','起床'],['breakfast','朝食'],['lunch','昼食'],['snack','おやつ'],['dinner','夕食'],['sleep','就寝']];
 
 /* ═══════════ API（トークン付き・タイムアウト・エラー処理） ═══════════ */
@@ -452,6 +455,18 @@ function renderView(r){
       '<div class="cell" style="border-right:none"><span class="lab">■問題行動 等■</span><div class="fulltext">'+esc(r.problemBehavior||'　')+'</div></div>'+
     '</div>'+
   '</div></div>';
+  // 食事
+  h+='<div class="sec"><div class="sec-lbl">食事</div><div class="sec-body"><div class="row-cells">'+
+    cell('主食',r.mealStaple)+cell('副食',r.mealSide)+
+    '<div class="cell" style="flex:2;border-right:none"><span class="lab">備考</span><div class="fulltext">'+esc(r.mealNote||'　')+'</div></div>'+
+  '</div></div></div>';
+  // 支援経過（新しい順）
+  var slog=Array.isArray(r.supportLog)?r.supportLog.slice():[];
+  slog.sort(function(a,b){return String((b&&b.date)||'').localeCompare(String((a&&a.date)||''))});
+  var slogHtml=slog.length?slog.map(function(s){
+    return'<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px dotted var(--g3)"><span style="flex-shrink:0;font-weight:700;color:var(--pri-d);min-width:92px">'+esc(fmtJDate(s.date)||s.date||'')+'</span><span style="flex:1;white-space:pre-wrap;word-break:break-word">'+esc(s.text||'')+'</span></div>';
+  }).join(''):'<span style="color:var(--g5)">　</span>';
+  h+='<div class="sec"><div class="sec-lbl">支援経過</div><div class="sec-body"><div class="cell" style="border-right:none;border-bottom:none">'+slogHtml+'</div></div></div>';
   // 対象アプリ
   var tApps=Array.isArray(r.targetApps)?r.targetApps:null;
   var tBadges=APP_TARGETS.map(function(p){
@@ -480,6 +495,7 @@ function openEdit(rec){
   editing=rec?JSON.parse(JSON.stringify(rec)):{id:null,active:true,family:[],rhythm:{}};
   if(!Array.isArray(editing.family))editing.family=[];
   if(!editing.rhythm)editing.rhythm={};
+  if(!Array.isArray(editing.supportLog))editing.supportLog=[];
   var r=editing;
   var levels=['','要支援1','要支援2','要介護1','要介護2','要介護3','要介護4','要介護5','自立'];
   var h='';
@@ -535,10 +551,42 @@ function openEdit(rec){
     fld('problemBehavior','問題行動 等',r.problemBehavior,'textarea')+
   '</div></div>';
 
+  // 食事（食事形態）
+  h+='<div class="cd"><div class="fgroup"><h3>食事</h3><div class="fgrid">'+
+    fld('mealStaple','主食',r.mealStaple)+fld('mealSide','副食',r.mealSide)+
+  '</div>'+fld('mealNote','備考',r.mealNote,'textarea')+'</div></div>';
+
+  // 支援経過（日付付きの時系列記録）
+  h+='<div class="cd"><div class="fgroup"><h3>支援経過</h3><div id="supportList"></div>'+
+    '<button class="btn btn-sec" id="supportAdd" type="button">＋ 経過を追加</button></div></div>';
+
   $('editBox').innerHTML=h;
   renderFamRows();
+  renderSupportRows();
   $('famAdd').addEventListener('click',function(){editing.family.push({name:'',relation:'',role:'',address:'',phone:'',emergency:false});collectFam();renderFamRows()});
+  $('supportAdd').addEventListener('click',function(){collectSupport();editing.supportLog.unshift({date:todayISO(),text:''});renderSupportRows()});
   showScreen('edit');
+}
+function renderSupportRows(){
+  var box=$('supportList');var h='';
+  editing.supportLog.forEach(function(s,i){
+    h+='<div class="fam-row" data-si="'+i+'" style="grid-template-columns:160px 1fr">'+
+      '<div class="fld"><label>日付</label><input data-sk="date" type="date" value="'+esc(s.date||'')+'"></div>'+
+      '<div class="fld"><label>内容</label><textarea data-sk="text" style="min-height:56px">'+esc(s.text||'')+'</textarea></div>'+
+      '<button class="fam-del" type="button" data-sdel="'+i+'" style="grid-column:1/-1">削除</button>'+
+    '</div>';
+  });
+  box.innerHTML=h;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-sdel]'),function(b){b.addEventListener('click',function(){collectSupport();editing.supportLog.splice(parseInt(this.getAttribute('data-sdel')),1);renderSupportRows()})});
+}
+function collectSupport(){
+  var box=$('supportList');if(!box)return;
+  Array.prototype.forEach.call(box.querySelectorAll('.fam-row'),function(row){
+    var i=parseInt(row.getAttribute('data-si'));if(isNaN(i)||!editing.supportLog[i])return;
+    Array.prototype.forEach.call(row.querySelectorAll('[data-sk]'),function(inp){
+      editing.supportLog[i][inp.getAttribute('data-sk')]=inp.value.trim?inp.value.trim():inp.value;
+    });
+  });
 }
 function renderFamRows(){
   var box=$('famList');var h='';
@@ -579,6 +627,8 @@ function collectForm(){
   Array.prototype.forEach.call($('editBox').querySelectorAll('[data-target]'),function(inp){if(inp.checked)rec.targetApps.push(inp.getAttribute('data-target'))});
   collectFam();
   rec.family=editing.family.filter(function(f){return f.name||f.phone||f.address});
+  collectSupport();
+  rec.supportLog=editing.supportLog.filter(function(s){return s&&(s.date||s.text)});
   rec.id=editing.id;
   if(editing.xref)rec.xref=editing.xref;
   // ホワイトリスト適用
