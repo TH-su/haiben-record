@@ -648,6 +648,7 @@ textarea{resize:vertical;min-height:76px}
       <span style="display:inline-block;width:10px;height:10px;background:#c62828;border-radius:50%;margin-right:3px"></span>要注意
       <span style="display:inline-block;width:10px;height:10px;background:#f9a825;border-radius:50%;margin-right:3px;margin-left:8px"></span>注意
     </span>
+    <label style="font-size:11px;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
   </div>
   <div class="tl-stop" id="bdScrollTop"><div class="tl-stop-inner"></div></div>
   <div class="bd-w" id="bdBox">
@@ -681,6 +682,7 @@ textarea{resize:vertical;min-height:76px}
       <button class="bn bs bsm" data-off="0">今日</button>
     </div>
     <button class="bn bs bsm rf-sp" id="tlRefresh">🔄 更新</button>
+    <label style="font-size:11px;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
     <button class="bn blax bsm" id="tlLax" style="margin-left:auto">💊 下剤</button>
   </div>
   <div class="cd">
@@ -1684,6 +1686,9 @@ function mergeCommonResidents(){
   var changed=0;
   list.forEach(function(c){
     if(!c||c.masterId==null||c.active===false)return; // 退去者は取り込まない
+    // 排泄記録の対象判定：targetApps があり 'excretion' を含まなければ対象外(false)。
+    // targetApps 自体が無ければ undefined（＝従来どおり表示の no-op 扱い）。
+    var tExc=Array.isArray(c.targetApps)?(c.targetApps.indexOf('excretion')>=0):undefined;
     var tgt=byMid[String(c.masterId)];
     if(!tgt){var nm=_normName(c.name);if(nm)tgt=byName[nm];}
     if(tgt){
@@ -1691,17 +1696,23 @@ function mergeCommonResidents(){
       if(c.room&&tgt.room!==c.room){tgt.room=c.room;changed++;}
       if(c.careLevel&&tgt.careLevel!==c.careLevel){tgt.careLevel=c.careLevel;changed++;}
       if(c.kana&&tgt.yomi!==c.kana){tgt.yomi=c.kana;changed++;}
+      if(tExc!==undefined&&tgt.targetExcretion!==tExc){tgt.targetExcretion=tExc;changed++;}
     }else{
-      if(!c.room)return; // 居室なしは isValidRes で除外されるため取り込まない
+      if(tExc===false)return; // 排泄対象外の master 入居者は当アプリに取り込まない
+      if(!c.room)return;      // 居室なしは isValidRes で除外されるため取り込まない
       var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
       D.residents.push({id:nextResId(),name:c.name||'',room:c.room,gender:g,
-        yomi:c.kana||'',careLevel:c.careLevel||'',active:true,masterId:c.masterId,_fromMaster:true});
+        yomi:c.kana||'',careLevel:c.careLevel||'',active:true,masterId:c.masterId,_fromMaster:true,
+        targetExcretion:(tExc===undefined?true:tExc)});
       changed++;
     }
   });
   if(changed){_recIdx=null;save();}
   return changed>0;
 }
+/* 排泄記録の対象者か（targetExcretion===false の人のみ対象外。未設定/true は対象＝no-op安全） */
+function isExcretionTarget(r){return !r||r.targetExcretion!==false}
+var showNonTargets=false; // 「対象外も表示」トグル（一覧/時系列の履歴閲覧用）
 
 /* ════════ 記録のインデックス（A: パフォーマンス最適化） ════════
    D.records をスキャンするコスト（filter/sort）を削減するため、入居者別 / 入居者×日別の
@@ -2084,7 +2095,7 @@ function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav 
 /* 五十音順：フリガナ優先、未設定なら氏名でフォールバック */
 function resSortKey(r){return String((r&&r.yomi)?r.yomi:(r&&r.name)?r.name:'').trim()}
 function resSortAiu(a,b){return resSortKey(a).localeCompare(resSortKey(b),'ja')}
-function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name})
+function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(isExcretionTarget(r)||(ci&&ci.rid===r.id))})
   .sort(resSortAiu);const cv=ci.rid;
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
     a.map(r=>'<option value="'+r.id+'"'+(cv===r.id?' selected':'')+'>'+r.name+'　'+r.room+'号室</option>').join('');
@@ -2322,7 +2333,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
   var cntLbl=isTodayView?'本日回数':'当日回数';
   if($('bdHdrUCnt'))$('bdHdrUCnt').textContent=cntLbl;
   if($('bdHdrSCnt'))$('bdHdrSCnt').textContent=cntLbl;
-  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   tb.innerHTML=res.map((re,i)=>{
     const lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
     const uh=elH(lu||null,re.id),sh=elH(ls||null,re.id);
@@ -2440,7 +2451,7 @@ function setupTopScroll(){setupTopScrollFor('tlScrollTop','tlBox')}
 
 /* ═══════════ TIMELINE (30分) ═══════════ */
 function renderTL(){const date=$('tlDate').value||today();
-  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   // ヘッダー行: 時刻（0〜23）を各2列（:00, :30）
   let h1='<th rowspan="2" style="min-width:96px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
   let h2='';
@@ -4055,6 +4066,14 @@ function init(){
 
   // ナビ
   $$('.bnav button').forEach(b=>b.addEventListener('click',function(){showSc(this.dataset.sc)}));
+
+  // 「対象外も表示」トグル（一覧/時系列で共有。排泄対象外の入居者を一時表示＝履歴閲覧用）
+  $$('.show-nontarget').forEach(function(cb){cb.addEventListener('change',function(){
+    showNonTargets=this.checked;
+    $$('.show-nontarget').forEach(function(o){o.checked=showNonTargets});
+    if(typeof renderBoard==='function')renderBoard();
+    if(typeof renderTL==='function')renderTL();
+  })});
 
   // 入居者プルダウン
   $('resSel').addEventListener('change',function(){var v=this.value;ci.rid=v?parseInt(v):null;if(isNaN(ci.rid))ci.rid=null});
