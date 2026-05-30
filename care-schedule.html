@@ -544,6 +544,16 @@ select.inp { cursor: pointer; }
 </head>
 <body>
 
+<!-- 端末用途ガード（事務所PC専用。現場タブレットでは週間計画を開かせない＝誤操作防止） -->
+<div id="suDeviceBlock" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(255,255,255,.97);align-items:center;justify-content:center;padding:20px">
+  <div style="max-width:440px;text-align:center;background:#fff;border:1px solid #e0e0e0;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,.18);padding:26px">
+    <div style="font-size:44px">🔒</div>
+    <h2 style="margin:8px 0;font-size:18px">この端末は現場用に設定されています</h2>
+    <p style="color:#666;font-size:14px;line-height:1.7">週間計画は<b>事務所PC</b>でご利用ください。</p>
+    <button id="suDeviceUnlock" style="margin-top:14px;padding:10px 16px;border:1px solid #2563eb;background:#fff;color:#2563eb;border-radius:10px;font-weight:700;cursor:pointer">管理者：この端末を事務所PCにする</button>
+  </div>
+</div>
+
 <header class="hdr">
   <h1>週間計画</h1>
   <div class="resident-selector">
@@ -777,6 +787,7 @@ select.inp { cursor: pointer; }
         <button class="btn btn-pri" onclick="addResident()" style="white-space:nowrap">追加</button>
       </div>
     </div>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--g6);margin:4px 0;cursor:pointer"><input type="checkbox" id="cs-show-nontarget" onchange="onCsShowNonTargetChange()">対象外（週間計画の対象でない方）も表示</label>
     <ul class="res-list" id="res-list"></ul>
     <div class="btn-row">
       <button class="btn btn-sec" onclick="closeResidentModal()">閉じる</button>
@@ -1647,6 +1658,7 @@ const SYNC = {
       this._dirty   = false; // プル完了 → クリーン状態へ
       this.save();
       recalcAllEventUnits();
+      try { mergeCommonSchedule(); } catch(e) {}
       populateResidentSelect();
       renderAll();
       this.log(`✅ 取得完了（${DB.residents.length}名・最終更新: ${new Date(this.config.lastSync).toLocaleString('ja-JP')}）`);
@@ -1768,6 +1780,7 @@ const SYNC = {
       this._dirty   = false;
       this.save();
       recalcAllEventUnits();
+      try { mergeCommonSchedule(); } catch(e) {}
       populateResidentSelect();
       renderAll();
       this.log(`✅ 自動取得完了（${DB.residents.length}名・${new Date(this.config.lastSync).toLocaleString('ja-JP')}）`);
@@ -1882,12 +1895,82 @@ function currentResident() {
   return DB.residents.find(r => r.id === DB.currentResidentId) || null;
 }
 
+/* ============================================================
+   入居者マスタ連携（共通情報の自動コピー / 週間計画の対象選択 / 端末ガード）
+   - すべて no-op 安全：連携キー（su_residents_common / su_device_role）が
+     無ければ従来挙動を一切変えない。既存の計画(events)は決して削除しない。
+   ============================================================ */
+var SU_COMMON_KEY = 'su_residents_common';
+var SU_DEVICE_KEY = 'su_device_role';
+var csShowNonTargets = false;
+function suNormName(s){ return String(s==null?'':s).replace(/\s+/g,'').trim(); }
+/* 週間計画の対象者か（targetSchedule===false のみ対象外。未設定/true は対象＝no-op安全） */
+function isScheduleTarget(r){ return !r || r.targetSchedule !== false; }
+/* 表示対象の入居者（対象者＋現在選択中。トグルONで全員） */
+function csVisibleResidents(){
+  if (csShowNonTargets) return DB.residents.slice();
+  return DB.residents.filter(function(r){ return isScheduleTarget(r) || (r && r.id === DB.currentResidentId); });
+}
+/* 入居者マスタの共通情報を取り込み（週間計画アプリ用。master を正とする） */
+function mergeCommonSchedule(){
+  var raw; try{ raw = localStorage.getItem(SU_COMMON_KEY); }catch(e){ return false; }
+  if (!raw) return false;
+  var data; try{ data = JSON.parse(raw); }catch(e){ return false; }
+  var list = (data && Array.isArray(data.residents)) ? data.residents : null;
+  if (!list || !list.length) return false;
+  if (!Array.isArray(DB.residents)) DB.residents = [];
+  var byMid = {}, byName = {};
+  DB.residents.forEach(function(r){
+    if (!r || typeof r !== 'object') return;
+    if (r.masterId != null) byMid[String(r.masterId)] = r;
+    var nm = suNormName(r.name); if (nm && !byName[nm]) byName[nm] = r;
+  });
+  var changed = 0;
+  list.forEach(function(c){
+    if (!c || c.masterId == null || c.active === false) return;
+    var tS = Array.isArray(c.targetApps) ? (c.targetApps.indexOf('schedule') >= 0) : undefined;
+    var tgt = byMid[String(c.masterId)];
+    if (!tgt){ var nm = suNormName(c.name); if (nm) tgt = byName[nm]; }
+    if (tgt){
+      if (tgt.masterId == null){ tgt.masterId = c.masterId; changed++; }
+      if (c.careLevel && tgt.careLevel !== c.careLevel){ tgt.careLevel = c.careLevel; changed++; }
+      if (c.room && tgt.room !== c.room){ tgt.room = c.room; changed++; }
+      if (tS !== undefined && tgt.targetSchedule !== tS){ tgt.targetSchedule = tS; changed++; }
+    } else {
+      if (tS === false) return; // 週間計画 対象外の master 入居者は取り込まない
+      DB.residents.push({
+        id: ruid(), name: String(c.name || ''), events: [],
+        careLevel: c.careLevel || '', copayRate: 1, welfareEquipUnits: 0,
+        room: c.room || '', masterId: c.masterId,
+        targetSchedule: (tS === undefined ? true : tS), _fromMaster: true
+      });
+      changed++;
+    }
+  });
+  // saveDB() は自動pushを誘発するため、取り込みは saveLocalOnly()（ローカルのみ）で永続化
+  if (changed){ try{ saveLocalOnly(); }catch(e){} }
+  return changed > 0;
+}
+/* 端末ガード（事務所PC専用。共有キー su_device_role==='field' で起動ブロック） */
+function suGetDeviceRole(){ try{ return localStorage.getItem(SU_DEVICE_KEY) || 'office'; }catch(e){ return 'office'; } }
+function applyScheduleDeviceGuard(){
+  var blocked = (suGetDeviceRole() === 'field');
+  var ov = document.getElementById('suDeviceBlock');
+  if (ov) ov.style.display = blocked ? 'flex' : 'none';
+  return blocked;
+}
+function onCsShowNonTargetChange(){
+  var t = document.getElementById('cs-show-nontarget');
+  csShowNonTargets = !!(t && t.checked);
+  try{ populateResidentSelect(); renderResidentList(); }catch(e){}
+}
+
 // ── Resident management ──
 function populateResidentSelect() {
   const sel = $('#resident-select');
   const cur = DB.currentResidentId;
   sel.innerHTML = '<option value="">-- 入居者を選択 --</option>' +
-    DB.residents.map(r =>
+    csVisibleResidents().map(r =>
       `<option value="${escHtml(r.id)}" ${r.id === cur ? 'selected' : ''}>${escHtml(r.name)}</option>`
     ).join('');
 }
@@ -1906,14 +1989,16 @@ function closeResidentModal() {
 }
 function renderResidentList() {
   const ul = $('#res-list');
-  if (!DB.residents.length) {
-    ul.innerHTML = '<li style="font-size:13px;color:var(--g6);padding:8px 0">入居者が登録されていません</li>';
+  const vis = csVisibleResidents();
+  if (!vis.length) {
+    ul.innerHTML = '<li style="font-size:13px;color:var(--g6);padding:8px 0">'
+      + (DB.residents.length ? '対象の入居者がいません（「対象外も表示」で全員表示）' : '入居者が登録されていません') + '</li>';
     return;
   }
-  ul.innerHTML = DB.residents.map(r =>
+  ul.innerHTML = vis.map(r =>
     `<li class="res-item ${r.id === DB.currentResidentId ? 'active' : ''}">
-      <span>${escHtml(r.name)}</span>
-      <button class="del-res" onclick="removeResident('${r.id.replace(/'/g,"\\'")}')">✕</button>
+      <span>${escHtml(r.name)}${(r.targetSchedule === false) ? ' <span style="font-size:11px;color:var(--g6)">（対象外）</span>' : ''}</span>
+      <button class="del-res" onclick="removeResident('${String(r.id).replace(/'/g,"\\'")}')">✕</button>
     </li>`
   ).join('');
 }
@@ -3028,6 +3113,15 @@ $('#f-new-res').addEventListener('keydown', e => { if (e.key === 'Enter') addRes
 // ── Init ──
 loadDB();
 SYNC.load();
+// 入居者マスタの共通情報を取り込み（連携キーが無ければ no-op）＋端末ガード
+try { mergeCommonSchedule(); } catch(e) { /* 取り込み失敗は運用を止めない */ }
+applyScheduleDeviceGuard();
+(function(){ var b = document.getElementById('suDeviceUnlock'); if (b) b.addEventListener('click', function(){
+  try { localStorage.setItem(SU_DEVICE_KEY, 'office'); } catch(e) {}
+  applyScheduleDeviceGuard();
+  try { populateResidentSelect(); renderResidentList(); renderAll(); } catch(e) {}
+  showToast('この端末を事務所PCに設定しました');
+}); })();
 populateResidentSelect();
 renderAll();
 initScrollSync();
@@ -3035,8 +3129,8 @@ requestAnimationFrame(() => {
   const gs = $('#grid-scroll');
   if (gs) gs.scrollTop = 6 * HOUR_PX; // 06:00 付近から表示
 });
-// 起動時: 同期設定があれば自動でクラウドから取得＋定期ポーリング開始
-if (SYNC.config.endpoint && SYNC.config.auto) {
+// 起動時: 同期設定があれば自動でクラウドから取得＋定期ポーリング開始（現場端末ガード時は取得しない）
+if (SYNC.config.endpoint && SYNC.config.auto && suGetDeviceRole() !== 'field') {
   setTimeout(() => SYNC.pull().then(() => SYNC.startPolling()), 300);
 } else if (SYNC.config.endpoint) {
   // URLは保存済みだが自動同期OFFの場合、ステータスバー表示のみ更新
