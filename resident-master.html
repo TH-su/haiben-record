@@ -179,6 +179,13 @@ input,select,textarea{font-family:inherit; font-size:15px}
   <div class="box">
     <h2>☁️ クラウド同期設定</h2>
     <div class="fld" style="margin-bottom:10px">
+      <label>この端末の用途</label>
+      <select id="cfgDeviceRole">
+        <option value="office">事務所PC（全機能を使用）</option>
+        <option value="field">現場タブレット（入居者マスタは使用不可）</option>
+      </select>
+    </div>
+    <div class="fld" style="margin-bottom:10px">
       <label>GAS Web App URL</label>
       <input id="cfgUrl" placeholder="https://script.google.com/macros/s/..../exec">
     </div>
@@ -191,6 +198,18 @@ input,select,textarea{font-family:inherit; font-size:15px}
       <button class="btn btn-gray" id="syncClose">閉じる</button>
       <button class="btn btn-sec" id="syncTest">接続テスト</button>
       <button class="btn btn-ok" id="syncSave">保存して再読込</button>
+    </div>
+  </div>
+</div>
+
+<!-- 端末用途ガード（現場タブレットでは入居者マスタを表示しない＝事務所PC専用） -->
+<div class="modal" id="deviceBlock">
+  <div class="box" style="text-align:center;max-width:440px">
+    <div style="font-size:44px;margin-bottom:8px">🔒</div>
+    <h2 style="justify-content:center">この端末は現場用に設定されています</h2>
+    <p class="muted" style="font-size:14px;line-height:1.7">入居者マスタは要配慮個人情報（医療・家族連絡先など）を含むため、<b>事務所PC</b>でご利用ください。</p>
+    <div class="detail-actions" style="justify-content:center;margin-top:16px">
+      <button class="btn btn-gray" id="deviceUnlock">管理者の方（端末設定を変更）</button>
     </div>
   </div>
 </div>
@@ -216,6 +235,13 @@ var CFG_KEY='rmaster_cfg';
 var ROSTER_KEY='rmaster_roster'; // 非機微の一覧キャッシュのみ
 var CFG={url:'', token:''};
 (function loadCfg(){try{var s=localStorage.getItem(CFG_KEY);if(s){var o=JSON.parse(s);CFG.url=o.url||'';CFG.token=o.token||''}}catch(e){}})();
+
+/* ── 端末の用途（事務所PC専用ガード。全管理系アプリ共通の同一オリジンキー） ──
+   'field'（現場タブレット）の端末では入居者マスタを表示しない（誤操作防止・機微情報の非表示）。
+   未設定/'office' は従来どおり全機能。あくまで運用上の誤操作防止であり厳密な認証ではない。 */
+var DEVICE_KEY='su_device_role';
+function getDeviceRole(){try{return localStorage.getItem(DEVICE_KEY)||'office'}catch(e){return'office'}}
+function setDeviceRole(v){try{localStorage.setItem(DEVICE_KEY,v)}catch(e){}}
 
 /* ── ユーティリティ ── */
 function $(id){return document.getElementById(id)}
@@ -584,13 +610,30 @@ function showScreen(name){
   if(name==='list')window.scrollTo(0,0);
 }
 
+/* ═══════════ 端末用途ガード ═══════════ */
+function applyDeviceGuard(){
+  var blocked=(getDeviceRole()==='field');
+  $('deviceBlock').classList.toggle('on',blocked);
+  return blocked;
+}
+/* キャッシュ即時表示＋（URLがあれば）ネット同期。init と端末解除後で共用 */
+function loadData(){
+  loadRosterCache();renderRoster();
+  if(roster.length)writeCommonRoster(); // 共有キーを最新化（他アプリが即参照可）
+  if(CFG.url)refreshRoster();else setSync('未接続');
+}
+
 /* ═══════════ 同期設定 ═══════════ */
-function openSync(){$('cfgUrl').value=CFG.url;$('cfgToken').value=CFG.token;$('mSync').classList.add('on')}
+function openSync(){$('cfgUrl').value=CFG.url;$('cfgToken').value=CFG.token;if($('cfgDeviceRole'))$('cfgDeviceRole').value=getDeviceRole();$('mSync').classList.add('on')}
 function closeSync(){$('mSync').classList.remove('on')}
 function saveSyncCfg(){
   CFG.url=$('cfgUrl').value.trim();CFG.token=$('cfgToken').value.trim();
   try{localStorage.setItem(CFG_KEY,JSON.stringify(CFG))}catch(e){}
-  closeSync();refreshRoster();
+  if($('cfgDeviceRole'))setDeviceRole($('cfgDeviceRole').value);
+  closeSync();
+  // 現場タブレットに設定された場合は即ブロック。事務所PCなら解除して読み込み。
+  if(applyDeviceGuard())return;
+  loadData();
 }
 function testSync(){
   if(!$('cfgUrl').value.trim()){toast('URLを入力してください');return}
@@ -600,8 +643,8 @@ function testSync(){
 
 /* ═══════════ 初期化 ═══════════ */
 function init(){
-  loadRosterCache();renderRoster();
-  if(roster.length)writeCommonRoster(); // 起動時に共有キーを最新化（他アプリが即参照可）
+  // ── 先に全イベントを登録（ブロック中でも「端末設定変更」が機能するように） ──
+  $('deviceUnlock').addEventListener('click',function(){$('deviceBlock').classList.remove('on');openSync()});
   $('q').addEventListener('input',renderRoster);
   Array.prototype.forEach.call($('filterRow').querySelectorAll('.chip'),function(c){
     c.addEventListener('click',function(){curFilter=this.getAttribute('data-f');
@@ -620,7 +663,9 @@ function init(){
   $('syncTest').addEventListener('click',testSync);
   $('syncSave').addEventListener('click',saveSyncCfg);
   $('mSync').addEventListener('click',function(e){if(e.target===this)closeSync()});
-  if(CFG.url)refreshRoster();else setSync('未接続');
+  // ── 端末用途ガード：現場タブレットはデータを一切読み込まずブロック表示 ──
+  if(applyDeviceGuard()){setSync('現場端末','err');return}
+  loadData();
 }
 document.addEventListener('DOMContentLoaded',init);
 </script>
