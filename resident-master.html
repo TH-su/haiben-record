@@ -265,7 +265,7 @@ var SECTIONS={
   office:['careOffice','careManager','careOfficeTel','careOfficeFax','welfareEquip','welfareEquipStaff','welfareEquipTel','rhythm'],
   medical:['hospital','doctor','hospitalTel','hospitalFax','emergencyHospital','pharmacy','pharmacyTel','pharmacyFax',
            'allergy','currentDiseases','sideEffects','pastHistory','medsRegular','medsNotes','problemBehavior'],
-  meal:['mealStaple','mealSide','mealNote'],
+  meal:['mealStaple','mealSide','denture','mealNote'],
   support:['supportLog']
 };
 // 対象アプリ（各ケアアプリに表示・記録する対象者かのフラグ）
@@ -279,7 +279,7 @@ var ALLOWED_KEYS=['id','name','kana','room','gender','careLevel','active','updat
   'welfareEquip','welfareEquipStaff','welfareEquipTel','rhythm',
   'hospital','doctor','hospitalTel','hospitalFax','emergencyHospital','pharmacy','pharmacyTel','pharmacyFax',
   'allergy','currentDiseases','sideEffects','pastHistory','medsRegular','medsNotes','problemBehavior',
-  'mealStaple','mealSide','mealNote','supportLog','xref'];
+  'mealStaple','mealSide','denture','mealNote','supportLog','xref'];
 var RHYTHM_KEYS=[['wake','起床'],['breakfast','朝食'],['lunch','昼食'],['snack','おやつ'],['dinner','夕食'],['sleep','就寝']];
 
 /* ═══════════ API（トークン付き・タイムアウト・エラー処理） ═══════════ */
@@ -457,7 +457,7 @@ function renderView(r){
   '</div></div>';
   // 食事
   h+='<div class="sec"><div class="sec-lbl">食事</div><div class="sec-body"><div class="row-cells">'+
-    cell('主食',r.mealStaple)+cell('副食',r.mealSide)+
+    cell('主食',r.mealStaple)+cell('副食',r.mealSide)+cell('義歯',r.denture)+
     '<div class="cell" style="flex:2;border-right:none"><span class="lab">備考</span><div class="fulltext">'+esc(r.mealNote||'　')+'</div></div>'+
   '</div></div></div>';
   // 支援経過（新しい順）
@@ -551,9 +551,10 @@ function openEdit(rec){
     fld('problemBehavior','問題行動 等',r.problemBehavior,'textarea')+
   '</div></div>';
 
-  // 食事（食事形態）
+  // 食事（食事形態・義歯）
   h+='<div class="cd"><div class="fgroup"><h3>食事</h3><div class="fgrid">'+
     fld('mealStaple','主食',r.mealStaple)+fld('mealSide','副食',r.mealSide)+
+    fld('denture','義歯',r.denture,'select',['無','有','部分義歯','総義歯'])+
   '</div>'+fld('mealNote','備考',r.mealNote,'textarea')+'</div></div>';
 
   // 支援経過（日付付きの時系列記録）
