@@ -240,8 +240,12 @@ var SECTIONS={
   medical:['hospital','doctor','hospitalTel','hospitalFax','emergencyHospital','pharmacy','pharmacyTel','pharmacyFax',
            'allergy','currentDiseases','sideEffects','pastHistory','medsRegular','medsNotes','problemBehavior']
 };
+// 対象アプリ（各ケアアプリに表示・記録する対象者かのフラグ）
+// 既定は全てON（介護現場では対象者の取りこぼしを避けるため。対象外を明示的に外す運用）
+var APP_TARGETS=[['excretion','排泄記録'],['weight','体重記録'],['schedule','週間計画']];
+function defaultTargetApps(){return APP_TARGETS.map(function(p){return p[0]})}
 // 保存時に許可するキー（ホワイトリスト）
-var ALLOWED_KEYS=['id','name','kana','room','gender','careLevel','active','updatedAt',
+var ALLOWED_KEYS=['id','name','kana','room','gender','careLevel','active','updatedAt','targetApps',
   'birthDate','careCertStart','careCertEnd','copayRate','welfare','admissionDate','dischargeDate','height','weight','adl','dementia',
   'preAdmission','postDischarge','family','careOffice','careManager','careOfficeTel','careOfficeFax',
   'welfareEquip','welfareEquipStaff','welfareEquipTel','rhythm',
@@ -289,7 +293,17 @@ function refreshRoster(){
     return false;
   });
 }
-function normRosterRow(r){return{id:r.id,name:r.name||'',kana:r.kana||'',room:r.room||'',gender:r.gender||'',careLevel:r.careLevel||'',active:r.active!==false,updatedAt:r.updatedAt||''}}
+function _toTargetArr(v){
+  if(Array.isArray(v))return v.slice();
+  if(typeof v==='string'&&v)return v.split(',').map(function(s){return s.trim()}).filter(Boolean);
+  return null; // 未設定（フラグ無し）は null のまま＝消費側で「従来どおり表示」の no-op 扱い
+}
+function normRosterRow(r){
+  var t=_toTargetArr(r.targetApps);
+  var o={id:r.id,name:r.name||'',kana:r.kana||'',room:r.room||'',gender:r.gender||'',careLevel:r.careLevel||'',active:r.active!==false,updatedAt:r.updatedAt||''};
+  if(t)o.targetApps=t;
+  return o;
+}
 
 /* ═══════════ 共通情報の自動コピー（全アプリ連携） ═══════════
    同一オリジンの全ツールが共有する localStorage キーに、識別/表示用の共通項目だけを
@@ -303,7 +317,9 @@ var COMMON_FIELDS=['name','kana','room','gender','careLevel'];
 function writeCommonRoster(){
   try{
     var residents=roster.map(function(r){
-      return{masterId:r.id,name:r.name||'',kana:r.kana||'',room:r.room||'',gender:r.gender||'',careLevel:r.careLevel||'',active:r.active!==false};
+      var e={masterId:r.id,name:r.name||'',kana:r.kana||'',room:r.room||'',gender:r.gender||'',careLevel:r.careLevel||'',active:r.active!==false};
+      if(Array.isArray(r.targetApps))e.targetApps=r.targetApps.slice(); // 対象アプリのフラグも配信
+      return e;
     });
     localStorage.setItem(COMMON_KEY,JSON.stringify({v:1,updatedAt:new Date().toISOString(),residents:residents}));
   }catch(e){/* 共有キャッシュは失敗しても本体運用に影響させない */}
@@ -410,6 +426,13 @@ function renderView(r){
       '<div class="cell" style="border-right:none"><span class="lab">■問題行動 等■</span><div class="fulltext">'+esc(r.problemBehavior||'　')+'</div></div>'+
     '</div>'+
   '</div></div>';
+  // 対象アプリ
+  var tApps=Array.isArray(r.targetApps)?r.targetApps:null;
+  var tBadges=APP_TARGETS.map(function(p){
+    var on=tApps?tApps.indexOf(p[0])>=0:true;
+    return'<span class="tag" style="background:'+(on?'var(--ok-l);color:var(--ok)':'var(--g1);color:var(--g5)')+'">'+(on?'✓ ':'– ')+esc(p[1])+'</span>';
+  }).join(' ');
+  h+='<div class="sec"><div class="sec-lbl">対象</div><div class="sec-body"><div class="cell" style="border-right:none;border-bottom:none"><span class="lab">対象アプリ</span><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">'+tBadges+'</div></div></div></div>';
   h+='</div>';
   $('viewBox').innerHTML=h;
 }
@@ -446,6 +469,15 @@ function openEdit(rec){
     fld('adl','生活自立度',r.adl)+fld('dementia','認知症自立度',r.dementia)+
     fld('active','在籍状態',r.active===false?'退去':'在籍','select',['在籍','退去'])+
   '</div></div></div>';
+
+  // 対象アプリ（各ケアアプリに表示・記録するか）
+  var curTargets=Array.isArray(r.targetApps)?r.targetApps:defaultTargetApps();
+  h+='<div class="cd"><div class="fgroup"><h3>対象アプリ（チェックした人だけ各アプリに表示・記録されます）</h3><div class="fgrid">'+
+    APP_TARGETS.map(function(p){
+      var on=curTargets.indexOf(p[0])>=0;
+      return'<label class="fld" style="flex-direction:row;align-items:center;gap:8px;cursor:pointer;border:1px solid var(--g2);border-radius:8px;padding:10px"><input type="checkbox" data-target="'+p[0]+'"'+(on?' checked':'')+' style="width:auto">'+esc(p[1])+'</label>';
+    }).join('')+
+  '</div><p class="muted" style="margin-top:6px">既定は全てON。対象外の人だけチェックを外してください（既存記録は削除されません）。</p></div></div>';
 
   h+='<div class="cd"><div class="fgroup"><h3>基本事項</h3>'+
     fld('preAdmission','入居前状況',r.preAdmission,'textarea')+
@@ -517,6 +549,8 @@ function collectForm(){
   });
   rec.rhythm={};
   Array.prototype.forEach.call($('editBox').querySelectorAll('[data-rhythm]'),function(inp){if(inp.value)rec.rhythm[inp.getAttribute('data-rhythm')]=inp.value});
+  rec.targetApps=[];
+  Array.prototype.forEach.call($('editBox').querySelectorAll('[data-target]'),function(inp){if(inp.checked)rec.targetApps.push(inp.getAttribute('data-target'))});
   collectFam();
   rec.family=editing.family.filter(function(f){return f.name||f.phone||f.address});
   rec.id=editing.id;
