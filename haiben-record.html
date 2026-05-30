@@ -1321,6 +1321,8 @@ async function syncFromAPI(showLoader,opts){
     if(typeof extractHospsFromSnapshot==='function')extractHospsFromSnapshot();
     // 注: 起動時の自動 push は廃止（サンプル/古いデータがサーバーを上書きする事故を防ぐ）。
     // 職員リストの同期は「職員タブ → 全員を受信」または UI 操作（追加/編集/削除）時のみ。
+    // 入居者マスタの共通情報を同期後にも反映（master を正として居室等を更新）
+    if(typeof mergeCommonResidents==='function')mergeCommonResidents();
     cleanData();save();
     // 同期成功時に URL の保存を refresh（cookie 1年延長・バックアップ層も再書込）
     if(apiUrl)saveApiUrl(apiUrl);
@@ -1655,6 +1657,50 @@ function save(){
 function flushSave(){
   if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}
   if(_saveDirty)_persistNow();
+}
+
+/* ════════ 共通入居者情報の自動取り込み（入居者マスタ → 当アプリ） ════════
+   同一オリジンの共有キー su_residents_common（入居者マスタが書き出す識別/表示用の
+   共通項目のみ）を読み、当アプリの入居者へ自動反映する。
+   ・連携キーが無い/空なら完全に無処理（既存挙動を一切変えない）
+   ・masterId（無ければ氏名）で突合。一致したら居室・介護度・ふりがなを更新し masterId 付与
+   ・当アプリに居ない在籍 master 入居者は新規追加（居室必須＝妥当性条件を満たす者のみ）
+   ・記録・cfg・予定・入院情報など当アプリ固有データには一切触れない（非破壊・冪等） */
+var SU_COMMON_KEY='su_residents_common';
+function _normName(s){return String(s==null?'':s).replace(/\s+/g,'').trim()}
+function mergeCommonResidents(){
+  var raw;try{raw=localStorage.getItem(SU_COMMON_KEY)}catch(e){return false}
+  if(!raw)return false;
+  var data;try{data=JSON.parse(raw)}catch(e){return false}
+  var list=(data&&Array.isArray(data.residents))?data.residents:null;
+  if(!list||!list.length)return false;
+  if(!Array.isArray(D.residents))D.residents=[];
+  var byMid={},byName={};
+  D.residents.forEach(function(r){
+    if(!isUserRes(r))return; // 職員（隠し入居者）には絶対に触れない
+    if(r.masterId!=null)byMid[String(r.masterId)]=r;
+    var nm=_normName(r.name);if(nm&&!byName[nm])byName[nm]=r;
+  });
+  var changed=0;
+  list.forEach(function(c){
+    if(!c||c.masterId==null||c.active===false)return; // 退去者は取り込まない
+    var tgt=byMid[String(c.masterId)];
+    if(!tgt){var nm=_normName(c.name);if(nm)tgt=byName[nm];}
+    if(tgt){
+      if(tgt.masterId==null){tgt.masterId=c.masterId;changed++;}
+      if(c.room&&tgt.room!==c.room){tgt.room=c.room;changed++;}
+      if(c.careLevel&&tgt.careLevel!==c.careLevel){tgt.careLevel=c.careLevel;changed++;}
+      if(c.kana&&tgt.yomi!==c.kana){tgt.yomi=c.kana;changed++;}
+    }else{
+      if(!c.room)return; // 居室なしは isValidRes で除外されるため取り込まない
+      var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
+      D.residents.push({id:nextResId(),name:c.name||'',room:c.room,gender:g,
+        yomi:c.kana||'',careLevel:c.careLevel||'',active:true,masterId:c.masterId,_fromMaster:true});
+      changed++;
+    }
+  });
+  if(changed){_recIdx=null;save();}
+  return changed>0;
 }
 
 /* ════════ 記録のインデックス（A: パフォーマンス最適化） ════════
@@ -3984,6 +4030,8 @@ function init(){
   load();
   // 旧バージョン（999999単一行・特殊record）の遺留物を起動時に掃除
   if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
+  // 入居者マスタの共通情報を起動時に自動取り込み（連携キーが無ければ無処理）
+  if(typeof mergeCommonResidents==='function')mergeCommonResidents();
   // ローカルに保存された職員リストがサーバーに反映されていない場合は自動で再送信
   // 起動時の自動 push は廃止（サンプル/古いデータがサーバーを上書きする事故を防ぐ）
   // 時計
