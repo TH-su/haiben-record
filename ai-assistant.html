@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- 業務文書に個人情報を含むためキャッシュ無効・検索除外 -->
+<meta http-equiv="Cache-Control" content="no-store">
+<meta name="robots" content="noindex,nofollow">
+<title>ラウレアハレ AI業務アシスタント</title>
+<style>
+:root{
+  --pri:#1a73e8; --pri-l:#e8f0fe; --pri-d:#1557b0;
+  --ok:#2e7d32; --ok-l:#e8f5e9; --ng:#c62828; --ng-l:#ffebee;
+  --warn-bg:#fff8e1; --warn-tx:#e65100;
+  --g0:#f8f9fa; --g1:#f1f3f4; --g2:#e8eaed; --g3:#dadce0;
+  --g5:#9aa0a6; --g6:#80868b; --g7:#5f6368; --g9:#202124;
+  --r:12px; --sh:0 1px 6px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;
+  background:var(--g0); color:var(--g9); font-size:15px; line-height:1.5; padding-bottom:72px;}
+button{font-family:inherit; cursor:pointer}
+input,select,textarea{font-family:inherit; font-size:15px}
+
+/* ── ヘッダー ── */
+.hdr{position:sticky; top:0; z-index:50; background:var(--pri); color:#fff;
+  padding:10px 14px; display:flex; align-items:center; gap:10px; box-shadow:var(--sh)}
+.hdr h1{font-size:17px; margin:0; font-weight:700; flex:1}
+.hdr .badge{font-size:11px; background:rgba(255,255,255,.18); padding:3px 9px; border-radius:14px; white-space:nowrap}
+
+/* ── 画面切替 ── */
+.scr{display:none; padding:14px; max-width:920px; margin:0 auto}
+.scr.on{display:block}
+
+/* ── カード ── */
+.cd{background:#fff; border-radius:var(--r); box-shadow:var(--sh); padding:14px; margin-bottom:12px}
+
+/* ── ホーム：文書タイプ選択 ── */
+.cat-h{font-size:13px; color:var(--g7); font-weight:700; margin:16px 4px 8px; display:flex; align-items:center; gap:6px}
+.cat-h:first-child{margin-top:4px}
+.dgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px}
+.dcard{background:#fff; border:1px solid var(--g2); border-radius:12px; padding:14px 12px; cursor:pointer;
+  transition:.12s; display:flex; flex-direction:column; gap:6px; text-align:left}
+.dcard:hover{box-shadow:var(--sh); border-color:var(--pri); transform:translateY(-1px)}
+.dcard .ic{font-size:26px; line-height:1}
+.dcard .t{font-size:14px; font-weight:700}
+.dcard .s{font-size:11px; color:var(--g6); line-height:1.4}
+
+/* ── 対象者バー ── */
+.resbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; background:var(--pri-l);
+  border:1px solid #cfe0fb; border-radius:10px; padding:10px 12px; margin-bottom:14px}
+.resbar label{font-size:12px; color:var(--pri-d); font-weight:700; white-space:nowrap}
+.resbar select{flex:1; min-width:160px; padding:8px 10px; border:1px solid var(--g3); border-radius:8px; background:#fff}
+.resbar .info{font-size:12px; color:var(--g7)}
+
+/* ── フォーム ── */
+.fgroup{margin-bottom:6px}
+.fgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px}
+.fld{display:flex; flex-direction:column; margin-bottom:10px}
+.fld.wide{grid-column:1/-1}
+.fld label{font-size:12px; color:var(--g7); margin-bottom:3px}
+.fld input,.fld select,.fld textarea{padding:9px 10px; border:1px solid var(--g3); border-radius:8px; width:100%; background:#fff}
+.fld textarea{min-height:74px; resize:vertical; line-height:1.6}
+.fld .hint{font-size:11px; color:var(--g6); margin-top:3px}
+
+/* リスト（繰り返し行） */
+.lwrap{border:1px solid var(--g2); border-radius:10px; padding:10px; margin-bottom:10px; background:var(--g0)}
+.lwrap > .lh{font-size:12px; color:var(--pri-d); font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:6px}
+.lrow{background:#fff; border:1px solid var(--g2); border-radius:8px; padding:10px; margin-bottom:8px; position:relative}
+.lrow .ldel{position:absolute; top:6px; right:6px; background:none; border:none; color:var(--ng); font-size:12px}
+.lrow .fgrid{margin-right:48px}
+
+/* ── ボタン ── */
+.btn{padding:11px 16px; border:none; border-radius:10px; font-size:14px; font-weight:700; min-height:46px}
+.btn-pri{background:var(--pri); color:#fff} .btn-ok{background:var(--ok); color:#fff}
+.btn-sec{background:#fff; color:var(--pri); border:1px solid var(--pri)}
+.btn-gray{background:var(--g2); color:var(--g7)} .btn-ng{background:#fff;color:var(--ng);border:1px solid var(--ng)}
+.btn:disabled{opacity:.5}
+.actions{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+.actions .grow{flex:1; min-width:120px}
+
+/* ── 出力 ── */
+.out-wrap{margin-top:4px}
+#out{background:#fff; border:1px solid var(--g3); border-radius:10px; padding:16px;
+  white-space:pre-wrap; word-break:break-word; font-size:14px; line-height:1.75; min-height:120px;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif; outline:none}
+#out:empty::before{content:"「文書を生成」を押すと、ここに編集可能な文書が表示されます。"; color:var(--g5)}
+#out:focus{border-color:var(--pri)}
+.out-note{font-size:11px; color:var(--g6); margin:6px 2px 0}
+
+/* ── 下書き一覧 ── */
+.draft{background:#fff; border:1px solid var(--g2); border-radius:10px; padding:12px; margin-bottom:8px;
+  display:flex; gap:10px; align-items:center}
+.draft .meta{flex:1; min-width:0}
+.draft .meta .t{font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.draft .meta .d{font-size:11px; color:var(--g6)}
+.draft .mini{padding:7px 10px; border-radius:8px; font-size:12px; min-height:36px; font-weight:700}
+
+/* ── 注意ボックス ── */
+.note{background:var(--warn-bg); color:var(--warn-tx); border-radius:10px; padding:11px 13px; font-size:12.5px; line-height:1.65; margin-bottom:12px}
+.note b{color:#bf360c}
+.empty{text-align:center; color:var(--g5); padding:40px 10px}
+
+/* ── ボトムナビ ── */
+.bnav{position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--g2);
+  display:flex; z-index:50; box-shadow:0 -1px 6px rgba(0,0,0,.08)}
+.bnav button{flex:1; border:none; background:none; padding:8px 4px; font-size:11px; color:var(--g6);
+  display:flex; flex-direction:column; align-items:center; gap:2px; min-height:56px; justify-content:center}
+.bnav button.on{color:var(--pri)} .bnav button .ic{font-size:20px}
+
+/* ── トースト ── */
+#toast{position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--g9); color:#fff; padding:10px 18px; border-radius:22px; font-size:14px; z-index:200;
+  opacity:0; transition:.25s; pointer-events:none; max-width:90%; text-align:center}
+#toast.on{opacity:1; transform:translateX(-50%) translateY(0)}
+
+/* ── 印刷 ── */
+@media print{
+  body{padding:0; background:#fff}
+  .hdr,.bnav,.resbar,.actions,#toast,.note,.editor-form,.editor-head{display:none !important}
+  .scr{padding:0; max-width:none}
+  .scr:not(.on){display:none}
+  .out-wrap{margin:0}
+  #out{border:none; padding:0; font-size:12pt; line-height:1.9}
+  .out-note{display:none}
+  @page{size:A4; margin:16mm}
+}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>🤝 ラウレアハレ AI業務アシスタント</h1>
+  <span class="badge" id="netBadge">🔒 ローカル動作</span>
+</div>
+
+<!-- ════════ ホーム（文書選択） ════════ -->
+<section class="scr on" id="sc-home">
+  <div class="note">
+    <b>このアプリは完全にこの端末の中だけで動作します（外部送信なし）。</b><br>
+    入力した内容や生成した文書は、インターネットに送信されません。下書きは「保存」した時だけこの端末に残ります。
+  </div>
+  <div id="docMenu"></div>
+</section>
+
+<!-- ════════ 文書エディタ ════════ -->
+<section class="scr" id="sc-editor">
+  <div class="editor-head">
+    <div class="actions">
+      <button class="btn btn-gray" id="backHome">← 文書選択</button>
+    </div>
+    <h2 id="edTitle" style="font-size:18px;margin:4px 2px 12px"></h2>
+  </div>
+
+  <div class="editor-form" id="edForm">
+    <div class="resbar" id="resBar">
+      <label>対象の入居者</label>
+      <select id="resSelect"><option value="">（選択しない／手入力）</option></select>
+      <span class="info" id="resInfo"></span>
+    </div>
+    <div class="cd" id="formBox"></div>
+    <div class="actions">
+      <button class="btn btn-pri grow" id="genBtn">📝 文書を生成</button>
+      <button class="btn btn-gray" id="clearForm">入力クリア</button>
+    </div>
+  </div>
+
+  <div class="out-wrap">
+    <div class="actions">
+      <button class="btn btn-ok" id="copyBtn">📋 コピー</button>
+      <button class="btn btn-sec" id="printBtn">🖨️ 印刷</button>
+      <button class="btn btn-sec" id="saveDraftBtn">💾 下書き保存</button>
+    </div>
+    <div id="out" contenteditable="true" spellcheck="false"></div>
+    <p class="out-note">※ 上の文書は直接編集できます。コピー／印刷／保存は編集後の内容が対象です。介護保険の加算要件・制度の数値は必ず最新の告示・通知でご確認ください。</p>
+  </div>
+</section>
+
+<!-- ════════ 下書き ════════ -->
+<section class="scr" id="sc-drafts">
+  <div class="note">下書きは<b>この端末のブラウザにのみ</b>保存されます（個人情報を含む場合があります）。共有端末では保存後の管理にご注意ください。</div>
+  <div id="draftBox"></div>
+</section>
+
+<!-- ════════ 設定 ════════ -->
+<section class="scr" id="sc-settings">
+  <div class="cd">
+    <div class="fld"><label>施設名</label><input id="setFacility" placeholder="有料老人ホーム ラウレアハレ"></div>
+    <div class="fld"><label>連絡先電話</label><input id="setTel" placeholder="例：0977-00-0000"></div>
+    <div class="fld"><label>作成者・管理者名（文書の差出人）</label><input id="setAuthor" placeholder="橋爪 豪"></div>
+    <div class="actions"><button class="btn btn-ok" id="saveSettings">💾 設定を保存</button></div>
+    <p class="out-note">設定はこの端末にのみ保存され、各文書の初期値に使われます。</p>
+  </div>
+  <div class="cd">
+    <h3 style="font-size:14px;color:var(--pri-d);margin:0 0 8px">データの管理</h3>
+    <p style="font-size:13px;color:var(--g7);margin:0 0 12px">この端末に保存した下書きをすべて削除します。元に戻せません。</p>
+    <button class="btn btn-ng" id="clearDrafts">🗑️ 下書きをすべて削除</button>
+  </div>
+  <div class="cd">
+    <h3 style="font-size:14px;color:var(--pri-d);margin:0 0 8px">このアプリについて</h3>
+    <p style="font-size:13px;color:var(--g7);line-height:1.7;margin:0">
+      介護現場の定型文書（ケアプラン・モニタリング・会議録・記録・申し送り・事故報告・家族連絡）の下書きを素早く整えるためのツールです。<b>外部のAIサーバーやインターネットへの送信は一切行いません。</b>文章の枠組みと体裁を自動生成し、専門的な判断・最終確認は利用者ご自身が行う設計です。
+    </p>
+  </div>
+</section>
+
+<!-- ボトムナビ -->
+<nav class="bnav">
+  <button class="on" data-sc="home"><span class="ic">📄</span>文書</button>
+  <button data-sc="drafts"><span class="ic">📁</span>下書き</button>
+  <button data-sc="settings"><span class="ic">⚙️</span>設定</button>
+</nav>
+
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   ラウレアハレ AI業務アシスタント（ローカル完結・外部送信なし）
+   - fetch / 外部CDN / 外部URL を一切使用しない（完全オフライン）
+   - 入居者の識別情報は同一オリジン共有キー su_residents_common から読込
+     （氏名・ふりがな・居室・性別・介護度・在籍 のみ。医療等の機微情報は読まない）
+   - 生成文書は端末内のみ。下書きは明示保存時だけ localStorage に保持
+   - 描画は esc() でエスケープ。文書出力は contenteditable で編集可
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 施設既定値（設定で上書き可。機微情報ではない） ── */
+var SETTINGS_KEY='su_ai_settings';
+var DRAFTS_KEY='su_ai_drafts';
+var SET={facility:'有料老人ホーム ラウレアハレ', tel:'', author:'橋爪 豪'};
+(function loadSet(){try{var s=localStorage.getItem(SETTINGS_KEY);if(s){var o=JSON.parse(s);SET.facility=o.facility||SET.facility;SET.tel=o.tel||'';SET.author=o.author||SET.author;}}catch(e){}})();
+
+/* ── ユーティリティ ── */
+function $(id){return document.getElementById(id)}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function toast(m){var t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.remove('on')},2600)}
+function pad(n){return String(n).padStart(2,'0')}
+function todayISO(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function nowHM(){var d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())}
+function blank(v,b){v=(v==null?'':String(v)).trim();return v?v:(b==null?'（　　　　　）':b)}
+/* 西暦ISO → 和暦（令和/平成）。空は空。 */
+function wareki(iso){
+  if(!iso)return'';
+  var p=String(iso).slice(0,10).split('-');if(p.length<3)return iso;
+  var y=parseInt(p[0],10),m=parseInt(p[1],10),d=parseInt(p[2],10);
+  if(isNaN(y))return iso;
+  var era,gy;
+  if(y>2019||(y===2019&&m>=5)){era='令和';gy=y-2018;}
+  else if(y>1989||(y===1989&&m>=1)){era='平成';gy=y-1988;}
+  else{era='昭和';gy=y-1925;}
+  return era+(gy===1?'元':gy)+'年'+m+'月'+d+'日';
+}
+function jdate(iso){if(!iso)return'';var p=String(iso).slice(0,10).split('-');if(p.length<3)return iso;return p[0]+'年'+parseInt(p[1],10)+'月'+parseInt(p[2],10)+'日'}
+
+/* ═══════════ 入居者（共有キーから識別情報のみ読込） ═══════════ */
+var COMMON_KEY='su_residents_common';
+var residents=[]; // [{masterId,name,kana,room,gender,careLevel,active}]
+function loadResidents(){
+  residents=[];
+  try{
+    var raw=localStorage.getItem(COMMON_KEY);if(!raw)return;
+    var o=JSON.parse(raw);var list=(o&&o.residents)||[];
+    if(Array.isArray(list)){
+      residents=list.filter(function(r){return r&&r.active!==false&&(r.name||'').trim()})
+        .map(function(r){return {masterId:r.masterId,name:r.name||'',kana:r.kana||'',room:r.room||'',gender:r.gender||'',careLevel:r.careLevel||''}})
+        .sort(function(a,b){return String(a.room||'').localeCompare(String(b.room||''),'ja')||String(a.kana||'').localeCompare(String(b.kana||''),'ja')});
+    }
+  }catch(e){residents=[]}
+}
+var CUR=null; // 選択中の入居者
+function fillResSelect(){
+  var sel=$('resSelect');if(!sel)return;
+  var html='<option value="">（選択しない／手入力）</option>';
+  residents.forEach(function(r,i){
+    html+='<option value="'+i+'">'+esc(r.name)+(r.room?'（'+esc(r.room)+'号室）':'')+(r.careLevel?' '+esc(r.careLevel):'')+'</option>';
+  });
+  sel.innerHTML=html;
+  sel.value='';
+  $('resInfo').textContent=residents.length?('登録 '+residents.length+'名'):'※ 入居者マスタ未連携（手入力できます）';
+}
+
+/* ═══════════ 文書定義 ═══════════
+   各文書: {id,icon,cat,title,sub,fields,gen(d)}
+   fields: {k,label,type,options?,full?,ph?,hint?,def?,item?(list)}
+   type: text|textarea|date|time|select|list
+   gen(d): d は {キー:値, listキー:[{subキー:値}...]} ── 平文文字列を返す
+   ─ d._res で選択中の入居者（{name,room,careLevel,gender,kana} or null）参照可 ─ */
+function L(arr){return arr.filter(function(x){return x!=null}).join('\n')}
+function sectionLines(items){ // [[label,val],...] → "label：val"
+  return items.map(function(p){return p[0]+'：'+blank(p[1])}).join('\n');
+}
+
+var DOCS=[
+/* 1. ケアプラン第1表 */
+{id:'careplan1',icon:'📋',cat:'ケアプラン',title:'ケアプラン 第1表',sub:'居宅サービス計画書(1)',
+ fields:[
+   {k:'name',label:'利用者氏名',type:'text'},
+   {k:'birth',label:'生年月日',type:'date'},
+   {k:'careLevel',label:'要介護状態区分',type:'select',options:['要支援1','要支援2','要介護1','要介護2','要介護3','要介護4','要介護5']},
+   {k:'planDate',label:'計画作成（変更）日',type:'date',def:'today'},
+   {k:'firstDate',label:'初回計画作成日',type:'date'},
+   {k:'certStart',label:'認定有効期間（開始）',type:'date'},
+   {k:'certEnd',label:'認定有効期間（終了）',type:'date'},
+   {k:'planType',label:'計画区分',type:'select',options:['初回','紹介','継続']},
+   {k:'intentUser',label:'利用者の生活に対する意向',type:'textarea',full:1,ph:'例：住み慣れた環境で、できることは自分で続けながら穏やかに暮らしたい。'},
+   {k:'intentFamily',label:'家族の生活に対する意向',type:'textarea',full:1,ph:'例：本人の意思を尊重しつつ、安全に過ごしてほしい。'},
+   {k:'committee',label:'介護認定審査会の意見・サービスの種類の指定',type:'textarea',full:1,ph:'なければ「特になし」'},
+   {k:'policy',label:'総合的な援助の方針',type:'textarea',full:1,ph:'例：本人の有する力を活かし、健康状態の安定と生活機能の維持を図る。'},
+   {k:'emg',label:'緊急時の主な連絡先・対応',type:'textarea',full:1,ph:'例：急変時は主治医（〇〇クリニック）へ連絡。家族（長男）へ連絡。'},
+   {k:'lifeAssist',label:'生活援助中心型の算定理由',type:'select',options:['該当なし','1. 一人暮らし','2. 家族等が障害・疾病等','3. その他']}
+ ],
+ gen:function(d){
+   return L([
+   '第１表　居宅サービス計画書（１）',
+   '',
+   '作成区分：'+blank(d.planType,'初回・紹介・継続')+'　　　認定済・申請中',
+   '利用者氏名：'+blank(d.name)+'　殿',
+   '生年月日：'+blank(jdate(d.birth))+'　　性別：'+blank(d._res&&d._res.gender,'　'),
+   '要介護状態区分：'+blank(d.careLevel),
+   '居宅サービス計画作成者氏名：'+blank(SET.author),
+   '居宅介護支援事業所：'+blank(SET.facility),
+   '居宅サービス計画作成（変更）日：'+blank(jdate(d.planDate))+'　　初回作成日：'+blank(jdate(d.firstDate)),
+   '認定の有効期間：'+blank(jdate(d.certStart))+'　〜　'+blank(jdate(d.certEnd)),
+   '',
+   '【利用者及び家族の生活に対する意向を踏まえた課題分析の結果】',
+   '〔本人〕'+blank(d.intentUser),
+   '〔家族〕'+blank(d.intentFamily),
+   '',
+   '【介護認定審査会の意見及びサービスの種類の指定】',
+   blank(d.committee,'特になし'),
+   '',
+   '【総合的な援助の方針】',
+   blank(d.policy),
+   (d.emg?('（緊急時の連絡先・対応）'+d.emg):null),
+   '',
+   '【生活援助中心型の算定理由】　'+blank(d.lifeAssist,'該当なし')
+   ]);
+ }},
+
+/* 2. ケアプラン第2表 */
+{id:'careplan2',icon:'🎯',cat:'ケアプラン',title:'ケアプラン 第2表',sub:'居宅サービス計画書(2)',
+ fields:[
+   {k:'name',label:'利用者氏名',type:'text'},
+   {k:'needs',label:'ニーズ（解決すべき課題）',type:'list',addLabel:'＋ ニーズを追加',
+     item:[
+       {k:'need',label:'生活全般の解決すべき課題（ニーズ）',type:'textarea',full:1},
+       {k:'longGoal',label:'長期目標',type:'textarea',full:1},
+       {k:'longTerm',label:'長期目標の期間',type:'text'},
+       {k:'shortGoal',label:'短期目標',type:'textarea',full:1},
+       {k:'shortTerm',label:'短期目標の期間',type:'text'},
+       {k:'service',label:'サービス内容',type:'textarea',full:1},
+       {k:'kind',label:'サービス種別',type:'text'},
+       {k:'who',label:'担当者（事業所）',type:'text'},
+       {k:'freq',label:'頻度',type:'text'},
+       {k:'term',label:'期間',type:'text'}
+     ]}
+ ],
+ gen:function(d){
+   var rows=(d.needs||[]).filter(function(r){return r&&(r.need||r.longGoal||r.shortGoal||r.service||r.kind||r.who||r.freq||r.term||r.longTerm||r.shortTerm)});
+   if(!rows.length)rows=[{}];
+   var num='①②③④⑤⑥⑦⑧';
+   var body=rows.map(function(r,i){
+     return L([
+     '［'+(num.charAt(i)||('('+(i+1)+')'))+' 生活全般の解決すべき課題（ニーズ）］',
+     blank(r.need),
+     '　長期目標：'+blank(r.longGoal)+'（期間：'+blank(r.longTerm,'　')+'）',
+     '　短期目標：'+blank(r.shortGoal)+'（期間：'+blank(r.shortTerm,'　')+'）',
+     '　援助内容：',
+     '　　・サービス内容：'+blank(r.service),
+     '　　・サービス種別：'+blank(r.kind,'　')+'　／　担当者（事業所）：'+blank(r.who,'　'),
+     '　　・頻度：'+blank(r.freq,'　')+'　／　期間：'+blank(r.term,'　')
+     ]);
+   }).join('\n\n');
+   return L(['第２表　居宅サービス計画書（２）','','利用者氏名：'+blank(d.name)+'　殿','',body]);
+ }},
+
+/* 3. モニタリング */
+{id:'monitor',icon:'📈',cat:'ケアプラン',title:'モニタリング記録',sub:'目標達成度・変化の確認',
+ fields:[
+   {k:'name',label:'利用者氏名',type:'text'},
+   {k:'monDate',label:'モニタリング実施日',type:'date',def:'today'},
+   {k:'from',label:'対象期間（開始）',type:'date'},
+   {k:'to',label:'対象期間（終了）',type:'date'},
+   {k:'author',label:'記録者',type:'text',def:'author'},
+   {k:'service',label:'サービスの実施状況',type:'textarea',full:1,ph:'利用サービス・利用状況・欠席等'},
+   {k:'achieve',label:'短期・長期目標の達成度',type:'textarea',full:1,ph:'達成／一部達成／未達成と具体的状況'},
+   {k:'satis',label:'利用者・家族の満足度／意向の変化',type:'textarea',full:1},
+   {k:'change',label:'心身の状況・生活の変化',type:'textarea',full:1,ph:'ADL・認知・健康状態・服薬・食事等の変化'},
+   {k:'issue',label:'今後の課題・対応',type:'textarea',full:1},
+   {k:'revise',label:'ケアプラン変更の必要性',type:'select',options:['無','有']},
+   {k:'reviseWhy',label:'（変更が必要な場合）理由',type:'textarea',full:1}
+ ],
+ gen:function(d){
+   return L([
+   'モニタリング記録',
+   '',
+   sectionLines([['利用者氏名',blank(d.name)+'　殿'],['居室',d._res&&d._res.room?d._res.room+'号室':''],['要介護度',d._res&&d._res.careLevel]]),
+   'モニタリング実施日：'+blank(jdate(d.monDate))+'　　対象期間：'+blank(jdate(d.from),'　')+' 〜 '+blank(jdate(d.to),'　'),
+   '記録者：'+blank(d.author),
+   '',
+   '1. サービスの実施状況','　'+blank(d.service),
+   '2. 短期・長期目標の達成度','　'+blank(d.achieve),
+   '3. 利用者・家族の満足度／意向の変化','　'+blank(d.satis),
+   '4. 心身の状況・生活の変化','　'+blank(d.change),
+   '5. 今後の課題・対応','　'+blank(d.issue),
+   '6. ケアプラン変更の必要性：　'+blank(d.revise,'無'),
+   (String(d.revise)==='有'?('　理由：'+blank(d.reviseWhy)):null)
+   ]);
+ }},
+
+/* 4. 担当者会議録 第4表 */
+{id:'meeting',icon:'👥',cat:'ケアプラン',title:'担当者会議の要点',sub:'第4表 サービス担当者会議',
+ fields:[
+   {k:'name',label:'利用者氏名',type:'text'},
+   {k:'date',label:'開催日',type:'date',def:'today'},
+   {k:'place',label:'開催場所',type:'text',def:'facility'},
+   {k:'times',label:'開催回数',type:'text',ph:'例：第3回'},
+   {k:'reason',label:'開催理由',type:'select',options:['更新認定','区分変更','サービス変更','状態変化','その他']},
+   {k:'members',label:'会議出席者',type:'list',addLabel:'＋ 出席者を追加',
+     item:[
+       {k:'org',label:'所属（職種）',type:'text'},
+       {k:'pname',label:'氏名',type:'text'}
+     ]},
+   {k:'topics',label:'検討した項目',type:'textarea',full:1},
+   {k:'detail',label:'検討内容',type:'textarea',full:1},
+   {k:'concl',label:'結論',type:'textarea',full:1},
+   {k:'remain',label:'残された課題（次回の開催時期等）',type:'textarea',full:1}
+ ],
+ gen:function(d){
+   var mem=(d.members||[]).filter(function(m){return (m.org||m.pname)});
+   var memTxt=mem.length?mem.map(function(m){return '　・'+blank(m.org,'　')+'／'+blank(m.pname,'　')}).join('\n'):'　・（　　　　　）';
+   return L([
+   '第４表　サービス担当者会議の要点',
+   '',
+   '利用者氏名：'+blank(d.name)+'　殿',
+   '開催日：'+blank(jdate(d.date))+'　　開催場所：'+blank(d.place)+'　　開催回数：'+blank(d.times,'第　回'),
+   '開催理由：'+blank(d.reason),
+   '',
+   '会議出席者：',
+   memTxt,
+   '',
+   '検討した項目：','　'+blank(d.topics),
+   '検討内容：','　'+blank(d.detail),
+   '結論：','　'+blank(d.concl),
+   '残された課題（次回の開催時期）：','　'+blank(d.remain)
+   ]);
+ }},
+
+/* 5. ケア記録 */
+{id:'carelog',icon:'📝',cat:'日々の記録',title:'ケア記録',sub:'介護記録・経過記録',
+ fields:[
+   {k:'name',label:'利用者氏名',type:'text'},
+   {k:'date',label:'日付',type:'date',def:'today'},
+   {k:'time',label:'時刻',type:'time',def:'now'},
+   {k:'author',label:'記録者',type:'text',def:'author'},
+   {k:'kind',label:'区分',type:'select',options:['様子・状態','バイタル','食事','水分','排泄','入浴・清潔','服薬','睡眠','活動・レク','受診','家族対応']},
+   {k:'vital',label:'バイタル（任意）',type:'text',ph:'例：BT36.5 BP128/78 P72 SpO2 98%'},
+   {k:'content',label:'内容・観察事項',type:'textarea',full:1},
+   {k:'action',label:'対応・特記事項',type:'textarea',full:1}
+ ],
+ gen:function(d){
+   return L([
+   '介護記録',
+   '',
+   '日付：'+blank(jdate(d.date))+'　時刻：'+blank(d.time),
+   '利用者：'+blank(d.name)+'　様'+(d._res&&d._res.room?'（'+d._res.room+'号室）':''),
+   '記録者：'+blank(d.author),
+   '区分：'+blank(d.kind),
+   (d.vital?('バイタル：'+d.vital):null),
+   '',
+   '〔内容・観察〕',blank(d.content),
+   '',
+   '〔対応・特記〕',blank(d.action,'特になし')
+   ]);
+ }},
+
+/* 6. 申し送り */
+{id:'handover',icon:'🔁',cat:'日々の記録',title:'申し送り',sub:'勤務交代時の連絡',
+ fields:[
+   {k:'date',label:'日付',type:'date',def:'today'},
+   {k:'shiftFrom',label:'申し送り元（勤務帯）',type:'select',options:['日勤','早番','遅番','夜勤']},
+   {k:'shiftTo',label:'申し送り先（勤務帯）',type:'select',options:['夜勤','日勤','遅番','早番']},
+   {k:'author',label:'記入者',type:'text',def:'author'},
+   {k:'items',label:'申し送り事項（入居者ごと）',type:'list',addLabel:'＋ 入居者の事項を追加',
+     item:[
+       {k:'who',label:'対象（氏名・居室）',type:'text'},
+       {k:'body',label:'内容',type:'textarea',full:1}
+     ]},
+   {k:'general',label:'全体連絡（共通事項）',type:'textarea',full:1}
+ ],
+ gen:function(d){
+   var its=(d.items||[]).filter(function(x){return (x.who||x.body)});
+   var itTxt=its.length?its.map(function(x,i){return (i+1)+'. ［'+blank(x.who,'　')+'］\n　'+blank(x.body)}).join('\n'):'　（個別事項なし）';
+   return L([
+   '申し送り',
+   '',
+   '日付：'+blank(jdate(d.date))+'　　勤務帯：'+blank(d.shiftFrom,'　')+' → '+blank(d.shiftTo,'　'),
+   '記入者：'+blank(d.author),
+   '',
+   '■ 入居者別 申し送り事項',
+   itTxt,
+   '',
+   '■ 全体連絡',
+   '　'+blank(d.general,'特になし')
+   ]);
+ }},
+
+/* 7. インシデント報告 */
+{id:'incident',icon:'⚠️',cat:'報告書',title:'事故・ヒヤリハット報告',sub:'インシデントレポート',
+ fields:[
+   {k:'type',label:'種別',type:'select',options:['ヒヤリハット','事故']},
+   {k:'name',label:'対象者氏名',type:'text'},
+   {k:'occur',label:'発生日時',type:'text',def:'nowdt',ph:'例：2026年6月1日 14時30分頃'},
+   {k:'found',label:'発見日時',type:'text',ph:'発生と異なる場合に記入'},
+   {k:'place',label:'発生場所',type:'text',ph:'例：居室・廊下・食堂・浴室'},
+   {k:'author',label:'報告者',type:'text',def:'author'},
+   {k:'situation',label:'発生状況（何が・どのように起きたか）',type:'textarea',full:1},
+   {k:'response',label:'発生時の対応',type:'textarea',full:1},
+   {k:'medical',label:'受診の有無',type:'select',options:['無','有']},
+   {k:'medicalDetail',label:'（受診時）医療機関・所見・処置',type:'textarea',full:1},
+   {k:'familyContact',label:'家族への連絡',type:'select',options:['済','未']},
+   {k:'familyDetail',label:'（連絡時）日時・対応者・家族の反応',type:'textarea',full:1},
+   {k:'cause',label:'原因の分析',type:'textarea',full:1},
+   {k:'prevent',label:'再発防止策',type:'textarea',full:1}
+ ],
+ gen:function(d){
+   return L([
+   blank(d.type,'事故・ヒヤリハット')+'報告書',
+   '',
+   '対象者：'+blank(d.name)+'　様'+(d._res&&d._res.room?'（'+d._res.room+'号室／'+blank(d._res.careLevel,'　')+'）':''),
+   '発生日時：'+blank(d.occur),
+   (d.found?('発見日時：'+d.found):null),
+   '発生場所：'+blank(d.place),
+   '報告者：'+blank(d.author),
+   '',
+   '1. 発生状況','　'+blank(d.situation),
+   '2. 発生時の対応','　'+blank(d.response),
+   '3. 受診の有無：'+blank(d.medical,'無'),
+   (String(d.medical)==='有'?('　'+blank(d.medicalDetail)):null),
+   '4. 家族への連絡：'+blank(d.familyContact,'未'),
+   (String(d.familyContact)==='済'?('　'+blank(d.familyDetail)):null),
+   '5. 原因の分析','　'+blank(d.cause),
+   '6. 再発防止策','　'+blank(d.prevent),
+   '',
+   '管理者確認：　　　　年　　月　　日　　氏名：'+blank(SET.author)+'　　㊞'
+   ]);
+ }},
+
+/* 8. 家族向け手紙 */
+{id:'letter',icon:'✉️',cat:'家族連絡',title:'家族向け手紙',sub:'正式な通知文書',
+ fields:[
+   {k:'to',label:'宛先（ご家族氏名）',type:'text',ph:'例：山田 太郎'},
+   {k:'date',label:'日付',type:'date',def:'today'},
+   {k:'subject',label:'件名',type:'text',ph:'例：体調の経過についてのご報告'},
+   {k:'about',label:'対象の入居者（本文中の呼称）',type:'text',ph:'例：お母様／〇〇様'},
+   {k:'body',label:'本文の要点（箇条書き可）',type:'textarea',full:1,ph:'伝えたい事実・経過・お願いを書いてください。文章でなくメモでも構いません。'},
+   {k:'closing',label:'結びの一言（任意）',type:'textarea',full:1,ph:'例：引き続き安心してお過ごしいただけるよう努めてまいります。'}
+ ],
+ gen:function(d){
+   var about=blank(d.about,'ご本人');
+   return L([
+   '　　　　　　　　　　　　　　　　　　　　'+blank(wareki(d.date),wareki(todayISO())),
+   '',
+   blank(d.to,'　　　　　　')+'　様',
+   '',
+   '　　　　　　　　　　　　　　　　'+blank(SET.facility),
+   '　　　　　　　　　　　　　　　　管理者　'+blank(SET.author),
+   (SET.tel?'　　　　　　　　　　　　　　　　TEL '+SET.tel:null),
+   '',
+   '　　　　　　'+blank(d.subject,'ご連絡'),
+   '',
+   '　拝啓　時下ますますご清祥のこととお慶び申し上げます。平素より当施設の運営にご理解とご協力を賜り、厚く御礼申し上げます。',
+   '',
+   '　さて、'+about+'の件につきまして、下記のとおりご連絡申し上げます。',
+   '',
+   blank(d.body),
+   '',
+   (d.closing?'　'+d.closing:'　引き続き'+about+'に寄り添ったケアに努めてまいります。'),
+   '　ご不明な点やご心配なことがございましたら、どうぞお気軽に当施設までお問い合わせくださいませ。',
+   '',
+   '敬具'
+   ]);
+ }},
+
+/* 9. 家族向けLINE/短文 */
+{id:'line',icon:'💬',cat:'家族連絡',title:'家族向けLINE・短文',sub:'LINE / SMS 用',
+ fields:[
+   {k:'name',label:'対象の入居者',type:'text'},
+   {k:'kind',label:'用件',type:'select',options:['日常のご報告','発熱','転倒','体調変化','入院','退院','受診結果','面会のご案内','その他']},
+   {k:'body',label:'要点（短く）',type:'textarea',full:1,ph:'伝えたいことを一言で。'},
+   {k:'needReply',label:'返信のお願い',type:'select',options:['不要','お願いする']}
+ ],
+ gen:function(d){
+   var nm=blank(d.name,'ご本人');
+   var open;
+   switch(d.kind){
+     case '発熱': open=nm+'様の発熱についてご連絡いたします。';break;
+     case '転倒': open=nm+'様の転倒についてご連絡いたします。';break;
+     case '体調変化': open=nm+'様のお体の状態についてご連絡いたします。';break;
+     case '入院': open=nm+'様のご入院についてご連絡いたします。';break;
+     case '退院': open=nm+'様のご退院についてご連絡いたします。';break;
+     case '受診結果': open=nm+'様の受診結果についてご連絡いたします。';break;
+     case '面会のご案内': open=nm+'様への面会についてご案内いたします。';break;
+     case '日常のご報告': open=nm+'様のご様子についてご報告いたします。';break;
+     default: open=nm+'様について、ご連絡いたします。';
+   }
+   return L([
+   blank(d.name,'　　')+'様のご家族様',
+   '',
+   'いつもお世話になっております。'+blank(SET.facility)+'です。',
+   '',
+   open,
+   '',
+   blank(d.body),
+   '',
+   (String(d.needReply)==='お願いする'?'お手すきの際にご返信いただけますと幸いです。':'取り急ぎご連絡まで。'),
+   '今後ともよろしくお願いいたします。'
+   ]);
+ }}
+];
+
+/* ═══════════ ホーム描画 ═══════════ */
+function renderHome(){
+  var cats=[];var byCat={};
+  DOCS.forEach(function(doc){if(!byCat[doc.cat]){byCat[doc.cat]=[];cats.push(doc.cat)}byCat[doc.cat].push(doc)});
+  var icons={'ケアプラン':'🗂️','日々の記録':'🖊️','報告書':'📑','家族連絡':'💐'};
+  var html='';
+  cats.forEach(function(cat){
+    html+='<div class="cat-h">'+(icons[cat]||'📂')+' '+esc(cat)+'</div><div class="dgrid">';
+    byCat[cat].forEach(function(doc){
+      html+='<button class="dcard" data-doc="'+esc(doc.id)+'">'+
+        '<span class="ic">'+doc.icon+'</span>'+
+        '<span class="t">'+esc(doc.title)+'</span>'+
+        '<span class="s">'+esc(doc.sub)+'</span></button>';
+    });
+    html+='</div>';
+  });
+  $('docMenu').innerHTML=html;
+  Array.prototype.forEach.call($('docMenu').querySelectorAll('.dcard'),function(b){
+    b.addEventListener('click',function(){openDoc(this.getAttribute('data-doc'))});
+  });
+}
+
+/* ═══════════ エディタ（フォーム生成） ═══════════ */
+var curDoc=null;
+var listState={}; // {fieldKey:[{sub:val}...]}
+function defVal(f){
+  if(f.def==='today')return todayISO();
+  if(f.def==='now')return nowHM();
+  if(f.def==='author')return SET.author;
+  if(f.def==='facility')return SET.facility;
+  if(f.def==='nowdt'){var d=new Date();return d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 '+d.getHours()+'時'+pad(d.getMinutes())+'分頃';}
+  return f.def||'';
+}
+function fieldHTML(f,scope){
+  var id=(scope||'')+'f_'+f.k;
+  var v=esc(defVal(f));
+  var wide=(f.type==='textarea'||f.full)?' wide':'';
+  var lab='<label>'+esc(f.label)+'</label>';
+  var ctl;
+  if(f.type==='textarea'){ctl='<textarea data-k="'+esc(f.k)+'" id="'+id+'" placeholder="'+esc(f.ph||'')+'">'+v+'</textarea>';}
+  else if(f.type==='select'){
+    ctl='<select data-k="'+esc(f.k)+'" id="'+id+'"><option value=""></option>'+
+      f.options.map(function(o){return '<option value="'+esc(o)+'"'+(defVal(f)===o?' selected':'')+'>'+esc(o)+'</option>'}).join('')+'</select>';
+  }
+  else{var t=(f.type==='date'?'date':f.type==='time'?'time':'text');
+    ctl='<input data-k="'+esc(f.k)+'" id="'+id+'" type="'+t+'" value="'+v+'" placeholder="'+esc(f.ph||'')+'">';}
+  return '<div class="fld'+wide+'">'+lab+ctl+(f.hint?'<span class="hint">'+esc(f.hint)+'</span>':'')+'</div>';
+}
+function openDoc(id){
+  curDoc=DOCS.filter(function(x){return x.id===id})[0];
+  if(!curDoc)return;
+  listState={};
+  $('edTitle').textContent=curDoc.icon+' '+curDoc.title;
+  // フォーム
+  var simple='',lists='';
+  curDoc.fields.forEach(function(f){
+    if(f.type==='list'){listState[f.k]=[];lists+=listBlockHTML(f);}
+    else simple+=fieldHTML(f);
+  });
+  $('formBox').innerHTML='<div class="fgrid">'+simple+'</div>'+lists;
+  // リストの初期1行
+  curDoc.fields.forEach(function(f){if(f.type==='list'){addListRow(f.k);}});
+  // 出力クリア
+  $('out').textContent='';
+  // 入居者選択を反映
+  applyCurResident();
+  showScreen('editor');
+  window.scrollTo(0,0);
+}
+function listBlockHTML(f){
+  return '<div class="lwrap" data-list="'+esc(f.k)+'">'+
+    '<div class="lh">'+esc(f.label)+'</div>'+
+    '<div class="lrows" id="lrows_'+esc(f.k)+'"></div>'+
+    '<button type="button" class="btn btn-sec" data-add="'+esc(f.k)+'" style="min-height:40px;padding:8px 14px;font-size:13px">'+esc(f.addLabel||'＋ 追加')+'</button>'+
+  '</div>';
+}
+function listFieldDef(k){var f=null;curDoc.fields.forEach(function(x){if(x.k===k)f=x});return f}
+function collectList(k){
+  var box=$('lrows_'+k);if(!box)return;
+  var arr=[];
+  Array.prototype.forEach.call(box.querySelectorAll('.lrow'),function(row){
+    var o={};
+    Array.prototype.forEach.call(row.querySelectorAll('[data-sub]'),function(inp){o[inp.getAttribute('data-sub')]=inp.value});
+    arr.push(o);
+  });
+  listState[k]=arr;
+}
+function renderListRows(k){
+  var f=listFieldDef(k);var box=$('lrows_'+k);if(!box||!f)return;
+  var html='';
+  (listState[k]||[]).forEach(function(row,i){
+    var inner=f.item.map(function(sf){
+      var v=esc(row[sf.k]==null?'':row[sf.k]);
+      var wide=(sf.type==='textarea'||sf.full)?' wide':'';
+      var lab='<label>'+esc(sf.label)+'</label>';
+      var ctl;
+      if(sf.type==='textarea')ctl='<textarea data-sub="'+esc(sf.k)+'">'+v+'</textarea>';
+      else if(sf.type==='select')ctl='<select data-sub="'+esc(sf.k)+'"><option value=""></option>'+sf.options.map(function(o){return '<option value="'+esc(o)+'"'+(row[sf.k]===o?' selected':'')+'>'+esc(o)+'</option>'}).join('')+'</select>';
+      else ctl='<input data-sub="'+esc(sf.k)+'" type="'+(sf.type==='date'?'date':'text')+'" value="'+v+'" placeholder="'+esc(sf.ph||'')+'">';
+      return '<div class="fld'+wide+'">'+lab+ctl+'</div>';
+    }).join('');
+    html+='<div class="lrow"><button type="button" class="ldel" data-del="'+i+'">✕ 削除</button><div class="fgrid">'+inner+'</div></div>';
+  });
+  box.innerHTML=html;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-del]'),function(b){
+    b.addEventListener('click',function(){collectList(k);listState[k].splice(parseInt(this.getAttribute('data-del'),10),1);renderListRows(k)});
+  });
+}
+function addListRow(k){
+  collectList(k);
+  if(!listState[k])listState[k]=[];
+  listState[k].push({});
+  renderListRows(k);
+}
+
+/* 入居者選択をフォームへ反映（name と既知項目をプリフィル。手入力済みは尊重） */
+function applyCurResident(){
+  if(!curDoc)return;
+  var nameInp=$('ff_name')||document.querySelector('#formBox [data-k="name"]');
+  if(CUR){
+    if(nameInp&&!nameInp.value)nameInp.value=CUR.name;
+    var cl=document.querySelector('#formBox [data-k="careLevel"]');
+    if(cl&&!cl.value&&CUR.careLevel){ // select か input
+      var has=Array.prototype.some.call(cl.options||[],function(o){return o.value===CUR.careLevel});
+      if(cl.tagName==='SELECT'){if(has)cl.value=CUR.careLevel;}else cl.value=CUR.careLevel;
+    }
+  }
+}
+
+/* ═══════════ 生成 ═══════════ */
+function collectForm(){
+  var d={};
+  Array.prototype.forEach.call($('formBox').querySelectorAll('[data-k]'),function(inp){
+    d[inp.getAttribute('data-k')]=(inp.value==null?'':inp.value);
+  });
+  curDoc.fields.forEach(function(f){if(f.type==='list'){collectList(f.k);d[f.k]=listState[f.k]||[];}});
+  d._res=CUR;
+  return d;
+}
+function generate(){
+  if(!curDoc)return;
+  var d=collectForm();
+  var text;
+  try{text=curDoc.gen(d);}catch(e){toast('⚠️ 生成エラー: '+e.message);return;}
+  $('out').textContent=text;
+  toast('✅ 文書を生成しました');
+  $('out').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ═══════════ コピー・印刷 ═══════════ */
+function copyOut(){
+  var text=$('out').innerText;
+  if(!text.trim()){toast('先に文書を生成してください');return;}
+  function fallback(){
+    var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');toast('📋 コピーしました');}catch(e){toast('コピーできませんでした。手動で選択してください');}
+    document.body.removeChild(ta);
+  }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){toast('📋 コピーしました')},fallback);
+  }else fallback();
+}
+
+/* ═══════════ 下書き ═══════════ */
+function loadDrafts(){try{var s=localStorage.getItem(DRAFTS_KEY);return s?(JSON.parse(s)||[]):[]}catch(e){return[]}}
+function saveDrafts(a){try{localStorage.setItem(DRAFTS_KEY,JSON.stringify(a))}catch(e){toast('⚠️ 保存できませんでした（容量超過の可能性）')}}
+function saveCurrentDraft(){
+  var text=$('out').innerText;
+  if(!text.trim()){toast('先に文書を生成してください');return;}
+  var arr=loadDrafts();
+  var now=new Date();
+  var stamp=now.getFullYear()+'/'+pad(now.getMonth()+1)+'/'+pad(now.getDate())+' '+pad(now.getHours())+':'+pad(now.getMinutes());
+  var title=(curDoc?curDoc.title:'文書');
+  // 1行目から対象者名らしき語を拾ってタイトルに添える
+  var first=text.split('\n').filter(function(l){return l.trim()})[1]||'';
+  arr.unshift({id:'d'+now.getTime(),title:title,sub:first.slice(0,24),date:stamp,docId:curDoc?curDoc.id:'',text:text});
+  if(arr.length>100)arr=arr.slice(0,100);
+  saveDrafts(arr);
+  toast('💾 下書きを保存しました');
+}
+function renderDrafts(){
+  var arr=loadDrafts();var box=$('draftBox');
+  if(!arr.length){box.innerHTML='<div class="empty">保存された下書きはありません</div>';return;}
+  var html='';
+  arr.forEach(function(dr){
+    html+='<div class="draft" data-id="'+esc(dr.id)+'">'+
+      '<div class="meta"><div class="t">'+esc(dr.title)+(dr.sub?'　<span style="font-weight:400;color:var(--g6)">'+esc(dr.sub)+'</span>':'')+'</div>'+
+      '<div class="d">'+esc(dr.date)+'</div></div>'+
+      '<button class="btn btn-sec mini" data-open="'+esc(dr.id)+'">開く</button>'+
+      '<button class="btn btn-ng mini" data-rm="'+esc(dr.id)+'">削除</button>'+
+    '</div>';
+  });
+  box.innerHTML=html;
+  Array.prototype.forEach.call(box.querySelectorAll('[data-open]'),function(b){b.addEventListener('click',function(){openDraft(this.getAttribute('data-open'))})});
+  Array.prototype.forEach.call(box.querySelectorAll('[data-rm]'),function(b){b.addEventListener('click',function(){removeDraft(this.getAttribute('data-rm'))})});
+}
+function openDraft(id){
+  var arr=loadDrafts();var dr=arr.filter(function(x){return x.id===id})[0];if(!dr)return;
+  curDoc=DOCS.filter(function(x){return x.id===dr.docId})[0]||null;
+  $('edTitle').textContent='📄 '+dr.title+'（保存した下書き）';
+  $('formBox').innerHTML='<p style="color:var(--g6);font-size:13px;margin:0">保存済みの下書きを表示しています。下の本文を直接編集してから、コピー／印刷／再保存できます。</p>';
+  $('out').textContent=dr.text;
+  showScreen('editor');window.scrollTo(0,0);
+}
+function removeDraft(id){
+  var arr=loadDrafts().filter(function(x){return x.id!==id});saveDrafts(arr);renderDrafts();toast('削除しました');
+}
+function clearAllDrafts(){
+  if(!loadDrafts().length){toast('下書きはありません');return;}
+  if(confirm('保存した下書きをすべて削除します。よろしいですか？（元に戻せません）')){
+    try{localStorage.removeItem(DRAFTS_KEY)}catch(e){}
+    renderDrafts();toast('すべて削除しました');
+  }
+}
+
+/* ═══════════ 設定 ═══════════ */
+function fillSettings(){$('setFacility').value=SET.facility;$('setTel').value=SET.tel;$('setAuthor').value=SET.author;}
+function saveSettings(){
+  SET.facility=$('setFacility').value.trim()||'有料老人ホーム ラウレアハレ';
+  SET.tel=$('setTel').value.trim();
+  SET.author=$('setAuthor').value.trim()||'橋爪 豪';
+  try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(SET))}catch(e){}
+  toast('💾 設定を保存しました');
+}
+
+/* ═══════════ 画面遷移 ═══════════ */
+function showScreen(name){
+  ['home','editor','drafts','settings'].forEach(function(s){var el=$('sc-'+s);if(el)el.classList.toggle('on',s===name)});
+  Array.prototype.forEach.call(document.querySelectorAll('.bnav button'),function(b){
+    var sc=b.getAttribute('data-sc');b.classList.toggle('on',sc===name||(name==='editor'&&sc==='home'));
+  });
+  if(name==='drafts')renderDrafts();
+  if(name==='settings')fillSettings();
+}
+
+/* ═══════════ 初期化 ═══════════ */
+function init(){
+  loadResidents();
+  renderHome();
+  fillResSelect();
+  // 入居者選択
+  $('resSelect').addEventListener('change',function(){
+    var v=this.value;CUR=(v==='')?null:residents[parseInt(v,10)]||null;
+    applyCurResident();
+    if(CUR)toast('対象者：'+CUR.name+' を反映しました');
+  });
+  // フォーム内の「＋追加」（イベント委譲）
+  $('formBox').addEventListener('click',function(e){
+    var add=e.target&&e.target.getAttribute&&e.target.getAttribute('data-add');
+    if(add){e.preventDefault();addListRow(add);}
+  });
+  // ボタン
+  $('backHome').addEventListener('click',function(){showScreen('home')});
+  $('genBtn').addEventListener('click',generate);
+  $('clearForm').addEventListener('click',function(){if(curDoc){var id=curDoc.id;openDoc(id);toast('入力をクリアしました');}});
+  $('copyBtn').addEventListener('click',copyOut);
+  $('printBtn').addEventListener('click',function(){if(!$('out').innerText.trim()){toast('先に文書を生成してください');return;}window.print();});
+  $('saveDraftBtn').addEventListener('click',saveCurrentDraft);
+  $('saveSettings').addEventListener('click',saveSettings);
+  $('clearDrafts').addEventListener('click',clearAllDrafts);
+  // ボトムナビ
+  Array.prototype.forEach.call(document.querySelectorAll('.bnav button'),function(b){
+    b.addEventListener('click',function(){showScreen(this.getAttribute('data-sc'))});
+  });
+  showScreen('home');
+}
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
