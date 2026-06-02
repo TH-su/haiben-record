@@ -1945,6 +1945,44 @@ const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 const uid = ()=> 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const ymNow = ()=>{ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); };
 const dNow = ()=>{ const d=new Date(); return d.toISOString().slice(0,10); };
+
+/* ============================================================
+   タブナビゲーション・主要ボタンの「クラッシュ耐性」配線
+   ------------------------------------------------------------
+   初期化コードの後半で万一エラーが起きても、タブ移動・用紙作成が
+   必ず動作するよう、ユーティリティ直後に **イベント委任** で document に
+   1つだけリスナーを登録する。個別ボタンへの addEventListener と違い、
+   後続コードの実行可否に依存しないため「クリックが一切効かない」状態を防ぐ。
+   goto / openPrintSheet は関数宣言（巻き上げ）のため、クリック時には必ず利用可能。
+   ============================================================ */
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if(!t || !t.closest) return;
+  // タブ切替
+  const tab = t.closest('.tnav button[data-go]');
+  if(tab){
+    try{
+      const target = tab.dataset.go;
+      if(target === 'input'){
+        try{
+          editingRecordId = null;
+          const ym = ymNow(), d = dNow();
+          const inMonth = $('#inMonth'), inDate = $('#inDate');
+          if(inMonth) inMonth.value = ym;
+          if(inDate)  inDate.value  = d;
+          if(typeof saveUI === 'function') saveUI({inMonth: ym});
+        }catch(err){ /* 入力タブ初期化失敗でもナビゲーションは継続 */ }
+      }
+      if(typeof goto === 'function') goto(target);
+    }catch(err){ /* ナビゲーションを止めない */ }
+    return;
+  }
+  // 用紙作成ボタン
+  if(t.closest('#btnPrintSheet')){
+    try{ if(typeof openPrintSheet === 'function') openPrintSheet(); }
+    catch(err){ try{ toast('用紙作成でエラーが発生しました', 'err'); }catch(e2){} }
+  }
+}, false);
 const ymPrev = (ym,step=1)=>{
   const [y,m] = ym.split('-').map(Number);
   const d = new Date(y, m-1-step, 1);
@@ -2314,34 +2352,22 @@ function analyze(residentId, ym){
 /* ============================================================
    Navigation
    ============================================================ */
-$$('.tnav button').forEach(b=>{
-  b.addEventListener('click', ()=>{
-    const target = b.dataset.go;
-    // 入力タブをメニューから開いた場合、対象月＝今月／測定日＝今日にリセット
-    if(target === 'input'){
-      editingRecordId = null;
-      const ym = ymNow();
-      const d  = dNow();
-      const inMonth = $('#inMonth');
-      const inDate  = $('#inDate');
-      if(inMonth) inMonth.value = ym;
-      if(inDate)  inDate.value  = d;
-      saveUI({inMonth: ym});
-    }
-    goto(target);
-  });
-});
+/* タブのクリック配線はユーティリティ直後の委任リスナーに集約済み（クラッシュ耐性のため）。
+   goto() は画面切替を先に行い、各 render はエラーで止まってもナビゲーションを妨げないよう
+   try/catch で隔離する。 */
 function goto(sc){
   $$('.tnav button').forEach(b=> b.classList.toggle('on', b.dataset.go===sc));
   $$('.scr').forEach(s=> s.classList.toggle('on', s.dataset.sc===sc));
-  saveUI({tab: sc});
-  if(sc==='list')  renderList();
-  if(sc==='input') renderInput();
-  if(sc==='indiv') renderIndiv();
-  if(sc==='grid')  renderGrid();
-  if(sc==='alert') renderAlerts();
-  if(sc==='cfg')   renderCfg();
-  window.scrollTo(0,0);
+  try{ saveUI({tab: sc}); }catch(e){}
+  try{
+    if(sc==='list')       renderList();
+    else if(sc==='input') renderInput();
+    else if(sc==='indiv') renderIndiv();
+    else if(sc==='grid')  renderGrid();
+    else if(sc==='alert') renderAlerts();
+    else if(sc==='cfg')   renderCfg();
+  }catch(e){ console.error('goto render error ('+sc+'):', e); }
+  try{ window.scrollTo(0,0); }catch(e){}
 }
 
 /* ============================================================
@@ -2586,9 +2612,8 @@ function openPrintSheet(){
   if(closeBtn) closeBtn.addEventListener('click', closePrintSheet);
 }
 
-/* 「🖨️ 用紙作成」ボタンの配線 */
-$('#btnPrintSheet')?.addEventListener('click', openPrintSheet);
-/* Esc キーで用紙を閉じる */
+/* 「🖨️ 用紙作成」ボタンのクリックはユーティリティ直後の委任リスナーで処理（クラッシュ耐性）。
+   ここでは Esc キーで用紙を閉じるショートカットのみ登録する。 */
 document.addEventListener('keydown', e=>{
   if(e.key === 'Escape' && document.body.classList.contains('ps-active')) closePrintSheet();
 });
