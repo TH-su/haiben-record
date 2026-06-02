@@ -1229,6 +1229,23 @@ function bmiCat(bmi){
 
 const DEFAULT_DB = { residents:[], records:[] };
 
+/* ディープクローン。structuredClone は Safari 15.4 未満（古い iPad 等）で未対応のため、
+   利用可能なら使い、無ければ JSON ベースのクローンにフォールバックする。
+   DB は JSON シリアライズ可能なプレーンデータなので JSON クローンで十分。
+   ※ 起動時の load() で呼ばれるため、ここで例外が出るとアプリ全体が停止し
+     「クリックが効かない」状態になる。互換性を最優先する。 */
+function deepClone(obj){
+  try{
+    if(typeof structuredClone === 'function') return structuredClone(obj);
+  }catch(e){ /* fall through */ }
+  try{
+    return JSON.parse(JSON.stringify(obj));
+  }catch(e){
+    // 最後の保険：浅いコピー
+    return Array.isArray(obj) ? obj.slice() : Object.assign({}, obj);
+  }
+}
+
 /* localStorage から JSON を安全に取り出す。パース失敗・型不正は null を返す。
    サニティ：residents / records 配列のどちらか一方でも持つオブジェクト。 */
 function _readDbFromKey(key){
@@ -1269,7 +1286,7 @@ function load(){
         console.error('load: all DB keys were unreadable; starting empty');
         try{ sessionStorage.setItem('wtmgr_load_error', '1'); }catch(e){}
       }
-      return structuredClone(DEFAULT_DB);
+      return deepClone(DEFAULT_DB);
     }
     if(recoveredFrom){
       console.warn('load: recovered DB from '+recoveredFrom);
@@ -1305,7 +1322,7 @@ function load(){
       TOGGLES.forEach(t => r[t.k] = !!latest[t.k]);
     }
     return d;
-  }catch(e){ console.error(e); return structuredClone(DEFAULT_DB); }
+  }catch(e){ console.error(e); return deepClone(DEFAULT_DB); }
 }
 /* 永続化：try/catch + 読み戻し検証 + 二世代バックアップローテーション
    ----------------------------------------------------------------
@@ -5128,7 +5145,7 @@ $('#cfgClear').addEventListener('click', ()=>{
   if(!confirm('全データを削除します。本当によろしいですか？（元に戻せません）')) return;
   // GAS連携URLは「アプリ設定」なので、データ削除では保持する
   const keepUrl = (DB && DB.apiUrl) || apiUrl || '';
-  DB = structuredClone(DEFAULT_DB);
+  DB = deepClone(DEFAULT_DB);
   if(keepUrl) DB.apiUrl = keepUrl;
   save();
   saveUI({inRes:'', ivRes:''});
