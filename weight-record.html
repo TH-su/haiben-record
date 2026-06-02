@@ -631,7 +631,10 @@ select option.is-discharged{color:var(--g6)}
   <div class="cd">
     <div class="cd-t">
       <span>入居者一覧</span>
-      <span class="cd-t-r" id="listCount">—</span>
+      <span class="cd-t-r" style="display:flex;align-items:center;gap:8px">
+        <button id="btnPrintSheet" class="bn bp bsm" title="入居者全員の前月体重と今月の記入欄を A4 で印刷">🖨️ 用紙作成</button>
+        <span id="listCount">—</span>
+      </span>
     </div>
     <div class="mp-w">
       <span style="font-size:12px;color:var(--g7);font-weight:700;margin-right:4px">対象月</span>
@@ -2352,6 +2355,206 @@ $('#listFilter').addEventListener('click', e=>{
   $$('#listFilter button').forEach(x=> x.classList.toggle('on', x===b));
   renderList();
 });
+
+/* ============================================================
+   用紙作成（体重測定用紙の印刷）
+   ------------------------------------------------------------
+   - 入居者一覧画面の「🖨️ 用紙作成」ボタンから起動
+   - 対象月（listMonth）の **前月** の体重を入居者ごとに表示
+   - 車椅子使用者は「実測値（含む車椅子）」「車椅子重量」を別欄に
+   - 今月の測定値を記入できるブランクセルを用意
+   - 全員分が A4 用紙１枚に収まるよう、人数に応じてフォントを自動圧縮
+   ============================================================ */
+function openPrintSheet(){
+  // 印刷対象月（list の対象月）と前月を計算
+  const targetYm = listMonth || ymNow();
+  const prevYm = ymPrev(targetYm, 1);
+  // 在籍中（退去者を除く）の入居者を部屋・名前で安全ソート
+  const residents = (typeof sortedResidents === 'function')
+    ? sortedResidents({ includeDischarged: false })
+    : (DB.residents || []).filter(r => r && !isDischarged(r));
+  if(residents.length === 0){
+    toast('印刷する入居者がいません', 'err');
+    return;
+  }
+  // 人数に応じてフォントサイズと行高を自動調整（A4 縦：約 257mm の印刷可能高）
+  // 行高(mm) = ヘッダ/フッタを除いた約 220mm を人数で割る → 1行最低 6mm を確保
+  const n = residents.length;
+  let rowH, fz, padV;
+  if(n <= 14)      { rowH = 13; fz = 11; padV = 4; }
+  else if(n <= 22) { rowH = 9.5; fz = 10; padV = 3; }
+  else if(n <= 30) { rowH = 7.4; fz = 9; padV = 2; }
+  else if(n <= 40) { rowH = 5.5; fz = 8; padV = 1.5; }
+  else             { rowH = 4.5; fz = 7; padV = 1; }   // 41名以上は最小設定
+
+  // 各入居者の前月情報を準備
+  function _bodyRow(r, idx){
+    const prevRec = (typeof getRecord === 'function') ? getRecord(r.id, prevYm) : null;
+    const isChair = (r.wheelchairKg != null && r.wheelchairKg > 0);
+    // 前月「実測値」: chair モードなら rawWeight、通常モードなら weight
+    let prevReal = '';
+    let prevChair = '';
+    let prevNet = '';
+    if(prevRec){
+      if(prevRec.measureMode === 'chair' && prevRec.rawWeight != null){
+        prevReal  = prevRec.rawWeight.toFixed(1);
+        prevChair = (prevRec.wheelchairKg != null) ? prevRec.wheelchairKg.toFixed(1) : '';
+        prevNet   = prevRec.weight.toFixed(1);
+      } else {
+        prevReal = prevRec.weight.toFixed(1);
+      }
+    }
+    // 車椅子（マスター登録値）を補助情報として表示
+    const chairKg = isChair ? r.wheelchairKg.toFixed(1) : '';
+    const room = (r.room != null && r.room !== '') ? r.room : '－';
+    const name = r.name || '（名前未設定）';
+    // 今月の測定値を書き込むブランク欄を 3 つ（実測値・車椅子重量・差引体重）用意。
+    // 通常モードは「実測値」のみ。車椅子モードは３つすべて意味があるので３列確保。
+    const blankCells = isChair
+      ? `<td class="bl">${' '.repeat(12)}</td><td class="bl">${' '.repeat(8)}</td><td class="bl">${' '.repeat(8)}</td>`
+      : `<td class="bl" colspan="3">${' '.repeat(12)}</td>`;
+
+    return `
+      <tr>
+        <td class="no">${idx + 1}</td>
+        <td class="rm">${escapeHtml(String(room))}</td>
+        <td class="nm">${escapeHtml(name)}${isChair ? '<span class="wcb">車</span>' : ''}</td>
+        <td class="prev">${prevReal || '－'}</td>
+        <td class="prev-chair">${prevChair || (isChair ? chairKg : '')}</td>
+        <td class="prev-net">${prevNet || ''}</td>
+        ${blankCells}
+        <td class="memo"></td>
+      </tr>`;
+  }
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="utf-8">
+<title>体重測定用紙 ${ymFmt(targetYm)}</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm 12mm; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;color:#000}
+  .ph-hd{display:flex;align-items:flex-end;justify-content:space-between;
+    border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:6px}
+  .ph-ttl{font-size:16pt;font-weight:700;letter-spacing:1px}
+  .ph-sub{font-size:9pt;color:#333}
+  .ph-meta{font-size:9pt;text-align:right;line-height:1.55}
+  table{width:100%;border-collapse:collapse;table-layout:fixed;
+    font-size:${fz}pt;font-variant-numeric:tabular-nums}
+  th,td{border:1px solid #555;padding:${padV}px 3px;text-align:center;
+    height:${rowH}mm;line-height:1.15;overflow:hidden}
+  thead th{background:#e8eaed;font-weight:700;font-size:${Math.max(fz-1, 7)}pt;
+    line-height:1.15;padding:3px 2px;height:auto}
+  td.no{width:22px;color:#555;font-size:${Math.max(fz-1, 7)}pt}
+  td.rm{width:32px;font-weight:700}
+  td.nm{text-align:left;padding-left:4px;font-weight:700;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .wcb{display:inline-block;margin-left:3px;padding:0 4px;background:#1565c0;
+    color:#fff;border-radius:3px;font-size:${Math.max(fz-2, 6)}pt;vertical-align:middle}
+  td.prev,td.prev-chair,td.prev-net{width:8%;font-weight:700;background:#fafafa}
+  td.prev-net{color:#0d47a1}
+  td.bl{background:#fff}
+  td.memo{width:18%;font-size:${Math.max(fz-1, 7)}pt}
+  .ph-ft{margin-top:6px;font-size:8pt;color:#444;display:flex;
+    justify-content:space-between;border-top:1px solid #999;padding-top:3px}
+  .ph-note{font-size:8pt;color:#555;margin-top:3px;line-height:1.45}
+  .ph-note b{color:#0d47a1}
+  /* 印刷時にはツールバー類を非表示 */
+  @media print{
+    .no-print{display:none !important}
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+  /* ブラウザ閲覧時用のトップバー */
+  .toolbar{position:sticky;top:0;background:#1565c0;color:#fff;
+    padding:8px 12px;display:flex;gap:8px;align-items:center;z-index:100;
+    box-shadow:0 2px 6px rgba(0,0,0,.18)}
+  .toolbar button{background:#fff;color:#1565c0;border:none;padding:6px 14px;
+    border-radius:4px;font-weight:700;cursor:pointer;font-size:13px}
+  .toolbar button:hover{background:#e3f2fd}
+  .toolbar .ph-info{flex:1;font-size:13px}
+  .ph-wrap{padding:8mm 12mm;background:#fff;max-width:210mm;margin:0 auto}
+</style>
+</head><body>
+<div class="toolbar no-print">
+  <span class="ph-info">📄 ${ymFmt(targetYm)} 体重測定用紙（プレビュー）— 印刷ボタンで A4 横１枚に出力されます</span>
+  <button onclick="window.print()">🖨️ 印刷</button>
+  <button onclick="window.close()">✖ 閉じる</button>
+</div>
+<div class="ph-wrap">
+  <div class="ph-hd">
+    <div>
+      <div class="ph-ttl">体重測定記録用紙</div>
+      <div class="ph-sub">対象月：${ymFmt(targetYm)}</div>
+    </div>
+    <div class="ph-meta">
+      <div>作成日：${todayStr}</div>
+      <div>在籍 ${residents.length} 名</div>
+    </div>
+  </div>
+  <table>
+    <colgroup>
+      <col style="width:22px"><col style="width:32px"><col>
+      <col style="width:8%"><col style="width:8%"><col style="width:8%">
+      <col style="width:8%"><col style="width:8%"><col style="width:8%">
+      <col style="width:18%">
+    </colgroup>
+    <thead>
+      <tr>
+        <th rowspan="2">№</th>
+        <th rowspan="2">部屋</th>
+        <th rowspan="2">氏名</th>
+        <th colspan="3" style="background:#fff3e0">前月（${ymFmt(prevYm)}）</th>
+        <th colspan="3" style="background:#e3f2fd">今月（${ymFmt(targetYm)}）測定値 ✏️</th>
+        <th rowspan="2">備考</th>
+      </tr>
+      <tr>
+        <th style="background:#fff3e0">実測<br><small>(kg)</small></th>
+        <th style="background:#fff3e0">車椅子<br><small>(kg)</small></th>
+        <th style="background:#fff3e0">差引<br><small>(kg)</small></th>
+        <th style="background:#e3f2fd">実測<br><small>(kg)</small></th>
+        <th style="background:#e3f2fd">車椅子<br><small>(kg)</small></th>
+        <th style="background:#e3f2fd">差引<br><small>(kg)</small></th>
+      </tr>
+    </thead>
+    <tbody>
+      ${residents.map((r, i) => _bodyRow(r, i)).join('')}
+    </tbody>
+  </table>
+  <div class="ph-note">
+    <b>記入要領：</b>
+    通常モードの方は「実測」欄のみ。車椅子の方は「実測（車椅子込み）」と「車椅子重量」、差引体重を必要に応じて記入してください。
+    「車」マークは車椅子使用者です。前月の差引（青字）は前月実測 − 車椅子の値です。
+  </div>
+  <div class="ph-ft">
+    <span>記録者：　　　　　　　　　　　</span>
+    <span>確認者：　　　　　　　　　　　</span>
+  </div>
+</div>
+<scr` + `ipt>
+  if(location.search.indexOf('print=1') >= 0){
+    setTimeout(function(){ window.print(); }, 250);
+  }
+</scr` + `ipt>
+</body></html>`;
+
+  // 新しいタブを開いて HTML を流し込む
+  const w = window.open('', '_blank');
+  if(!w){
+    toast('ポップアップがブロックされました。許可してください。', 'err');
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+/* 「🖨️ 用紙作成」ボタンの配線 */
+$('#btnPrintSheet')?.addEventListener('click', openPrintSheet);
 
 function renderList(){
   const body = $('#listBody');
