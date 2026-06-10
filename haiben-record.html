@@ -776,6 +776,18 @@ textarea{resize:vertical;min-height:76px}
       <div class="fg" style="margin:0"><label class="fl">排便 警告（日）</label><input type="number" id="cfgSW" min="1" max="7"></div>
       <div class="fg" style="margin:0"><label class="fl">排便 危険（日）</label><input type="number" id="cfgSD" min="1" max="7"></div>
     </div>
+    <div class="fg" style="margin:12px 0 0">
+      <label class="fl">📦 端末に保持する記録期間（長期運用の軽量化）</label>
+      <select id="cfgKeep">
+        <option value="90">直近 90日</option>
+        <option value="180">直近 180日（推奨）</option>
+        <option value="365">直近 1年</option>
+        <option value="730">直近 2年</option>
+      </select>
+      <div style="font-size:11px;color:var(--g6);margin-top:4px;line-height:1.5">
+        期間より古い記録は<b>この端末からのみ</b>自動整理されます。スプレッドシートには全期間の記録がそのまま残ります。
+      </div>
+    </div>
     <button class="bn bp" style="margin-top:14px;width:100%" id="btnSaveCfg">設定を保存</button>
   </div>
   <div class="cd">
@@ -1527,6 +1539,32 @@ function normalizeData(){
       r.tsUTC=Number(r.tsUTC);
     }
     if(r.id==null)r.id=uid()})}
+/* ════════ ローカル保持期間（長期運用の軽量化） ════════
+   端末(localStorage)には直近 cfg.localKeepDays 日分（既定180日）の記録のみ保持し、
+   それより古い排泄記録を「ローカルからのみ」削除する。
+   ・サーバー（スプレッドシート）には全期間の記録がそのまま残る
+     （この関数は apiPush を一切呼ばないため、サーバー側データには影響しない）
+   ・snapshot 等のシステムレコードは isUserRec 判定で除外し決して削除しない
+   ・日付が読めない記録は安全側で保持する
+   呼び出しは cleanData() 末尾＝起動時とサーバー同期後の2箇所を1点でカバー。 */
+function pruneOldLocalRecords(){
+  var days=(D.cfg&&Number(D.cfg.localKeepDays))||180;
+  if(!(days>0)||days>=3650)return 0; // 不正値・10年以上は全保持扱い
+  if(!Array.isArray(D.records)||!D.records.length)return 0;
+  var d=new Date();d.setDate(d.getDate()-days);
+  var cutoff=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  var before=D.records.length;
+  D.records=D.records.filter(function(r){
+    if(!r)return false;
+    if(typeof isUserRec==='function'&&!isUserRec(r))return true; // snapshot等は常に保持
+    var dt=String(r.date||'').slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dt))return true;              // 日付不明は保持
+    return dt>=cutoff;
+  });
+  var removed=before-D.records.length;
+  if(removed>0)_recIdx=null;
+  return removed;
+}
 function cleanData(){
   normalizeData();
   if(D.residents)D.residents=D.residents.filter(isValidRes);
@@ -1541,6 +1579,8 @@ function cleanData(){
       return true;
     });
   }
+  // 保持期間より古い記録をローカルからのみ整理（サーバーは全量保持）
+  pruneOldLocalRecords();
 }
 function nextResId(){
   var ids=D.residents.map(function(r){return toNum(r.id)}).filter(function(v){return v!==null});
@@ -1571,6 +1611,7 @@ function load(){
     {id:5,name:'渡辺 節子',room:'105',gender:'女性',active:true,_seed:true}],records:[],cfg:null}
   }
   if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
+  if(!Number(D.cfg.localKeepDays))D.cfg.localKeepDays=180; // 端末保持期間の既定（日）
   if(!Array.isArray(D.residents))D.residents=[];
   if(!Array.isArray(D.records))D.records=[];
   // 職員（記録者）リスト：{name, active} のオブジェクト配列。最大 32 名 (4列x8行)。
@@ -2854,7 +2895,12 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
     const tbl='<div class="ht-w"><table class="ht"><thead><tr>'+
       '<th>日付</th><th>時刻</th><th>種別</th><th>排尿量</th><th>尿の色</th><th>便の性状</th><th>排便量</th><th>便の色</th><th><span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分</span></th><th>備考</th><th>記録者</th>'+
       '</tr></thead><tbody>'+initialRows+'</tbody></table>'+moreInd+'</div>';
-    $('mHistC').innerHTML=tbl;
+    // 保持期間の注記（古い記録はサーバーに全量保管されている旨を明示）
+    var _keepD=Number(D.cfg&&D.cfg.localKeepDays)||180;
+    var keepNote=(_keepD>0&&_keepD<3650)
+      ?'<div style="text-align:center;padding:7px;font-size:11px;color:var(--g6)">📦 端末には直近'+_keepD+'日分を保持・表示しています（全期間の記録はスプレッドシートに保管）</div>'
+      :'';
+    $('mHistC').innerHTML=tbl+keepNote;
     _histState={rid:rid,recs:recs,rendered:first,_wsvg:_wsvgSm};
     // スクロール末端で次チャンクを追加
     var mdc=$('mHistC');
@@ -3011,6 +3057,7 @@ function renderCfg(){
   $$('.res-hist').forEach(b=>b.addEventListener('click',function(){showHist(parseInt(this.dataset.id))}));
   $('cfgUW').value=D.cfg.urineWarnH;$('cfgUD').value=D.cfg.urineDangerH;
   $('cfgSW').value=D.cfg.stoolWarnD;$('cfgSD').value=D.cfg.stoolDangerD;
+  if($('cfgKeep'))$('cfgKeep').value=String(Number(D.cfg.localKeepDays)||180);
   if($('cfgApi'))$('cfgApi').value=apiUrl||'';
   if($('apiStatus')&&apiUrl)$('apiStatus').textContent='接続URL: '+apiUrl.slice(0,60)+'...';
   renderStaffList();
@@ -4025,7 +4072,9 @@ function expCSV(){const BOM='\uFEFF';
     return[r.date,r.time,res?res.room:'',res?res.name:'',tl,
       r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',Number(r.waterCC)>0?Number(r.waterCC):'',r.notes||'',r.staff||'']
       .map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')});
-  dl(BOM+[hdr.join(','),...rows].join('\n'),'haiben_'+today()+'.csv','text/csv;charset=utf-8;')}
+  dl(BOM+[hdr.join(','),...rows].join('\n'),'haiben_'+today()+'.csv','text/csv;charset=utf-8;');
+  var _kd=Number(D.cfg&&D.cfg.localKeepDays)||180;
+  if(_kd>0&&_kd<3650)showToast('📥 CSV出力しました（端末保持分：直近'+_kd+'日。全期間はスプレッドシート）')}
 function expJSON(){dl(JSON.stringify(D,null,2),'haiben_backup_'+today()+'.json','application/json')}
 function impJSON(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader();
   rd.onload=function(ev){try{var imp=JSON.parse(ev.target.result);if(!imp.residents||!imp.records)throw 0;
@@ -4487,8 +4536,15 @@ function init(){
   if($('cfgShowInactive'))$('cfgShowInactive').addEventListener('change',renderCfg);
   $('btnSaveCfg').addEventListener('click',function(){D.cfg={
     urineWarnH:parseInt($('cfgUW').value)||6,urineDangerH:parseInt($('cfgUD').value)||8,
-    stoolWarnD:parseInt($('cfgSW').value)||2,stoolDangerD:parseInt($('cfgSD').value)||3};save();
-    apiPush('saveCfg',{cfg:D.cfg});showToast('✅ 設定を保存しました')});
+    stoolWarnD:parseInt($('cfgSW').value)||2,stoolDangerD:parseInt($('cfgSD').value)||3,
+    localKeepDays:parseInt($('cfgKeep')&&$('cfgKeep').value)||180};
+    // 保持期間を縮めた場合は即時整理（ローカルのみ。サーバーは全量保持）
+    var _pruned=pruneOldLocalRecords();
+    save();
+    apiPush('saveCfg',{cfg:D.cfg});
+    if(typeof renderBoard==='function')renderBoard();
+    if(typeof renderTL==='function')renderTL();
+    showToast(_pruned>0?('✅ 設定を保存しました（古い記録 '+_pruned+'件を端末から整理）'):'✅ 設定を保存しました')});
   $('btnCSV').addEventListener('click',expCSV);
   $('btnJSON').addEventListener('click',expJSON);
   $('btnImport').addEventListener('click',function(){$('impFile').click()});
