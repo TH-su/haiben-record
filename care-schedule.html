@@ -2002,10 +2002,11 @@ function renderResidentList() {
   }
   ul.innerHTML = vis.map(r =>
     `<li class="res-item ${r.id === DB.currentResidentId ? 'active' : ''}">
-      <span>${escHtml(r.name)}${(r.targetSchedule === false) ? ' <span style="font-size:11px;color:var(--g6)">（対象外）</span>' : ''}${r.movedOut ? ' <span style="font-size:11px;color:var(--ng)">（退去）</span>' : ''}</span>
+      <span>${escHtml(r.name)}${(r.targetSchedule === false) ? ' <span style="font-size:11px;color:var(--g6)">（対象外）</span>' : ''}${r.movedOut ? ' <span style="font-size:11px;color:var(--ng)">（退去）</span>' : ''}${r.hospitalized ? ' <span style="font-size:11px;color:#e65100">（入院中）</span>' : ''}</span>
       ${r.movedOut
         ? `<button class="del-res" style="color:var(--pri)" onclick="restoreResident('${String(r.id).replace(/'/g,"\\'")}')">復帰</button>`
-        : `<button class="del-res" style="color:var(--g7)" onclick="moveOutResident('${String(r.id).replace(/'/g,"\\'")}')">退去</button>`}
+        : `<button class="del-res" style="color:#e65100" onclick="toggleHospitalized('${String(r.id).replace(/'/g,"\\'")}')">${r.hospitalized ? '退院' : '入院'}</button>
+           <button class="del-res" style="color:var(--g7)" onclick="moveOutResident('${String(r.id).replace(/'/g,"\\'")}')">退去</button>`}
       <button class="del-res" onclick="removeResident('${String(r.id).replace(/'/g,"\\'")}')">✕</button>
     </li>`
   ).join('');
@@ -2044,6 +2045,15 @@ function moveOutResident(id) {
   }
   saveDB(); populateResidentSelect(); renderResidentList(); renderAll();
   showToast(`「${res.name}」を退去にしました`);
+}
+function toggleHospitalized(id) {
+  const res = DB.residents.find(r => r.id === id);
+  if (!res) return;
+  res.hospitalized = !res.hospitalized;
+  saveDB(); renderResidentList(); renderAll();
+  showToast(res.hospitalized
+    ? `「${res.name}」を入院中にしました（ワークスケジュールでは極薄表示になります）`
+    : `「${res.name}」を退院にしました`);
 }
 function restoreResident(id) {
   const res = DB.residents.find(r => r.id === id);
