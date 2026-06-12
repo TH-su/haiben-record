@@ -789,7 +789,7 @@ select.inp { cursor: pointer; }
         <button class="btn btn-pri" onclick="addResident()" style="white-space:nowrap">追加</button>
       </div>
     </div>
-    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--g6);margin:4px 0;cursor:pointer"><input type="checkbox" id="cs-show-nontarget" onchange="onCsShowNonTargetChange()">対象外（週間計画の対象でない方）も表示</label>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--g6);margin:4px 0;cursor:pointer"><input type="checkbox" id="cs-show-nontarget" onchange="onCsShowNonTargetChange()">退去者・対象外も表示</label>
     <ul class="res-list" id="res-list"></ul>
     <div class="btn-row">
       <button class="btn btn-sec" onclick="closeResidentModal()">閉じる</button>
@@ -1911,7 +1911,10 @@ function isScheduleTarget(r){ return !r || r.targetSchedule !== false; }
 /* 表示対象の入居者（対象者＋現在選択中。トグルONで全員） */
 function csVisibleResidents(){
   if (csShowNonTargets) return DB.residents.slice();
-  return DB.residents.filter(function(r){ return isScheduleTarget(r) || (r && r.id === DB.currentResidentId); });
+  return DB.residents.filter(function(r){
+    if (r && r.movedOut && r.id !== DB.currentResidentId) return false; /* 退去者は非表示 */
+    return isScheduleTarget(r) || (r && r.id === DB.currentResidentId);
+  });
 }
 /* 入居者マスタの共通情報を取り込み（週間計画アプリ用。master を正とする） */
 function mergeCommonSchedule(){
@@ -1999,7 +2002,10 @@ function renderResidentList() {
   }
   ul.innerHTML = vis.map(r =>
     `<li class="res-item ${r.id === DB.currentResidentId ? 'active' : ''}">
-      <span>${escHtml(r.name)}${(r.targetSchedule === false) ? ' <span style="font-size:11px;color:var(--g6)">（対象外）</span>' : ''}</span>
+      <span>${escHtml(r.name)}${(r.targetSchedule === false) ? ' <span style="font-size:11px;color:var(--g6)">（対象外）</span>' : ''}${r.movedOut ? ' <span style="font-size:11px;color:var(--ng)">（退去）</span>' : ''}</span>
+      ${r.movedOut
+        ? `<button class="del-res" style="color:var(--pri)" onclick="restoreResident('${String(r.id).replace(/'/g,"\\'")}')">復帰</button>`
+        : `<button class="del-res" style="color:var(--g7)" onclick="moveOutResident('${String(r.id).replace(/'/g,"\\'")}')">退去</button>`}
       <button class="del-res" onclick="removeResident('${String(r.id).replace(/'/g,"\\'")}')">✕</button>
     </li>`
   ).join('');
@@ -2026,6 +2032,25 @@ function removeResident(id) {
   if (DB.currentResidentId === id) DB.currentResidentId = DB.residents[0]?.id || null;
   saveDB(); populateResidentSelect(); renderResidentList(); renderAll();
   showToast('削除しました');
+}
+function moveOutResident(id) {
+  const res = DB.residents.find(r => r.id === id);
+  if (!res) return;
+  if (!confirm(`「${res.name}」を退去にしますか？\n（一覧から非表示になります。計画データは保持され、「退去者・対象外も表示」から復帰できます）`)) return;
+  res.movedOut = true;
+  if (DB.currentResidentId === id) {
+    const next = DB.residents.find(r => !r.movedOut && isScheduleTarget(r));
+    DB.currentResidentId = next ? next.id : null;
+  }
+  saveDB(); populateResidentSelect(); renderResidentList(); renderAll();
+  showToast(`「${res.name}」を退去にしました`);
+}
+function restoreResident(id) {
+  const res = DB.residents.find(r => r.id === id);
+  if (!res) return;
+  res.movedOut = false;
+  saveDB(); populateResidentSelect(); renderResidentList(); renderAll();
+  showToast(`「${res.name}」を復帰しました`);
 }
 
 // ── Calendar render ──
