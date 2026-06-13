@@ -1342,7 +1342,8 @@ async function syncFromAPI(showLoader,opts){
     if(apiUrl)saveApiUrl(apiUrl);
     // Phase 2 B-2: 同期完了時刻を記録（次回は差分のみ取得）
     _setLastSyncTs(Date.now());
-    apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP')+(isDeltaSync?' (差分)':''));
+    // ヘッダには時刻のみ表示（「(差分)」ラベルは現場画面で不要のため非表示。差分同期動作は維持）
+    apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
     // 未送信キューを再送
     flushPendingQueue();
     return true}
