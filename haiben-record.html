@@ -1238,6 +1238,11 @@ async function apiGet(opts){
 var LAST_SYNC_KEY='hbcr_last_sync_ts';
 function _getLastSyncTs(){try{var v=localStorage.getItem(LAST_SYNC_KEY);return v?Number(v):0}catch(e){return 0}}
 function _setLastSyncTs(ts){try{localStorage.setItem(LAST_SYNC_KEY,String(ts))}catch(e){}}
+/* 日付TZ修正（2026-06-15・サーバー側で date を JST yyyy-MM-dd に正規化）に伴う一度きりの回復。
+   旧サーバーは date を1日前で返していたため、端末ローカルに誤日付で取り込まれた記録が残る。
+   差分同期では updatedAt 未変更の既存記録を取り直さないので、次回同期を一度だけ全件にして上書き是正する。 */
+var DATEFIX_HEAL_KEY='hbcr_datefix_heal_v1';
+var _dateHealNeeded=(function(){try{return !localStorage.getItem(DATEFIX_HEAL_KEY)}catch(e){return false}})();
 
 async function apiPost(action,data){
   if(!apiUrl)return null;
@@ -1257,7 +1262,9 @@ async function syncFromAPI(showLoader,opts){
   try{
     // Phase 2 B-2: 差分同期（前回同期時刻以降のみ取得）
     // opts.full=true で強制全件取得（初回・整合性確認時に使用）
-    var sinceTs=opts.full?0:_getLastSyncTs();
+    // 日付TZ修正の回復：未回復端末は最初の同期を一度だけ全件にして誤日付を是正
+    var _healing=_dateHealNeeded;
+    var sinceTs=(opts.full||_healing)?0:_getLastSyncTs();
     var json=await apiGet({since:sinceTs});
     if(json.error)throw new Error(json.error);
     if(json.residents===undefined)throw new Error('レスポンス形式が不正です');
@@ -1342,6 +1349,8 @@ async function syncFromAPI(showLoader,opts){
     if(apiUrl)saveApiUrl(apiUrl);
     // Phase 2 B-2: 同期完了時刻を記録（次回は差分のみ取得）
     _setLastSyncTs(Date.now());
+    // 日付TZ修正の回復が全件取得で完了したらフラグを立て、以後は通常の差分同期に戻す
+    if(_healing){_dateHealNeeded=false;try{localStorage.setItem(DATEFIX_HEAL_KEY,'1')}catch(e){}}
     // ヘッダには時刻のみ表示（「(差分)」ラベルは現場画面で不要のため非表示。差分同期動作は維持）
     apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
     // 未送信キューを再送
