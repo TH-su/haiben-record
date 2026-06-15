@@ -31,6 +31,20 @@ function doGet(e){
       }
     }
 
+    // 日付を JST の 'yyyy-MM-dd' へ正規化（2026-06-15 修正）。
+    // Sheets の date セルは Date シリアル(JST深夜=前日15:00Z)で読み出されるため、
+    // 値が ISO/Date/文字列いずれでも +9h して UTC 成分を読み、日付境界の-1日ズレを確実に防ぐ。
+    // ※normalizeCell_ の整形に依存せず doGet 出口で一括正規化する（端末間の日付不一致の恒久対策）。
+    records.forEach(function(r){
+      if(r && r.date){
+        var _d = new Date(r.date);
+        if(!isNaN(_d.getTime())){
+          var _j = new Date(_d.getTime() + 32400000); // +9h = JST
+          r.date = _j.getUTCFullYear()+'-'+('0'+(_j.getUTCMonth()+1)).slice(-2)+'-'+('0'+_j.getUTCDate()).slice(-2);
+        }
+      }
+    });
+
     return json({ok:true,
       residents: readSheet_('Residents', RES_DEFAULT_HEADERS),
       records:   records,
