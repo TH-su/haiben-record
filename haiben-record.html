@@ -1411,22 +1411,42 @@ function _staffApiPush(action,data){
   _staffSendQueue.push({action:action,data:data,retries:0});
   _staffSendNext();
 }
-function loadPendingQueue(){try{var s=localStorage.getItem(PQ_KEY);return s?JSON.parse(s):[]}catch(e){return[]}}
-function savePendingQueue(q){try{localStorage.setItem(PQ_KEY,JSON.stringify(q))}catch(e){}}
+function loadPendingQueue(){try{var s=_storageGet(PQ_KEY);return s?JSON.parse(s):[]}catch(e){return[]}}
+function savePendingQueue(q){
+  // 本体(hbcr_v2)と同様に圧縮保存し、容量圧迫時の失敗を減らす。
+  // 失敗（QuotaExceeded 等）を無音で握り潰さず、間引き再試行＋通知で「未送信の消失」を防ぐ。
+  try{
+    _storageSet(PQ_KEY,JSON.stringify(q));
+  }catch(e){
+    try{
+      if(Array.isArray(q)&&q.length>1){
+        // 古い分を落として最新の未送信を優先保持（本体はサーバー正本があるが、キューは最後の砦）
+        var half=q.slice(Math.ceil(q.length/2));
+        _storageSet(PQ_KEY,JSON.stringify(half));
+        try{showToast('⚠️ 未送信が多く一部のみ保持しました（容量）');}catch(e2){}
+        return;
+      }
+    }catch(e3){}
+    try{showToast('⚠️ 未送信データを保存できませんでした（容量不足）');}catch(e4){}
+  }
+}
 function enqueuePending(action,data){
   var q=loadPendingQueue();
   q.push({action:action,data:data,at:Date.now()});
   // 過大化防止（最大500件）
   if(q.length>500)q=q.slice(-500);
   savePendingQueue(q)}
+var _pqFlushing=false;
 function flushPendingQueue(){
   if(!apiUrl)return;
+  if(_pqFlushing)return;            // 再入ガード：apiPush成功時と同期末尾からの並走による二重送信を防ぐ
   var q=loadPendingQueue();
   if(!q.length)return;
+  _pqFlushing=true;
   // 順番に再送する
   var remain=[];var i=0;
   function next(){
-    if(i>=q.length){savePendingQueue(remain);if(remain.length===0&&q.length>0)showToast('✅ 未送信データを同期しました');return}
+    if(i>=q.length){savePendingQueue(remain);if(remain.length===0&&q.length>0)showToast('✅ 未送信データを同期しました');_pqFlushing=false;return}
     var item=q[i++];
     apiPost(item.action,item.data||{})
       .then(function(r){if(!(r&&r.ok!==false))remain.push(item);next()})
@@ -1531,6 +1551,12 @@ function normalizeData(){
         // "HH:MM:SS" → "HH:MM"
         var mm=r.time.match(/^(\d{2}):(\d{2})/);if(mm)r.time=mm[1]+':'+mm[2];
       }
+    }
+    // time を最終的に必ず「文字列」へ正規化（Sheets由来の数値/欠落でも描画・詳細がクラッシュしないように）。
+    // 有効な HH:MM でなければ、正規化済み datetime の時刻部から復元。復元不能なら空文字。
+    if(typeof r.time!=='string'||!/^\d{1,2}:\d{2}/.test(r.time)){
+      var _dtm=(typeof r.datetime==='string')?r.datetime.match(/T(\d{2}:\d{2})/):null;
+      r.time=_dtm?_dtm[1]:'';
     }
     // datetime が欠落/不正でも、date + time があれば再構築
     if((!r.datetime||typeof r.datetime!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(r.datetime))
@@ -1984,7 +2010,7 @@ function dayR(rid,d,t){
 
 /* ── 予定（30分スロット）── */
 function slotToHM(s){var h=Math.floor(s/2),m=(s%2)*30;return(h<10?'0':'')+h+':'+(m<10?'0':'')+m}
-function hmToSlot(hm){var p=(hm||'').split(':');var h=parseInt(p[0],10),m=parseInt(p[1]||'0',10);if(isNaN(h))return-1;return h*2+(m>=30?1:0)}
+function hmToSlot(hm){var p=String(hm==null?'':hm).split(':');var h=parseInt(p[0],10),m=parseInt(p[1]||'0',10);if(isNaN(h))return-1;return h*2+(m>=30?1:0)}
 function schedSet(re){var o={};if(!re||!Array.isArray(re.schedule))return o;
   re.schedule.forEach(function(hm){var s=hmToSlot(hm);if(s>=0&&s<48){o[s]=o[s]?(o[s]+'/'+hm):hm}});return o}
 function toggleSchedule(rid,slot){var r=D.residents.find(function(x){return x.id===rid});if(!r)return;
@@ -2513,7 +2539,7 @@ function renderTL(){const date=$('tlDate').value||today();
   const rows=res.map(re=>{
     const dr=recsByResDate(re.id,date);
     // 30分バケット(0..47)
-    const bk={};dr.forEach(r=>{const p=r.time.split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);
+    const bk={};dr.forEach(r=>{const p=String(r.time||'').split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);
       const slot=h*2+(m>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
     var schSet=schedSet(re);
     // 🏥 入院イベント取得（赤地/青地マーカー＆灰色化用）
