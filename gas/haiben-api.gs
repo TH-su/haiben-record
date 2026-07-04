@@ -274,7 +274,8 @@ function debugDumpResidents(){
     const rows = sh.getRange(2,1,Math.min(5,last-1),lastCol).getValues();
     rows.forEach((row,i)=>{
       console.log('行'+(i+2)+':');
-      row.forEach((v,j)=> console.log('  '+headers[j]+' = "'+v+'"'));
+      // 個人情報保護：値そのもの（氏名・居室等）はログに残さず、先頭1字＋長さのみ表示する。
+      row.forEach(function(v,j){var s=(v==null?'':String(v));var shown=s.length?(s.charAt(0)+'…('+s.length+')'):'';console.log('  '+headers[j]+' = "'+shown+'"');});
     });
   }
 }

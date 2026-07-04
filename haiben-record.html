@@ -1412,7 +1412,7 @@ function _staffSendNext(){
         item.retries=(item.retries||0)+1;
         _staffSendQueue.unshift(item);
       }else{
-        console.warn('[hbcr] staff push 失敗（リトライ上限）:',item);
+        console.warn('[hbcr] staff push 失敗（リトライ上限）:',item&&item.action,'retries=',item&&item.retries); // 個人情報保護：item本体(職員氏名)は出力しない
         enqueuePending(item.action,item.data);
       }
     }
