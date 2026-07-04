@@ -1254,8 +1254,14 @@ async function apiPost(action,data){
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json()}
 
+var _syncInFlight=null;
 async function syncFromAPI(showLoader,opts){
   if(!apiUrl)return false;
+  // 再入ガード：進行中の同期があれば結果Promiseを共有する。
+  // 起動時自動同期と「🔄更新」連打等の多重同時実行による、古い同一スナップショットからの
+  // 二重マージ（記録欠落）・lastSyncTs巻戻り・二重取得を防ぐ。既存のマージ/差分ロジックは不変。
+  if(_syncInFlight)return _syncInFlight;
+  var _run=(async function(){
   if(showLoader)ldShow('APIからデータを取得中...');
   apiSetStatus('sy');
   opts=opts||{};
@@ -1311,6 +1317,14 @@ async function syncFromAPI(showLoader,opts){
       }
       return 0;
     }
+    // #6 全件/heal同期時の保護：サーバー旧版で「未送信のローカル編集」を上書きしないため、
+    //    同一IDで両者に updatedAt があり、ローカルが厳密に新しい通常記録はローカル版を採用する。
+    //    差分同期(delta)ではサーバーが最新を返す前提のため適用しない（回帰面を最小化）。
+    //    どちらかに updatedAt が無ければ従来どおりサーバー優先。
+    var _fullFetch=(opts.full||_healing);
+    var localRecById={};
+    if(_fullFetch){localRec.forEach(function(r){if(r&&r.id!=null&&!_isSnapshotRec(r))localRecById[r.id]=r});}
+    function _recTs(rec){var v=rec&&(rec.updatedAt||rec.createdAt);if(!v)return 0;var t=new Date(v).getTime();return isNaN(t)?0:t;}
     apiRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){
       // snapshot の場合、server 版が壊れていれば local の notes/medicine を保護。
       // さらに、local snapshot.ts が server より新しい場合は local を優先（未同期の入院変更を保護）
@@ -1322,6 +1336,11 @@ async function syncFromAPI(showLoader,opts){
           r.notes=localSnap.notes;
           r.updatedAt=localSnap.updatedAt||r.updatedAt;
         }
+      }
+      // #6: 全件取得時のみ、ローカルに未送信の新しい編集があればローカル版を優先
+      if(_fullFetch&&!_isSnapshotRec(r)){
+        var _lr=localRecById[r.id];
+        if(_lr){var _lt=_recTs(_lr),_st=_recTs(r);if(_lt>0&&_st>0&&_lt>_st)r=_lr;}
       }
       mergedRec.push(r);seenRecId[r.id]=true
     }}});
@@ -1360,7 +1379,11 @@ async function syncFromAPI(showLoader,opts){
     apiSetStatus('er','接続エラー: '+e.message);
     showToast('⚠️ API同期失敗: '+e.message);
     return false}
-  finally{ldHide()}}
+  finally{ldHide()}
+  })();
+  _syncInFlight=_run;
+  try{return await _run;}finally{_syncInFlight=null;}
+}
 
 // 未送信キュー（API書き込み失敗時、後で再送する）
 var PQ_KEY='hbcr_pq';
@@ -1454,24 +1477,43 @@ function flushPendingQueue(){
   next()}
 
 // 書き込み操作をAPIに反映（失敗してもローカルは保存済みのため継続。失敗時はキューに退避して後で再送）
-function apiPush(action,data){
-  if(!apiUrl)return;
-  data=data||{};
+/* 書き込みは「順次送信キュー」で直列化する。
+   従来の fire-and-forget では、同一レコードの saveRecord/addRecord 直後に delRecord を送ると
+   ネットワーク到達順が入れ替わり、削除済みレコードがサーバー上で復活する（幽霊レコード）恐れがあった。
+   1件ずつ前の完了を待って送ることで送信順を保証する。ローカルは即保存・即描画のため画面体感は不変。 */
+var _writeQ=[], _writeSending=false;
+function _writeDrain(){
+  if(_writeSending)return;
+  var item=_writeQ.shift();
+  if(!item){ flushPendingQueue(); return; } // キューが空いたら未送信分を再送
+  _writeSending=true;
   apiSetStatus('sy');
-  apiPost(action,data)
+  apiPost(item.action,item.data)
     .then(function(r){
       if(r&&r.ok!==false){
         apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
-        // 成功したら溜まった未送信を送る
-        flushPendingQueue();
       }else{
         apiSetStatus('er','書き込みエラー');
-        enqueuePending(action,data);
-        showToast('⚠️ API書き込み失敗（ローカルに保存・後で再送）')}})
+        enqueuePending(item.action,item.data);
+        showToast('⚠️ API書き込み失敗（ローカルに保存・後で再送）');
+      }
+    })
     .catch(function(e){
-      apiSetStatus('er',e.message);
-      enqueuePending(action,data);
-      showToast('⚠️ API書き込み失敗（ローカルに保存・後で再送）')})}
+      apiSetStatus('er',e&&e.message);
+      enqueuePending(item.action,item.data);
+      showToast('⚠️ API書き込み失敗（ローカルに保存・後で再送）');
+    })
+    .finally(function(){
+      _writeSending=false;
+      _writeDrain(); // 次の書き込み（無ければ未送信キューの再送）へ
+    });
+}
+function apiPush(action,data){
+  if(!apiUrl)return;
+  data=data||{};
+  _writeQ.push({action:action,data:data});
+  _writeDrain();
+}
 
 function fmtCons(r){if(r.consistency)return r.consistency;if(r.bristol)return'タイプ'+r.bristol+'('+( BL[r.bristol]||'')+')';return''}
 function fmtUA(v){if(v==null||v==='')return'';return typeof v==='number'?v+'ml':v}
@@ -1719,10 +1761,22 @@ function _persistNow(){
     // Phase 1 A-2: LZString 圧縮で localStorage 容量を実効 4〜5 倍に拡張
     _storageSet('hbcr_v2',json);
   }catch(e){
-    console.error('[hbcr] 保存失敗:',e);
-    // 書き込み失敗時は dirty を戻し、次回フラッシュで再試行
-    _saveDirty=true;
-    try{showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'))}catch(e2){}
+    // 容量超過(QuotaExceeded)の可能性：古いローカル記録を整理して「その場で一度だけ」再試行する。
+    // 離脱時(flushSave→_persistNow)は後続の save() が無く再試行機会が無いため、ここで救済しないと
+    // 直前の記録が失われうる。サーバーは全期間を保持しているためローカルの古い記録削除は安全。
+    var _saved2=false;
+    try{
+      if(typeof pruneOldLocalRecords==='function'&&pruneOldLocalRecords()>0){
+        _storageSet('hbcr_v2',JSON.stringify(D));
+        _saved2=true;
+      }
+    }catch(e2){}
+    if(!_saved2){
+      console.error('[hbcr] 保存失敗:',e);
+      // 書き込み失敗時は dirty を戻し、次回フラッシュで再試行
+      _saveDirty=true;
+      try{showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'))}catch(e3){}
+    }
   }
 }
 function save(){
@@ -2613,23 +2667,32 @@ function renderTL(){const date=$('tlDate').value||today();
     return'<tr><td class="tl-nm"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
   $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
   setupTopScroll();
-  // セルクリック→詳細（記録あり） / 予定編集モーダル（記録なし）
-  $$('.tl-c',$('tlBox')).forEach(function(td){td.addEventListener('click',function(){
-    if(!this.dataset.slot)return;
-    var parts=this.dataset.slot.split('-');var rid=parseInt(parts[0]);var slot=parseInt(parts[1]);
-    if(this.classList.contains('has')){
-      var dr=recsByResDate(rid,date);
-      var matching=dr.filter(function(r){var p=r.time.split(':');var h=parseInt(p[0]);var m=parseInt(p[1]||0);return h*2+(m>=30?1:0)===slot});
-      if(matching.length===1)showDet(matching[0].id);
-      else if(matching.length>1)showDetMulti(matching);
-    }else{
-      openSchedCellModal(rid,slot);
-    }
-  })});
-  // 名前クリック→履歴
-  $$('.tl-nm-link',$('tlBox')).forEach(el=>el.addEventListener('click',function(e){e.stopPropagation();showHist(parseInt(this.dataset.hist))}));
-  // 📊5日ボタン
-  $$('.fd-btn',$('tlBox')).forEach(el=>el.addEventListener('click',function(e){e.stopPropagation();showFiveDay(parseInt(this.dataset.fd))}));}
+  // セル/名前/5日ボタンのクリックは「イベント委譲」で処理する（tlBox へ一度だけ登録）。
+  // 従来は毎描画で 48×入居者数（≒1,900個）のリスナ＋クロージャを生成していた。委譲で1個に集約。
+  // date は描画毎に変わるためハンドラ内で常に最新値を読む（クロージャ固定を避ける）。
+  var _tlBox=$('tlBox');
+  if(_tlBox&&!_tlBox._tlDelegated){
+    _tlBox._tlDelegated=true;
+    _tlBox.addEventListener('click',function(e){
+      var t=e.target; if(!t||!t.closest)return;
+      var nm=t.closest('.tl-nm-link');
+      if(nm){e.stopPropagation();showHist(parseInt(nm.dataset.hist));return;}
+      var fd=t.closest('.fd-btn');
+      if(fd){e.stopPropagation();showFiveDay(parseInt(fd.dataset.fd));return;}
+      var td=t.closest('.tl-c');
+      if(!td||!_tlBox.contains(td)||!td.dataset.slot)return;
+      var parts=td.dataset.slot.split('-');var rid=parseInt(parts[0]);var slot=parseInt(parts[1]);
+      var d=$('tlDate').value||today();
+      if(td.classList.contains('has')){
+        var dr=recsByResDate(rid,d);
+        var matching=dr.filter(function(r){var p=String(r.time||'').split(':');var h=parseInt(p[0]);var m=parseInt(p[1]||0);return h*2+(m>=30?1:0)===slot});
+        if(matching.length===1)showDet(matching[0].id);
+        else if(matching.length>1)showDetMulti(matching);
+      }else{
+        openSchedCellModal(rid,slot);
+      }
+    });
+  }}
 
 /* ═══════════ 5-DAY PERSONAL TIMELINE ═══════════ */
 let cur5DayRid=null, cur5DayEnd=null; // end=表示範囲の最終日(最下段)
