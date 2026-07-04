@@ -60,11 +60,16 @@ function doGet(e){
 
 /** ============ doPost（既存通り。upsertRow_ が updatedAt を自動設定済み） ============ */
 function doPost(e){
+  // 複数端末の同時POSTによる読み-書き競合（lost update・行重複・Configヘッダ破壊）を防ぐため
+  // スクリプトロックで書き込みを直列化する。既存の switch / レスポンス形状は不変（外側で包むだけ）。
+  var lock = LockService.getScriptLock();
   try{
+    lock.waitLock(20000); // 取得できなければ throw → catch で ok:false（クライアントはキュー退避・再送）
     if(!e || !e.postData) return json({ok:false, error:'no postData'});
     const body = JSON.parse(e.postData.contents);
     const action = body.action;
-    console.log('doPost action=', action, ' body=', JSON.stringify(body).slice(0,800));
+    // 個人情報保護：body（氏名・排泄記録内容）はログに出力しない。action のみ記録する。
+    console.log('doPost action=', action);
     switch(action){
       case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
       case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
@@ -77,6 +82,8 @@ function doPost(e){
   }catch(err){
     console.error('doPost error:', err);
     return json({ok:false, error:String(err)});
+  }finally{
+    try{ lock.releaseLock(); }catch(_){}
   }
 }
 
