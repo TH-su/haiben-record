@@ -1210,9 +1210,10 @@ function apiSetStatus(st,msg){
   var si=$('apiStatus');if(si&&msg)si.textContent=msg}
 
 function ldShow(msg){$('ldMsg').textContent=msg||'同期中...';$('ldOv').classList.add('on');
-  // 安全策: 15秒後に自動で閉じる
+  // 安全策: 62秒後に自動で閉じる（全件取得はデータ増で最大60秒かかりうるため、
+  // それ以下で閉じると同期継続中にローダーが消え「終わった」と誤認させるため）
   clearTimeout(ldShow._tid);
-  ldShow._tid=setTimeout(function(){ldHide()},15000)}
+  ldShow._tid=setTimeout(function(){ldHide()},62000)}
 function ldHide(){clearTimeout(ldShow._tid);$('ldOv').classList.remove('on')}
 
 // fetchにタイムアウト付与（デフォルト12秒）
@@ -1232,7 +1233,12 @@ async function apiGet(opts){
   opts=opts||{};
   var url=apiUrl+'?action=getAll';
   if(opts.since&&opts.since>0)url+='&since='+encodeURIComponent(opts.since);
-  var r=await fetchTO(url,{cache:'no-store'});
+  // GAS は毎回シート全行を読むため差分でも約8秒・全件は約15秒かかる（記録7500件時点・実測）。
+  // 既定12秒では全件取得（初回・日付回復・「同期」ボタン）が必ずタイムアウトし、
+  // 未回復端末は since=0 の全件を強制するため回復フラグが立たず永久に同期不能になる。
+  // データ増を見込み全件60秒／差分30秒へ緩和（応答自体は正常＝待てば成功する）。
+  var _isFullGet=!(opts.since&&opts.since>0);
+  var r=await fetchTO(url,{cache:'no-store'},_isFullGet?60000:30000);
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json()}
 var LAST_SYNC_KEY='hbcr_last_sync_ts';
@@ -1247,10 +1253,12 @@ var _dateHealNeeded=(function(){try{return !localStorage.getItem(DATEFIX_HEAL_KE
 async function apiPost(action,data){
   if(!apiUrl)return null;
   data=data||{};
+  // 書込も GAS 側で LockService.waitLock(20秒)＋シート全行読込が走るため、
+  // 既定12秒では混雑時にタイムアウトし未送信キュー送りになりうる。30秒へ緩和。
   var r=await fetchTO(apiUrl,{
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({action:action,record:data.record,id:data.id,resident:data.resident,cfg:data.cfg})});
+    body:JSON.stringify({action:action,record:data.record,id:data.id,resident:data.resident,cfg:data.cfg})},30000);
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json()}
 
