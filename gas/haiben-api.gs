@@ -9,6 +9,11 @@ const REC_DEFAULT_HEADERS = ['id','residentId','date','time','datetime','type',
   'medicine','tablets','notes','staff','createdAt','updatedAt'];
 const CFG_DEFAULT_HEADERS = ['key','value'];
 
+// Google Sheets のシリアル値の基準日 1899-12-30（UTC）。serial×86400000ms を加算し UTC 成分を読むと
+// Session.getScriptTimeZone()/Utilities.formatDate を一切使わずに元の暦日・時刻を復元できる（TZ非依存）。
+const SHEETS_EPOCH_MS = -2209161600000; // = Date.UTC(1899,11,30)
+const RESIDENTS_CACHE_KEY = 'residents_v1';
+
 /** ============ doGet（差分同期対応） ============ */
 function doGet(e){
   // エディタの「実行」ボタンで直接呼ばれた場合の保護
@@ -16,7 +21,8 @@ function doGet(e){
   try{
     // Phase 2 B-2: ?since= があれば updatedAt で差分フィルタ
     const since = parseInt(params.since, 10) || 0;
-    let records = readSheet_('Records', REC_DEFAULT_HEADERS);
+    // Records は Advanced Service でバルク高速読込（per-cell formatDate を排除）。失敗時は readSheet_ へフォールバック。
+    let records = readRecords_();
     let delta = false;
 
     if(since > 0 && records.length > 0){
@@ -46,7 +52,7 @@ function doGet(e){
     });
 
     return json({ok:true,
-      residents: readSheet_('Residents', RES_DEFAULT_HEADERS),
+      residents: readResidentsCached_(),
       records:   records,
       cfg:       readConfig_(),
       delta:     delta,
@@ -74,8 +80,8 @@ function doPost(e){
       case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
       case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
       case 'delRecord':  deleteRow_('Records',   body.id);                            return json({ok:true});
-      case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident); return json({ok:true});
-      case 'delRes':     deleteRow_('Residents', body.id);                            return json({ok:true});
+      case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident); invalidateResidentsCache_(); return json({ok:true});
+      case 'delRes':     deleteRow_('Residents', body.id);                            invalidateResidentsCache_(); return json({ok:true});
       case 'saveCfg':    writeConfig_(body.cfg);                                      return json({ok:true});
       default: return json({ok:false, error:'unknown action: '+action});
     }
@@ -140,6 +146,127 @@ function readSheet_(name, defaultHeaders){
     headers.forEach((h,i)=>{ if(h) o[h]=normalizeCell_(h,row[i]); });
     return o;
   }).filter(o => o.id!=null && o.id!=='');
+}
+
+/** ============ Records 高速読込（Sheets Advanced Service・per-cell formatDate 排除） ============
+ * doGet のホットパス。UNFORMATTED_VALUE + SERIAL_NUMBER で取得し、日付/時刻セルは
+ * cellFromSerial_ の TZ非依存算術で復元する。例外/クォータ(429)時は従来 readSheet_ にフォールバック。 */
+function readRecords_(){
+  try{
+    return readRecordsFast_();
+  }catch(err){
+    console.warn('readRecordsFast_ フォールバック（readSheet_使用）:', String(err));
+    return readSheet_('Records', REC_DEFAULT_HEADERS);
+  }
+}
+
+function readRecordsFast_(){
+  getOrCreateSheet_('Records', REC_DEFAULT_HEADERS); // シート存在・ヘッダを保証（構造保証は従来どおり）
+  const res = Sheets.Spreadsheets.Values.get(SS.getId(), 'Records', {
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'SERIAL_NUMBER'
+  });
+  const values = res.values;
+  if(!values || values.length < 2) return [];
+  const headers = values[0].map(v => String(v).trim());
+  const out = [];
+  for(let r = 1; r < values.length; r++){
+    const row = values[r]; // API は行末の空セルを省略しうる → row[i] が undefined になり得る
+    const o = {};
+    for(let i = 0; i < headers.length; i++){
+      const h = headers[i];
+      if(h) o[h] = cellFromSerial_(h, row[i]);
+    }
+    if(o.id != null && o.id !== '') out.push(o);
+  }
+  return out;
+}
+
+// UTC 成分から 'yyyy-MM-dd' を組む
+function _ymdUTC_(ms){
+  const d = new Date(ms);
+  return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2)+'-'+('0'+d.getUTCDate()).slice(-2);
+}
+
+/** SERIAL_NUMBER 取得値をセル種別に応じて正規化（normalizeCell_ の Utilities.formatDate 版と同一の暦日/時刻を返す）。
+ * date は整数部＝日、datetime/time は小数部＝時刻。丸めは分単位（Math.round）で 10:00→9:59 の浮動小数バグを回避。 */
+function cellFromSerial_(header, v){
+  if(v == null || v === ''){
+    if(header === 'active') return true;   // 空は既定 true（normalizeCell_ と一致）
+    if(header === 'hidden') return false;
+    return '';
+  }
+  if(header === 'date'){
+    if(typeof v === 'number'){
+      if(v < 1) return '';                 // serial<1（1899-12-30/時刻のみ）＝日付なし
+      return _ymdUTC_(SHEETS_EPOCH_MS + Math.floor(v) * 86400000);
+    }
+    return v;                              // 文字列で入っているケースはそのまま（doGet 出口で正規化）
+  }
+  if(header === 'datetime'){
+    if(typeof v === 'number'){
+      if(v < 1) return '';                 // 日付なし
+      const totalMin = Math.round(v * 1440);
+      const days = Math.floor(totalMin / 1440);
+      const minInDay = totalMin - days * 1440;
+      const hh = Math.floor(minInDay / 60), mm = minInDay % 60;
+      return _ymdUTC_(SHEETS_EPOCH_MS + days * 86400000)
+        + 'T' + ('0'+hh).slice(-2) + ':' + ('0'+mm).slice(-2);
+    }
+    return v;
+  }
+  if(header === 'time'){
+    if(typeof v === 'number'){
+      const frac = v - Math.floor(v);
+      let mins = Math.round(frac * 1440);
+      if(mins >= 1440) mins = 0;
+      const h2 = Math.floor(mins / 60), m2 = mins % 60;
+      return ('0'+h2).slice(-2) + ':' + ('0'+m2).slice(-2);
+    }
+    return v;
+  }
+  if(header === 'createdAt' || header === 'updatedAt' || header === 'tsUTC'){
+    // ISO 文字列保存が通常だが、Date 型で入っていた場合の吸収（normalizeCell_ の toISOString 相当）。
+    if(typeof v === 'number' && v > 0) return new Date(SHEETS_EPOCH_MS + v * 86400000).toISOString();
+    return v;
+  }
+  if(header === 'cfg'){
+    if(typeof v === 'string' && v.trim().charAt(0) === '{'){
+      try{ return JSON.parse(v); }catch(e){ return {}; }
+    }
+    return v;
+  }
+  if(header === 'active'){
+    if(typeof v === 'boolean') return v;
+    const sa = String(v).toUpperCase();
+    return !(sa === 'FALSE' || sa === '0' || sa === 'NO');
+  }
+  if(header === 'hidden'){
+    if(typeof v === 'boolean') return v;
+    const sb = String(v).toUpperCase();
+    return (sb === 'TRUE' || sb === '1' || sb === 'YES');
+  }
+  return v;
+}
+
+/** ============ Residents キャッシュ（変更頻度が低いため doGet 毎の全行読込を除去） ============ */
+function readResidentsCached_(){
+  const cache = CacheService.getScriptCache();
+  let hit = null;
+  try{ hit = cache.get(RESIDENTS_CACHE_KEY); }catch(e){}
+  if(hit){
+    try{ return JSON.parse(hit); }catch(e){}
+  }
+  const residents = readSheet_('Residents', RES_DEFAULT_HEADERS);
+  try{
+    const s = JSON.stringify(residents);
+    if(s.length <= 90000) cache.put(RESIDENTS_CACHE_KEY, s, 300); // 100KB上限の将来防御・TTL 300秒
+  }catch(e){}
+  return residents;
+}
+
+function invalidateResidentsCache_(){
+  try{ CacheService.getScriptCache().remove(RESIDENTS_CACHE_KEY); }catch(e){}
 }
 
 function upsertRow_(name, defaultHeaders, obj){
