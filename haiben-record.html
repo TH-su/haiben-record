@@ -1477,7 +1477,13 @@ function flushPendingQueue(){
   // 順番に再送する
   var remain=[];var i=0;
   function next(){
-    if(i>=q.length){savePendingQueue(remain);if(remain.length===0&&q.length>0)showToast('✅ 未送信データを同期しました');_pqFlushing=false;return}
+    if(i>=q.length){
+      // enqueuePending は末尾追記のみ＝ q.length 以降はフラッシュ中の追記分。全置換で消さず合流保存する
+      var fresh=loadPendingQueue();
+      var extra=fresh.length>q.length?fresh.slice(q.length):[];
+      savePendingQueue(remain.concat(extra));
+      if(remain.length===0&&extra.length===0&&q.length>0)showToast('✅ 未送信データを同期しました');
+      _pqFlushing=false;return}
     var item=q[i++];
     apiPost(item.action,item.data||{})
       .then(function(r){if(!(r&&r.ok!==false))remain.push(item);next()})
