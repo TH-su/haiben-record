@@ -75,7 +75,7 @@ function getSection(id, section){
     family:['family'],
     office:['careOffice','careManager','careOfficeTel','careOfficeFax','welfareEquip','welfareEquipStaff','welfareEquipTel','rhythm'],
     medical:['hospital','doctor','hospitalTel','hospitalFax','emergencyHospital','pharmacy','pharmacyTel','pharmacyFax','allergy','infections','bloodType','medicalCare','vaccinations','disclosure','currentDiseases','sideEffects','pastHistory','medsRegular','medsNotes','problemBehavior'],
-    meds:['medMgmt','medAssist','highRiskMeds','formAdjust','medRefusal'],
+    meds:['medMgmt','medAssist','highRiskMeds','formAdjust','medRefusal','formAdjustStatus','medRefusalPlan'],
     adl_detail:['swallow','water','excretion','bath','dress','mobility','transfer','bedriddenRank','pressureUlcer','vision','hearing'],
     cognitive:['dementiaType','cogScore','careHints','psychHistory'],
     comm:['preferredName','commMethod','commNotes'],
@@ -87,7 +87,7 @@ function getSection(id, section){
     medSupport:['medicalSupportLog'],
     // 現場タブレット(field)向け「安全情報のみ」。家族連絡先・経済・詳細病歴・服薬詳細は含めない。
     // facesheet.html の field 限定ビュー専用。resident-master.html の SAFE_FIELDS と一致させること。
-    facesheet_safe:['kana','room','gender','preferredName','allergy','infections','medicalCare','formAdjust','careHints','mealForm','thickener','swallow','denture','mobility','problemBehavior']
+    facesheet_safe:['kana','room','gender','preferredName','allergy','infections','medicalCare','formAdjust','careHints','mealForm','thickener','swallow','denture','mobility','problemBehavior','medMgmt','medAssist','medRefusal','medRefusalPlan','formAdjustStatus']
   };
   var keys=map[section]; if(!keys) return null;
   var out={id:rec.id,name:rec.name}; keys.forEach(function(k){ out[k]=rec[k]; }); return out;
