@@ -14,33 +14,8 @@ const CFG_DEFAULT_HEADERS = ['key','value'];
 const SHEETS_EPOCH_MS = -2209161600000; // = Date.UTC(1899,11,30)
 const RESIDENTS_CACHE_KEY = 'residents_v1';
 
-/** ============ 認証（2026-07-18 追加） ============
- * スクリプトプロパティ HAIBEN_TOKEN に合言葉を設定すると、全リクエスト（doGet/doPost）で
- * トークン検証が有効になる。未設定の間は従来通り認証なしで動作する「猶予モード」。
- * → 新コードをデプロイ（挙動不変）→ 全端末でトークン入力 → 最後に HAIBEN_TOKEN を設定した
- *   瞬間から強制、という無停止移行ができる。※設定までは無認証のままなので移行は即日完了させる。
- * トークンの受け取り: GET は ?token=、POST は JSON ボディの token（master.gs と同方式）。 */
-const TOKEN_PROP = 'HAIBEN_TOKEN';
-
-function _token(e){
-  var exp = PropertiesService.getScriptProperties().getProperty(TOKEN_PROP);
-  if(!exp) return true; // 猶予モード: トークン未設定なら検証しない（従来互換）
-  var got = (e && e.parameter && e.parameter.token) || '';
-  if(!got && e && e.postData){
-    try{ got = JSON.parse(e.postData.contents).token || ''; }catch(err){}
-  }
-  return got === exp;
-}
-
-/** 403 相当のレスポンス（GAS は HTTP ステータスを変えられないため JSON で表現） */
-function authError_(){
-  return json({ok:false, error:'認証エラー: 同期トークンが未設定または一致しません。設定画面で正しいトークンを入力してください。', code:403});
-}
-
 /** ============ doGet（差分同期対応） ============ */
 function doGet(e){
-  // 認証: HAIBEN_TOKEN 設定時は全 GET を検証（要配慮個人情報の読取保護）
-  if(!_token(e)) return authError_();
   // エディタの「実行」ボタンで直接呼ばれた場合の保護
   const params = (e && e.parameter) || {};
   try{
@@ -91,8 +66,6 @@ function doGet(e){
 
 /** ============ doPost（既存通り。upsertRow_ が updatedAt を自動設定済み） ============ */
 function doPost(e){
-  // 認証: HAIBEN_TOKEN 設定時は全 POST を検証（改竄・削除の防止）。ロック取得前に弾く。
-  if(!_token(e)) return authError_();
   // 複数端末の同時POSTによる読み-書き競合（lost update・行重複・Configヘッダ破壊）を防ぐため
   // スクリプトロックで書き込みを直列化する。既存の switch / レスポンス形状は不変（外側で包むだけ）。
   var lock = LockService.getScriptLock();
