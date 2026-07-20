@@ -71,7 +71,10 @@ var ACK_FAMILY_PHONE = [];
 /* 薬タブ2列目の退避ラベル。verifyImport が件数を数えるのに使うので文面を変えたら両方直す。 */
 var MEDS_EXTRA_TAG = '内服(定期薬)欄の2列目';
 var TARGET_SHEET = 'master_import';    // 書込先（安全のため複製先。確認後に master へ）
-var MASTER_SHEET_NAME = 'master';      // ここへ直接書き込むことは禁止（ガードで停止する）
+/* runMigration の書込先として master を指定することは禁止（ガードで停止する）。
+   master へ直接書くのは addReservedIds だけで、これは予約行の追記専用＝
+   既存行は変更せず・登録済みidはスキップする。ただし DRY_RUN の対象外で即時書き込む。 */
+var MASTER_SHEET_NAME = 'master';
 var DEFAULT_TARGET_APPS = ['excretion','weight','schedule'];
 
 /* タブ名。空なら自動検出するが、同系統のタブが複数あるため
