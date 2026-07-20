@@ -2,10 +2,19 @@
  * 「入居者情報」スプレッドシートにバインドして使用（拡張機能→Apps Script）。
  * 入居者マスタは 'master' タブに 1行=1名 で保存。
  * デプロイ: デプロイ→新しいデプロイ→ウェブアプリ→実行=自分 / アクセス=全員→ /exec URL を取得
- * スクリプトプロパティ RMASTER_TOKEN に任意の合言葉を設定（resident-master.html 側と一致させる）
+ *
+ * ── スクリプトプロパティ（合言葉）──
+ *   RMASTER_TOKEN       … 事務所用。全機能（閲覧・保存）
+ *   RMASTER_TOKEN_FIELD … 現場タブレット用。**安全項目の閲覧のみ**（任意。設定しなければ現場配布なし）
+ *
+ * ★重要: 端末の用途(su_device_role)はブラウザ側の値なので詐称できる。
+ *   したがって現場端末の制限は「現場用トークンでは安全項目しか返さない」というサーバ側の判定で担保する。
+ *   現場タブレットには RMASTER_TOKEN_FIELD だけを配り、RMASTER_TOKEN は絶対に配らないこと。
  *****/
 var MASTER_SHEET = 'master';
 var TOKEN_PROP = 'RMASTER_TOKEN';
+var TOKEN_PROP_FIELD = 'RMASTER_TOKEN_FIELD';
+var FIELD_SECTION = 'facesheet_safe';   // 現場トークンで参照を許す唯一のセクション
 var HEADERS = ['id','name','kana','room','gender','careLevel','active','updatedAt','dataJson','targetApps'];
 
 function _sheet(){
@@ -14,11 +23,17 @@ function _sheet(){
   if(!sh){ sh = ss.insertSheet(MASTER_SHEET); sh.appendRow(HEADERS); }
   return sh;
 }
-function _token(e){
-  var exp = PropertiesService.getScriptProperties().getProperty(TOKEN_PROP);
+/* 合言葉から権限を判定して返す。'full' | 'field' | '' (不正) */
+function _role(e){
+  var p = PropertiesService.getScriptProperties();
+  var full = p.getProperty(TOKEN_PROP);
+  var field = p.getProperty(TOKEN_PROP_FIELD);
   var got = (e && e.parameter && e.parameter.token) || '';
   if(!got && e && e.postData){ try{ got = JSON.parse(e.postData.contents).token || ''; }catch(err){} }
-  return exp && got === exp;
+  if(!got) return '';
+  if(full && got === full) return 'full';
+  if(field && got === field) return 'field';
+  return '';
 }
 function _json(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function _err(m){ return _json({error:m}); }
@@ -26,9 +41,24 @@ function _truthy(v){ return v!==false && v!=='false' && v!=='退去' && v!==''; 
 
 function doGet(e){
   try{
-    if(!_token(e)) return _err('認証エラー');
+    var role = _role(e);
+    if(!role) return _err('認証エラー');
     var a = (e && e.parameter && e.parameter.action) || '';
-    if(a==='ping') return _json({ok:true});
+    if(a==='ping') return _json({ok:true, role:role});
+
+    // ── 現場トークン: 安全項目の参照のみ許可（名簿・個人フル・保存は不可）──
+    if(role==='field'){
+      if(a==='getSection' && e.parameter.section===FIELD_SECTION){
+        // 退去者は現場に出さない（id総当たりで退去者を読まれるのを防ぐ）
+        var rec = getResident(e.parameter.id);
+        if(!rec || rec.active===false) return _json({section:null});
+        return _json({section:getSection(e.parameter.id, FIELD_SECTION)});
+      }
+      if(a==='getRoster') return _json({roster:getRosterSafe()});
+      return _err('この端末では参照できません（現場用の合言葉です）');
+    }
+
+    // ── 事務所トークン: 全機能 ──
     if(a==='getRoster') return _json({roster:getRoster(e.parameter.since)});
     if(a==='getResident') return _json({record:getResident(e.parameter.id)});
     if(a==='getSection') return _json({section:getSection(e.parameter.id, e.parameter.section)});
@@ -37,11 +67,18 @@ function doGet(e){
 }
 function doPost(e){
   try{
-    if(!_token(e)) return _err('認証エラー');
+    var role = _role(e);
+    if(!role) return _err('認証エラー');
+    if(role!=='full') return _err('この端末では保存できません（現場用の合言葉です）');
     var b = JSON.parse(e.postData.contents);
     if(b.action==='saveResident') return _json({record:saveResident(b.record)});
     return _err('不明なaction');
   }catch(err){ return _err(String(err)); }
+}
+/* 現場向けの名簿（在籍者の識別項目のみ。退去者・更新日時・対象アプリは返さない） */
+function getRosterSafe(){
+  return getRoster().filter(function(r){ return r.active!==false; })
+    .map(function(r){ return {id:r.id, name:r.name, kana:r.kana, room:r.room, gender:r.gender, careLevel:r.careLevel, active:true}; });
 }
 
 function getRoster(since){
