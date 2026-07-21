@@ -807,6 +807,11 @@ textarea{resize:vertical;min-height:76px}
       <label class="fl">GAS Web App URL</label>
       <input type="text" id="cfgApi" placeholder="https://script.google.com/macros/s/〇〇〇/exec">
     </div>
+    <div class="fg">
+      <label class="fl">🔑 同期トークン（合言葉）</label>
+      <input type="password" id="cfgApiToken" placeholder="GASのスクリプトプロパティ HAIBEN_TOKEN と同じ値" autocomplete="off">
+      <div style="margin-top:4px;font-size:11px;color:var(--g5)">※管理者から知らされた合言葉を入力してください。記録データの不正アクセスを防ぐ認証キーです。</div>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
       <button class="bn bp bsm" id="btnApiSave">💾 URLを保存・接続</button>
       <button class="bn bs bsm" id="btnApiSync">🔄 手動同期</button>
@@ -1087,6 +1092,13 @@ const API_COOKIE_BAK='hbcr_api_url_bak';   // Cookie 別名でも保存
 const API_IDB_NAME='hbcr_api_db';          // IndexedDB（ITP に最も強い）
 const API_IDB_STORE='kv';
 const API_IDB_KEY='api_url';
+/* 同期トークン（2026-07-18 認証対応）: URL と同じ多層永続化で保存。
+   GAS 側スクリプトプロパティ HAIBEN_TOKEN と同じ値を設定画面で入力する。
+   ※URL ハッシュ(#api=)での復元はトークンには適用しない（履歴・共有リンク経由の漏えい防止） */
+const API_TOKEN_KEY='hbcr_api_token';
+const API_TOKEN_KEY_BAK='hbcr_api_token_bak';
+const API_TOKEN_COOKIE='hbcr_api_token';
+const API_TOKEN_IDB_KEY='api_token';
 
 /* GAS Web App URL の堅牢な保存／読み出し（5層）
    1. localStorage 主
@@ -1192,13 +1204,50 @@ function clearApiUrl(){
   _delCookie(API_COOKIE_BAK);
   _idbDel(API_IDB_KEY);
 }
-/* 定期的に URL を再保存（生存ハートビート） — 全層が同期され続けることを保証 */
+/* ── 同期トークンの保存／読み出し（URL と同じ多層永続化） ── */
+function saveApiToken(tk){
+  tk=(tk||'').trim();
+  if(!tk){clearApiToken();return}
+  try{localStorage.setItem(API_TOKEN_KEY,tk)}catch(e){console.warn('[hbcr] token localStorage失敗:',e)}
+  try{localStorage.setItem(API_TOKEN_KEY_BAK,tk)}catch(e){}
+  try{sessionStorage.setItem(API_TOKEN_KEY,tk)}catch(e){}
+  _setCookie(API_TOKEN_COOKIE,tk,365);
+  _idbSet(API_TOKEN_IDB_KEY,tk);
+}
+function loadApiToken(){
+  var t='';
+  try{t=localStorage.getItem(API_TOKEN_KEY)||''}catch(e){}
+  if(!t){try{t=localStorage.getItem(API_TOKEN_KEY_BAK)||''}catch(e){}}
+  if(!t){try{t=sessionStorage.getItem(API_TOKEN_KEY)||''}catch(e){}}
+  if(!t){t=_getCookie(API_TOKEN_COOKIE)||''}
+  if(t)saveApiToken(t); // 復元できたら全層へ書き戻し
+  if(!t){
+    _idbGet(API_TOKEN_IDB_KEY).then(function(v){
+      if(v&&typeof v==='string'){
+        saveApiToken(v);apiToken=v;
+        if($('cfgApiToken')&&!$('cfgApiToken').value)$('cfgApiToken').value=v;
+      }
+    });
+  }
+  return t;
+}
+function clearApiToken(){
+  try{localStorage.removeItem(API_TOKEN_KEY)}catch(e){}
+  try{localStorage.removeItem(API_TOKEN_KEY_BAK)}catch(e){}
+  try{sessionStorage.removeItem(API_TOKEN_KEY)}catch(e){}
+  _delCookie(API_TOKEN_COOKIE);
+  _idbDel(API_TOKEN_IDB_KEY);
+}
+
+/* 定期的に URL・トークンを再保存（生存ハートビート） — 全層が同期され続けることを保証 */
 function _heartbeatApiUrl(){
   if(apiUrl)saveApiUrl(apiUrl);
+  if(apiToken)saveApiToken(apiToken);
 }
 // 初回 + 5分ごとに heartbeat（apiUrl がある時だけ再保存）
 setInterval(_heartbeatApiUrl,5*60*1000);
 let apiUrl='';
+let apiToken='';
 
 function apiSetStatus(st,msg){
   var b=$('apiBd');if(!b)return;
@@ -1233,6 +1282,7 @@ async function apiGet(opts){
   opts=opts||{};
   var url=apiUrl+'?action=getAll';
   if(opts.since&&opts.since>0)url+='&since='+encodeURIComponent(opts.since);
+  if(apiToken)url+='&token='+encodeURIComponent(apiToken); // 認証（GAS: HAIBEN_TOKEN）
   // GAS は毎回シート全行を読むため差分でも約8秒・全件は約15秒かかる（記録7500件時点・実測）。
   // 既定12秒では全件取得（初回・日付回復・「同期」ボタン）が必ずタイムアウトし、
   // 未回復端末は since=0 の全件を強制するため回復フラグが立たず永久に同期不能になる。
@@ -1258,7 +1308,7 @@ async function apiPost(action,data){
   var r=await fetchTO(apiUrl,{
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({action:action,record:data.record,id:data.id,resident:data.resident,cfg:data.cfg})},30000);
+    body:JSON.stringify({action:action,record:data.record,id:data.id,resident:data.resident,cfg:data.cfg,token:apiToken||undefined})},30000);
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json()}
 
@@ -4724,7 +4774,9 @@ function init(){
 
   // ── Google Sheets API 連携 ──
   apiUrl=loadApiUrl();
+  apiToken=loadApiToken();
   if($('cfgApi'))$('cfgApi').value=apiUrl;
+  if($('cfgApiToken'))$('cfgApiToken').value=apiToken;
   if(apiUrl){
     apiSetStatus('sy');
     syncFromAPI(true).then(ok=>{
@@ -4741,6 +4793,10 @@ function init(){
     const url=$('cfgApi').value.trim();
     if(!url){showToast('⚠️ URLを入力してください');return}
     if(!url.startsWith('https://script.google.com/')){showToast('⚠️ GASのURLを確認してください');return}
+    // 同期トークンも同時に保存（空なら旧GAS互換の未認証モード）
+    const tk=$('cfgApiToken')?$('cfgApiToken').value.trim():'';
+    apiToken=tk;
+    if(tk)saveApiToken(tk);else clearApiToken();
     apiUrl=url;saveApiUrl(url);
     // API接続初回: サンプル入居者（_seed）を削除してサーバーデータをクリーンに取り込む
     if(Array.isArray(D.residents)){D.residents=D.residents.filter(function(r){return !r._seed});save()}
@@ -4769,7 +4825,9 @@ function init(){
     customConfirm('Google Sheets連携を解除しますか？\nローカルデータは保持されます。').then(function(ok){
       if(!ok)return;
       apiUrl='';clearApiUrl();
+      apiToken='';clearApiToken();
       $('cfgApi').value='';
+      if($('cfgApiToken'))$('cfgApiToken').value='';
       apiSetStatus('of');
       $('apiStatus').textContent='GASデプロイ後に取得したURLを入力して「URLを保存・接続」を押してください。';
       showToast('🔌 連携を解除しました')})});
