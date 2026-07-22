@@ -25,6 +25,11 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
   position:sticky;top:0;z-index:100;box-shadow:0 3px 12px rgba(0,0,0,.15);
   display:flex;align-items:center;justify-content:space-between}
 .hdr h1{font-size:17px;font-weight:700}.hdr-sub{font-size:12px;opacity:.85;margin-top:2px}
+/* アプリ間ジャンプ（care-schedule / daycare-roster と同じ見た目。共通部品が無いため各ファイルに持つ） */
+.hdr-btn{min-height:40px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);
+  color:#fff;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+.hdr-btn:hover{background:rgba(255,255,255,.28)}
+.hdr-btn:focus-visible{outline:2px solid #fff;outline-offset:1px}
 
 /* bottom nav */
 .bnav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--g2);
@@ -411,6 +416,12 @@ textarea{resize:vertical;min-height:76px}
 <header class="hdr">
   <div><h1>🏥 排泄ケア記録</h1><div class="hdr-sub" id="hDate"></div></div>
   <div style="display:flex;align-items:center;gap:8px">
+    <!-- アプリ間ジャンプ（daycare-roster.html と同形式）。
+         ★このアプリだけ /haiben-record/ 配下で配信されるため相対パスでは care-tools に届かない。
+           同一オリジン（th-su.github.io）なので ../care-tools/ で参照する。
+         .hdr は justify-content:space-between のため右グループの【先頭に足す】と
+         APIバッジ・時刻の位置が動かない。 -->
+    <button class="hdr-btn" id="btnMaster" aria-label="入居者マスタを新しいタブで開く" title="入居者マスタを開く（入居者情報の源泉）">👤 入居者マスタ</button>
     <div class="api-bd api-of" id="apiBd">●</div>
     <div style="font-size:12px;opacity:.85" id="hTime"></div>
   </div>
@@ -4909,7 +4920,12 @@ function init(){
       showToast('🔌 連携を解除しました')})});
 }
 
-document.addEventListener('DOMContentLoaded',init);
+document.addEventListener('DOMContentLoaded',function(){
+  // アプリ間ジャンプ（別タブ＝入力中の記録を失わない）
+  var _bm=document.getElementById('btnMaster');
+  if(_bm)_bm.addEventListener('click',function(){window.open('../care-tools/resident-master.html','_blank')});
+  init();
+});
 
 // グローバルエラーハンドラ — 未処理エラーでフリーズしないよう保護
 window.onerror=function(msg){console.error('AppError:',msg);ldHide();return false};

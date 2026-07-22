@@ -77,18 +77,64 @@ function doPost(e){
 }
 /* 現場向けの名簿（在籍者の識別項目のみ。退去者・更新日時・対象アプリは返さない） */
 function getRosterSafe(){
-  return getRoster().filter(function(r){ return r.active!==false; })
+  /* 拡張項目は捨てるので parse させない（現場タブレットの名簿取得を重くしない） */
+  return getRoster(null,true).filter(function(r){ return r.active!==false; })
     .map(function(r){ return {id:r.id, name:r.name, kana:r.kana, room:r.room, gender:r.gender, careLevel:r.careLevel, active:true}; });
 }
 
-function getRoster(since){
+/* 一覧に出すために dataJson から取り出す項目。
+   ★ここに増やしてよいのは「事務所の一覧画面に出す非機微項目」だけ。
+     現場端末には getRosterSafe() が明示フィールドだけを組み直して返すので流れない。
+     病名・処方・家族連絡先など要配慮情報は絶対に足さないこと（一覧APIは端末キャッシュに載る）。 */
+var ROSTER_EXTRA = ['birthDate','height'];
+
+function getRoster(since, skipExtra){
   var sh=_sheet(), v=sh.getDataRange().getValues(), out=[], s=since?new Date(since).getTime():0;
   for(var i=1;i<v.length;i++){ var r=v[i]; if(r[0]==='') continue;
     if(s){ var u=r[7]?new Date(r[7]).getTime():0; if(u<s) continue; }
-    out.push({ id:r[0], name:r[1], kana:r[2], room:r[3], gender:r[4], careLevel:r[5],
-               active:_truthy(r[6]), updatedAt:r[7], targetApps:String(r[9]||'') });
+    var e={ id:r[0], name:r[1], kana:r[2], room:r[3], gender:r[4], careLevel:r[5],
+            active:_truthy(r[6]), updatedAt:r[7], targetApps:String(r[9]||'') };
+    /* dataJson（H列）は既に読み込み済みなので追加のシート読み取りは発生しない。
+       壊れた JSON があっても一覧全体を落とさない（その人だけ空欄になる）。 */
+    if(!skipExtra){
+      var d=null; try{ d=JSON.parse(r[8]||'{}'); }catch(err){ d=null; }
+      for(var k=0;k<ROSTER_EXTRA.length;k++){
+        var key=ROSTER_EXTRA[k];
+        if(e[key]!==undefined) continue;                 // シート列の値を dataJson で上書きしない
+        var val=(d && d[key]!=null) ? d[key] : '';
+        /* 数値やオブジェクトが入っていても画面が壊れないよう文字列に寄せる
+           （オブジェクトは値を持たないものとして扱う） */
+        e[key]=(typeof val==='object') ? '' : String(val);
+      }
+    }
+    out.push(e);
   }
   return out;
+}
+
+/* 一覧APIの拡張が効いているかを確認する（読み取りのみ・値は出さない）。
+   GASエディタで直接実行して使う。件数と充足率だけを出し、生年月日そのものはログに残さない
+   （実行ログは Cloud Logging に残り、後から回収できないため）。 */
+function verifyRoster(){
+  var all=getRoster();
+  Logger.log('■ getRoster: '+all.length+'名');
+  var cnt={};
+  ROSTER_EXTRA.forEach(function(k){ cnt[k]=0; });
+  all.forEach(function(r){ ROSTER_EXTRA.forEach(function(k){ if(String(r[k]||'')!=='') cnt[k]++; }); });
+  ROSTER_EXTRA.forEach(function(k){
+    Logger.log('   '+k+': 入力済 '+cnt[k]+'/'+all.length+'名'+(cnt[k]?'':'  ⚠️ 0件。dataJson に値が無いか項目名が違う'));
+  });
+  /* ★現場端末に漏れないことの機械確認。getRosterSafe は明示フィールドだけを組み直す実装なので
+     ROSTER_EXTRA が1つでも混じっていたら実装が壊れている。 */
+  var safe=getRosterSafe();
+  var leak=[];
+  if(safe.length){
+    ROSTER_EXTRA.forEach(function(k){ if(k in safe[0]) leak.push(k); });
+  }
+  Logger.log(leak.length
+    ? '❌ 現場用の名簿に '+leak.join(',')+' が含まれています。getRosterSafe を確認してください'
+    : '✅ 現場用の名簿には拡張項目が含まれていません（現場端末へ漏れない）');
+  Logger.log('   現場用の名簿: '+safe.length+'名（在籍者のみ）／返すキー: '+(safe.length?Object.keys(safe[0]).join(','):'—'));
 }
 function _findRow(sh,id){
   var ids=sh.getRange(1,1,Math.max(sh.getLastRow(),1),1).getValues();
