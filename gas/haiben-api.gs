@@ -37,19 +37,24 @@ function authError_(){
   return json({ok:false, error:'認証エラー: 同期トークンが未設定または一致しません。設定画面で正しいトークンを入力してください。', code:403});
 }
 
-/** ============ 入居者マスタ名簿の代理取得（2026-07-22 追加） ============
- * 現場端末に入居者マスタのトークンを配らずに済ませるため、サーバー間で名簿を取得して配る。
- * スクリプトプロパティ MASTER_API_URL（マスタGASの /exec）と MASTER_API_TOKEN
- * （RMASTER_TOKEN_FIELD＝現場用・安全項目のみ閲覧可）が両方設定された時だけ有効。
- * 未設定なら null を返し、呼び出し側は従来どおり動作する（連携なしの既存挙動を保つ）。
- * マスタ側の障害・認証エラーで排泄記録の同期まで止めないため、失敗時も null で返す（安全側）。 */
+/** ============ 入居者マスタ名簿の取得（2026-07-22 / スプレッドシート直読み方式） ============
+ * 入居者マスタのスプレッドシート 'master' タブを直接読む。
+ * 当初は GAS 間の HTTP 通信（UrlFetchApp）で取得する設計にしたが、外部通信の権限
+ * （script.external_request）の承認がどうしても通らなかったため方式を変更した。
+ * 直読みなら既に承認済みの spreadsheets 権限だけで動くので、追加の承認作業が要らない。
+ * 副次的に、マスタ側のトークン管理もマスタGASのデプロイ状態への依存もなくなる。
+ *
+ * スクリプトプロパティ MASTER_SHEET_ID（入居者マスタのスプレッドシートID）が設定された
+ * 時だけ有効。未設定なら null を返し、呼び出し側は従来どおり動作する（既存挙動を保つ）。
+ * 読み出すのは識別・表示用の安全項目のみ。dataJson（医療情報等）は列添字すら取らない。
+ * 返す形は呼び出し側の契約（masterId/name/kana/room/gender/careLevel/active）を変えない。 */
 const MASTER_ROSTER_CACHE_KEY = 'master_roster_v1';
+const MASTER_SHEET_NAME = 'master';   // master.gs の MASTER_SHEET と同じ
+const MASTER_SAFE_COLS = ['id','name','kana','room','gender','careLevel','active'];
 
 function fetchMasterRoster_(){
-  const p = PropertiesService.getScriptProperties();
-  const url = p.getProperty('MASTER_API_URL');
-  const tok = p.getProperty('MASTER_API_TOKEN');
-  if(!url || !tok) return null;   // 連携未設定 ＝ 従来動作
+  const sheetId = PropertiesService.getScriptProperties().getProperty('MASTER_SHEET_ID');
+  if(!sheetId) return null;   // 連携未設定 ＝ 従来動作
 
   const cache = CacheService.getScriptCache();
   try{
@@ -58,33 +63,83 @@ function fetchMasterRoster_(){
   }catch(e){}
 
   try{
-    const res = UrlFetchApp.fetch(url + '?action=getRoster&token=' + encodeURIComponent(tok),
-      { muteHttpExceptions:true, followRedirects:true });
-    if(res.getResponseCode() !== 200){
-      console.error('masterRoster: HTTP ' + res.getResponseCode());
-      return null;
+    const sh = SpreadsheetApp.openById(sheetId).getSheetByName(MASTER_SHEET_NAME);
+    if(!sh){ console.error('masterRoster: シート「' + MASTER_SHEET_NAME + '」が見つかりません'); return null; }
+    const last = sh.getLastRow();
+    if(last < 2) return [];   // ヘッダーのみ＝入居者ゼロ。連携は成立しているので [] を返す
+
+    const lastCol = sh.getLastColumn();
+    const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(function(v){ return String(v).trim(); });
+    // 安全項目の列位置だけを引く。dataJson・targetApps は添字を取らない＝読み出し対象にしない。
+    const idx = {};
+    MASTER_SAFE_COLS.forEach(function(k){ idx[k] = headers.indexOf(k); });
+    if(idx.id < 0){ console.error('masterRoster: id列が見つかりません（ヘッダー: ' + headers.join(',') + '）'); return null; }
+
+    const rows = sh.getRange(2,1,last-1,lastCol).getValues();
+    const pick = function(r,k){ return idx[k]>=0 ? String(r[idx[k]]==null?'':r[idx[k]]).trim() : ''; };
+    const roster = [];
+    for(let i=0;i<rows.length;i++){
+      const r = rows[i];
+      if(r[idx.id]==='' || r[idx.id]==null) continue;
+      // 在籍判定は master.gs の _truthy と同じ規則（false/'false'/'退去'/空 を除外）
+      const act = idx.active>=0 ? r[idx.active] : true;
+      if(act===false || act==='false' || act==='退去' || act==='') continue;
+      roster.push({
+        masterId : String(r[idx.id]),
+        name     : pick(r,'name'),
+        kana     : pick(r,'kana'),
+        room     : pick(r,'room'),
+        gender   : pick(r,'gender'),
+        careLevel: pick(r,'careLevel'),
+        active   : true
+      });
     }
-    const body = JSON.parse(res.getContentText());
-    // master.gs は認証失敗時に {error:...} を返す。roster 配列が無ければ連携不可として扱う。
-    // 個人情報保護：body の中身（氏名・居室）はログに出さず、エラー文言のみ記録する。
-    if(!body || !Array.isArray(body.roster)){
-      console.error('masterRoster: ' + (body && body.error ? body.error : 'roster形式が不正'));
-      return null;
-    }
-    // su_residents_common と同じ形へ変換（マスタ側の id が masterId にあたる）
-    const roster = body.roster.map(function(r){
-      return { masterId:r.id, name:r.name, kana:r.kana, room:r.room,
-               gender:r.gender, careLevel:r.careLevel, active:r.active!==false };
-    });
     try{
       const s = JSON.stringify(roster);
       if(s.length <= 90000) cache.put(MASTER_ROSTER_CACHE_KEY, s, 600); // 100KB上限の防御・TTL 10分
     }catch(e){}
     return roster;
   }catch(err){
-    console.error('masterRoster fetch error: ' + err);
+    // 権限不足・ID誤り・マスタ側の障害いずれでも、記録の同期は止めない（安全側フォールバック）
+    console.error('masterRoster read error: ' + err);
     return null;
   }
+}
+
+/** 診断用: マスタ連携の設定をエディタから点検する。デプロイ不要・氏名は出力しない。
+ *  Apps Script エディタの関数プルダウンで checkMasterLink を選び「実行」を押す。
+ *  ウェブアプリからは到達できない（doGet/doPost の分岐に無い）ため、公開面は増えない。 */
+function checkMasterLink(){
+  const id = PropertiesService.getScriptProperties().getProperty('MASTER_SHEET_ID');
+  console.log('--- 1. 設定の確認 ---');
+  console.log('MASTER_SHEET_ID: ' + (id ? '設定あり（末尾8文字: ' + id.slice(-8) + '）' : '★未設定★'));
+  if(!id){ console.log('→ スクリプトプロパティ MASTER_SHEET_ID が未設定です。'); return; }
+
+  console.log('--- 2. スプレッドシートを開く ---');
+  let ss;
+  try{ ss = SpreadsheetApp.openById(id); }
+  catch(err){
+    console.log('→ 開けません: ' + err);
+    console.log('   IDが違うか、このアカウントに閲覧権限がありません。');
+    return;
+  }
+  console.log('スプレッドシート名: ' + ss.getName());
+  const sh = ss.getSheetByName(MASTER_SHEET_NAME);
+  if(!sh){
+    console.log('→ シート「' + MASTER_SHEET_NAME + '」がありません。');
+    console.log('   このファイルのタブ一覧: ' + ss.getSheets().map(function(s){ return s.getName(); }).join(', '));
+    return;
+  }
+
+  console.log('--- 3. 名簿の読み取り ---');
+  try{ CacheService.getScriptCache().remove(MASTER_ROSTER_CACHE_KEY); }catch(e){}  // 診断は必ず実データを見る
+  const roster = fetchMasterRoster_();
+  if(roster === null){ console.log('→ 読み取りに失敗しました。上に出ているエラーログを確認してください。'); return; }
+  console.log('★★★ 成功 ★★★');
+  console.log('在籍者: ' + roster.length + '件'
+    + ' / 居室あり: ' + roster.filter(function(r){ return r.room; }).length + '件'
+    + ' / かなあり: ' + roster.filter(function(r){ return r.kana; }).length + '件');
+  console.log('※氏名は表示していません');
 }
 
 /** ============ doGet（差分同期対応） ============ */
