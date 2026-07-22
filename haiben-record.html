@@ -1427,6 +1427,9 @@ async function syncFromAPI(showLoader,opts){
     // 職員リストの同期は「職員タブ → 全員を受信」または UI 操作（追加/編集/削除）時のみ。
     // 入居者マスタの共通情報を同期後にも反映（master を正として居室等を更新）
     if(typeof mergeCommonResidents==='function')mergeCommonResidents();
+    // 入居者マスタ名簿をサーバー経由でも更新（非同期・await しない＝記録同期の完了を待たせない。
+    // 失敗しても false を返すだけで、ここまでの同期結果には影響しない）
+    if(typeof syncMasterRoster==='function')syncMasterRoster();
     cleanData();save();
     // 同期成功時に URL の保存を refresh（cookie 1年延長・バックアップ層も再書込）
     if(apiUrl)saveApiUrl(apiUrl);
@@ -1871,11 +1874,20 @@ function flushSave(){
    ・記録・cfg・予定・入院情報など当アプリ固有データには一切触れない（非破壊・冪等） */
 var SU_COMMON_KEY='su_residents_common';
 function _normName(s){return String(s==null?'':s).replace(/\s+/g,'').trim()}
-function mergeCommonResidents(){
-  var raw;try{raw=localStorage.getItem(SU_COMMON_KEY)}catch(e){return false}
-  if(!raw)return false;
-  var data;try{data=JSON.parse(raw)}catch(e){return false}
-  var list=(data&&Array.isArray(data.residents))?data.residents:null;
+/* 引数はどちらも省略可。省略時は従来どおり localStorage の共有名簿を読む（既存呼び出しは無改修で同一動作）。
+   srcList … 名簿配列を外から渡す（サーバー代理取得した名簿を適用する経路で使う）
+   opts.noAdd … 未登録の入居者を新規追加しない。サーバー由来の名簿は targetApps を持たない
+                （master.gs の getRosterSafe が返さない）ため、これが無いと排泄ケア対象外の方まで取り込まれる。 */
+function mergeCommonResidents(srcList, opts){
+  opts=opts||{};
+  var list;
+  if(Array.isArray(srcList)){list=srcList}
+  else{
+    var raw;try{raw=localStorage.getItem(SU_COMMON_KEY)}catch(e){return false}
+    if(!raw)return false;
+    var data;try{data=JSON.parse(raw)}catch(e){return false}
+    list=(data&&Array.isArray(data.residents))?data.residents:null;
+  }
   if(!list||!list.length)return false;
   if(!Array.isArray(D.residents))D.residents=[];
   var byMid={},byName={};
@@ -1899,6 +1911,7 @@ function mergeCommonResidents(){
       if(c.kana&&tgt.yomi!==c.kana){tgt.yomi=c.kana;changed++;}
       if(tExc!==undefined&&tgt.targetExcretion!==tExc){tgt.targetExcretion=tExc;changed++;}
     }else{
+      if(opts.noAdd)return;   // サーバー由来の名簿は対象アプリ情報を持たないため新規追加はしない（既存者の更新のみ）
       if(tExc===false)return; // 排泄対象外の master 入居者は当アプリに取り込まない
       if(!c.room)return;      // 居室なしは isValidRes で除外されるため取り込まない
       var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
@@ -1910,6 +1923,43 @@ function mergeCommonResidents(){
   });
   if(changed){_recIdx=null;save();}
   return changed>0;
+}
+
+/* ── 入居者マスタ名簿のサーバー取得（2026-07-22 追加） ──
+   排泄記録GASが入居者マスタGASから代理取得した名簿を受け取り、既存入居者の居室・フリガナ・
+   要介護度の更新にだけ使う。これにより、入居者マスタを開かない現場端末にも最新の居室が届く。
+   ※共有キー su_residents_common には書かない。あのキーは「入居者マスタが唯一の書き手」という
+     連携契約で、フェイスシート・ケアスケジュール・体重管理の3アプリも読んでいる。専用キーに
+     保存して影響を当アプリ内に閉じ込める。オフライン時は前回取得分を再利用する。 */
+const MASTER_ROSTER_KEY='hbcr_master_roster';
+function loadStoredMasterRoster(){
+  try{
+    var raw=localStorage.getItem(MASTER_ROSTER_KEY);if(!raw)return null;
+    var d=JSON.parse(raw);return (d&&Array.isArray(d.residents)&&d.residents.length)?d.residents:null;
+  }catch(e){return null}
+}
+async function syncMasterRoster(){
+  if(!apiUrl)return false;
+  try{
+    var url=apiUrl+'?action=masterRoster';
+    if(apiToken)url+='&token='+encodeURIComponent(apiToken);
+    var r=await fetchTO(url,{},20000);
+    if(!r.ok)return false;
+    var j=await r.json();
+    // available:false ＝ サーバー側でマスタ連携が未設定。静かに見送る（従来動作のまま）
+    if(!j||j.available!==true||!Array.isArray(j.roster)||!j.roster.length)return false;
+    try{localStorage.setItem(MASTER_ROSTER_KEY,JSON.stringify({v:1,updatedAt:new Date().toISOString(),residents:j.roster}))}catch(e){}
+    var changed=mergeCommonResidents(j.roster,{noAdd:true});
+    if(changed){
+      if(typeof buildResSel==='function')buildResSel();
+      if(typeof renderCfg==='function')renderCfg();
+    }
+    return changed;
+  }catch(e){
+    // マスタ連携の失敗で記録の同期を止めない（安全側フォールバック）
+    console.warn('[hbcr] マスタ名簿の取得に失敗（記録の同期は継続）:',e&&e.message);
+    return false;
+  }
 }
 /* 排泄記録の対象者か（targetExcretion===false の人のみ対象外。未設定/true は対象＝no-op安全） */
 function isExcretionTarget(r){return !r||r.targetExcretion!==false}
@@ -4275,6 +4325,11 @@ function init(){
   if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
   // 入居者マスタの共通情報を起動時に自動取り込み（連携キーが無ければ無処理）
   if(typeof mergeCommonResidents==='function')mergeCommonResidents();
+  // 前回サーバーから取得したマスタ名簿を起動時にも適用（オフライン・同期前でも最新の居室を表示）
+  if(typeof loadStoredMasterRoster==='function'){
+    var _mr0=loadStoredMasterRoster();
+    if(_mr0)mergeCommonResidents(_mr0,{noAdd:true});
+  }
   // ローカルに保存された職員リストがサーバーに反映されていない場合は自動で再送信
   // 起動時の自動 push は廃止（サンプル/古いデータがサーバーを上書きする事故を防ぐ）
   // 時計

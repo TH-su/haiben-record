@@ -37,12 +37,68 @@ function authError_(){
   return json({ok:false, error:'認証エラー: 同期トークンが未設定または一致しません。設定画面で正しいトークンを入力してください。', code:403});
 }
 
+/** ============ 入居者マスタ名簿の代理取得（2026-07-22 追加） ============
+ * 現場端末に入居者マスタのトークンを配らずに済ませるため、サーバー間で名簿を取得して配る。
+ * スクリプトプロパティ MASTER_API_URL（マスタGASの /exec）と MASTER_API_TOKEN
+ * （RMASTER_TOKEN_FIELD＝現場用・安全項目のみ閲覧可）が両方設定された時だけ有効。
+ * 未設定なら null を返し、呼び出し側は従来どおり動作する（連携なしの既存挙動を保つ）。
+ * マスタ側の障害・認証エラーで排泄記録の同期まで止めないため、失敗時も null で返す（安全側）。 */
+const MASTER_ROSTER_CACHE_KEY = 'master_roster_v1';
+
+function fetchMasterRoster_(){
+  const p = PropertiesService.getScriptProperties();
+  const url = p.getProperty('MASTER_API_URL');
+  const tok = p.getProperty('MASTER_API_TOKEN');
+  if(!url || !tok) return null;   // 連携未設定 ＝ 従来動作
+
+  const cache = CacheService.getScriptCache();
+  try{
+    const hit = cache.get(MASTER_ROSTER_CACHE_KEY);
+    if(hit) return JSON.parse(hit);
+  }catch(e){}
+
+  try{
+    const res = UrlFetchApp.fetch(url + '?action=getRoster&token=' + encodeURIComponent(tok),
+      { muteHttpExceptions:true, followRedirects:true });
+    if(res.getResponseCode() !== 200){
+      console.error('masterRoster: HTTP ' + res.getResponseCode());
+      return null;
+    }
+    const body = JSON.parse(res.getContentText());
+    // master.gs は認証失敗時に {error:...} を返す。roster 配列が無ければ連携不可として扱う。
+    // 個人情報保護：body の中身（氏名・居室）はログに出さず、エラー文言のみ記録する。
+    if(!body || !Array.isArray(body.roster)){
+      console.error('masterRoster: ' + (body && body.error ? body.error : 'roster形式が不正'));
+      return null;
+    }
+    // su_residents_common と同じ形へ変換（マスタ側の id が masterId にあたる）
+    const roster = body.roster.map(function(r){
+      return { masterId:r.id, name:r.name, kana:r.kana, room:r.room,
+               gender:r.gender, careLevel:r.careLevel, active:r.active!==false };
+    });
+    try{
+      const s = JSON.stringify(roster);
+      if(s.length <= 90000) cache.put(MASTER_ROSTER_CACHE_KEY, s, 600); // 100KB上限の防御・TTL 10分
+    }catch(e){}
+    return roster;
+  }catch(err){
+    console.error('masterRoster fetch error: ' + err);
+    return null;
+  }
+}
+
 /** ============ doGet（差分同期対応） ============ */
 function doGet(e){
   // 認証: HAIBEN_TOKEN 設定時は全 GET を検証（要配慮個人情報の読取保護）
   if(!_token(e)) return authError_();
   // エディタの「実行」ボタンで直接呼ばれた場合の保護
   const params = (e && e.parameter) || {};
+  // 入居者マスタ名簿の代理取得。既存の getAll 経路とは独立した別アクションにすることで、
+  // マスタ側の遅延・障害が記録同期のホットパスに一切影響しないようにする。
+  if(params.action === 'masterRoster'){
+    const mr = fetchMasterRoster_();
+    return json({ok:true, roster: mr || [], available: mr !== null});
+  }
   try{
     // Phase 2 B-2: ?since= があれば updatedAt で差分フィルタ
     const since = parseInt(params.since, 10) || 0;
