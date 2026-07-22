@@ -853,6 +853,12 @@ textarea{resize:vertical;min-height:76px}
   <div class="fg"><label class="fl">氏名</label><input type="text" id="mRN" placeholder="見本"></div>
   <div class="fg"><label class="fl">フリガナ（五十音順の並び替え用）</label><input type="text" id="mRY" placeholder="ヤマダ ハナコ"></div>
   <div class="fg"><label class="fl">居室番号</label><input type="text" id="mRR" placeholder="101"></div>
+  <div id="mResMasterNote" style="display:none;margin:-6px 0 12px">
+    <div style="display:flex;gap:7px;align-items:flex-start;background:#eef4fb;border:1px solid #b9d3ee;border-radius:6px;padding:8px 10px">
+      <span aria-hidden="true" style="font-size:14px;line-height:1.5">🔒</span>
+      <span style="font-size:12px;color:#1a3d63;line-height:1.6">フリガナと居室番号は<strong>入居者マスタで管理</strong>されています。変更は入居者マスタから行ってください。</span>
+    </div>
+  </div>
   <div class="fg"><label class="fl">性別</label>
     <select id="mRG"><option value="女性">女性</option><option value="男性">男性</option></select></div>
   <div class="fg"><label class="fl">ステータス</label>
@@ -4112,6 +4118,19 @@ function toggleResHidden(id,makeHidden){
   showToast(makeHidden?'✅ 非表示にしました':'✅ 表示に戻しました');
 }
 
+/* 入居者マスタが正本の項目（フリガナ・居室番号）の編集可否を切り替える。
+   マスタ連携済み（masterId あり）の入居者は mergeCommonResidents() が起動時と同期完了時に
+   マスタ値で必ず上書きするため、ここで編集させると「保存できたのに次回起動で消える」ことになる。
+   → 編集不可にし、変更先が入居者マスタであることを画面上で明示する。 */
+function setMasterManagedFields(locked){
+  ['mRY','mRR'].forEach(function(id){
+    var el=$(id);if(!el)return;
+    el.readOnly=!!locked;
+    if(locked){el.setAttribute('aria-describedby','mResMasterNote');el.style.background='var(--g1)';el.style.color='var(--g7)';el.style.cursor='not-allowed'}
+    else{el.removeAttribute('aria-describedby');el.style.background='';el.style.color='';el.style.cursor=''}
+  });
+  var note=$('mResMasterNote');if(note)note.style.display=locked?'':'none';
+}
 function editRes(id){const r=D.residents.find(x=>x.id===id);if(!r)return;editResId=id;
   $('mResT').textContent='入居者を編集';$('mRN').value=r.name;if($('mRY'))$('mRY').value=r.yomi||'';$('mRR').value=r.room;$('mRG').value=r.gender||'女性';
   if($('mRS'))$('mRS').value=(r.active===false)?'inactive':'active';
@@ -4121,6 +4140,7 @@ function editRes(id){const r=D.residents.find(x=>x.id===id);if(!r)return;editRes
   if($('mRUD')){$('mRUD').value=(rc.urineDangerH!=null?rc.urineDangerH:'');$('mRUD').placeholder='全体設定: '+D.cfg.urineDangerH}
   if($('mRSW')){$('mRSW').value=(rc.stoolWarnD!=null?rc.stoolWarnD:'');$('mRSW').placeholder='全体設定: '+D.cfg.stoolWarnD}
   if($('mRSD')){$('mRSD').value=(rc.stoolDangerD!=null?rc.stoolDangerD:'');$('mRSD').placeholder='全体設定: '+D.cfg.stoolDangerD}
+  setMasterManagedFields(r.masterId!=null);
   $('mRes').classList.add('on')}
 /* ════════ 入院管理モーダル ════════ */
 var _hospEditRid=null;
@@ -4668,6 +4688,7 @@ function init(){
     $('mRN').value='';if($('mRY'))$('mRY').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
     if($('mRLax'))$('mRLax').value='';
     ['mRUW','mRUD','mRSW','mRSD'].forEach(function(id){if($(id)){$(id).value='';$(id).placeholder='全体設定: '+(id==='mRUW'?D.cfg.urineWarnH:id==='mRUD'?D.cfg.urineDangerH:id==='mRSW'?D.cfg.stoolWarnD:D.cfg.stoolDangerD)}});
+    setMasterManagedFields(false); // 新規追加は常に編集可（編集モーダルの読み取り専用状態を持ち越さない）
     $('mRes').classList.add('on')});
   $('mResCancel').addEventListener('click',function(){$('mRes').classList.remove('on');editResId=null});
   $('mResSave').addEventListener('click',saveRes);
