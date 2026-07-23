@@ -2,6 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
+<meta name="robots" content="noindex,nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.2, maximum-scale=5.0, user-scalable=yes">
 <title>排泄ケア記録システム</title>
 <style>
@@ -861,7 +863,7 @@ textarea{resize:vertical;min-height:76px}
 <!-- ── Modals ── -->
 <div class="mo" id="mRes"><div class="md">
   <div class="md-t" id="mResT">入居者を追加</div>
-  <div class="fg"><label class="fl">氏名</label><input type="text" id="mRN" placeholder="見本"></div>
+  <div class="fg"><label class="fl">氏名</label><input type="text" id="mRN" placeholder="例）見本 はな"></div>
   <div class="fg"><label class="fl">フリガナ（五十音順の並び替え用）</label><input type="text" id="mRY" placeholder="ヤマダ ハナコ"></div>
   <div class="fg"><label class="fl">居室番号</label><input type="text" id="mRR" placeholder="101"></div>
   <div id="mResMasterNote" style="display:none;margin:-6px 0 12px">
@@ -1766,11 +1768,11 @@ function load(){
   }else{
     isNew=true;
     D={residents:[
-    {id:1,name:'見本',room:'101',gender:'女性',active:true,_seed:true},
-    {id:2,name:'見本',room:'102',gender:'男性',active:true,_seed:true},
-    {id:3,name:'見本',room:'103',gender:'女性',active:true,_seed:true},
-    {id:4,name:'見本',room:'104',gender:'男性',active:true,_seed:true},
-    {id:5,name:'見本',room:'105',gender:'女性',active:true,_seed:true}],records:[],cfg:null}
+    {id:1,name:'見本 はな（サンプル）',room:'101',gender:'女性',active:true,_seed:true},
+    {id:2,name:'見本 じろう（サンプル）',room:'102',gender:'男性',active:true,_seed:true},
+    {id:3,name:'見本 さちこ（サンプル）',room:'103',gender:'女性',active:true,_seed:true},
+    {id:4,name:'見本 いちろう（サンプル）',room:'104',gender:'男性',active:true,_seed:true},
+    {id:5,name:'見本 せつこ（サンプル）',room:'105',gender:'女性',active:true,_seed:true}],records:[],cfg:null}
   }
   if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
   if(!Number(D.cfg.localKeepDays))D.cfg.localKeepDays=180; // 端末保持期間の既定（日）
