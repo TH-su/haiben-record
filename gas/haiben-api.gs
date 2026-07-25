@@ -287,6 +287,10 @@ function ensureHeaders_(sh, defaultHeaders){
   const lower = headers.map(h=>h.toLowerCase());
   const missing = defaultHeaders.filter(h => lower.indexOf(String(h).toLowerCase()) < 0);
   if(!missing.length) return;
+  // 実際の列数が足りなければ先に列を挿入する。足りないまま setValues すると例外になり、
+  // saveRes 全体が失敗して入居者情報が一切保存できなくなる（列を切り詰めたシートで起きる）。
+  const short = lastCol + missing.length - sh.getMaxColumns();
+  if(short > 0) sh.insertColumnsAfter(lastCol, short);
   sh.getRange(1, lastCol+1, 1, missing.length).setValues([missing]);
 }
 
