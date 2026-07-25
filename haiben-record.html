@@ -251,8 +251,10 @@ textarea{resize:vertical;min-height:76px}
 #mDet{z-index:320}
 /* 確認ダイアログは全モーダルの最前面 */
 #mConf{z-index:340}
-/* 自動ロックは確認ダイアログ・トースト(400)よりさらに前面（画面を確実に覆い隠す） */
-#mLock{z-index:500}
+/* 自動ロックは確認ダイアログ・トースト(400)よりさらに前面。
+   背景は必ず不透明にする — .mo 既定の rgba(0,0,0,.5) では背後の氏名・居室・記録が
+   透けて読めてしまい、共有端末の情報保護という目的を満たさない（z-index は重なり順しか制御しない）。 */
+#mLock{z-index:500;background:var(--g0)}
 .md{background:#fff;border-radius:var(--r);padding:22px;width:100%;max-width:440px;
   max-height:85vh;overflow-y:auto;box-shadow:0 3px 12px rgba(0,0,0,.15)}
 .md-t{font-size:16px;font-weight:700;margin-bottom:15px}
@@ -1030,7 +1032,7 @@ textarea{resize:vertical;min-height:76px}
 
 <div class="mo" id="mLock"><div class="md" style="max-width:360px;text-align:center">
   <div class="md-t">🔒 画面をロックしました</div>
-  <div style="font-size:13px;line-height:1.7;color:var(--g6)">無操作が続いたため、この端末に残っていた記録を消去しました。<br>データはサーバーに保存されています。</div>
+  <div style="font-size:13px;line-height:1.7;color:var(--g6)">無操作が続いたため、この端末に残っていた排泄記録を消去しました。<br>サーバーへの保存を確認済みです。「再開する」で読み直せます。<br><span style="font-size:12px;color:var(--g7)">※入居者名簿は入居者マスタ側の設定に従います</span></div>
   <div class="md-f" style="justify-content:center"><button class="bn bp" id="mLockResume">再開する</button></div>
 </div></div>
 
@@ -1550,11 +1552,15 @@ function enqueuePending(action,data){
   if(q.length>500)q=q.slice(-500);
   savePendingQueue(q)}
 var _pqFlushing=false;
-function flushPendingQueue(){
-  if(!apiUrl)return;
-  if(_pqFlushing)return;            // 再入ガード：apiPush成功時と同期末尾からの並走による二重送信を防ぐ
+/* done … 省略可の完了コールバック。引数 true = キューを送り切った。
+   自動ロックが「送信完了を実際に待って」から消去判定するために追加（1200ms の勘に頼らない）。
+   既存の呼び出し（引数なし）は従来と完全に同一挙動。 */
+function flushPendingQueue(done){
+  function _fin(ok){if(typeof done==='function'){try{done(ok)}catch(e){}}}
+  if(!apiUrl){_fin(false);return}
+  if(_pqFlushing){_fin(false);return}  // 再入ガード：apiPush成功時と同期末尾からの並走による二重送信を防ぐ
   var q=loadPendingQueue();
-  if(!q.length)return;
+  if(!q.length){_fin(true);return}
   _pqFlushing=true;
   // 順番に再送する
   var remain=[];var i=0;
@@ -1564,8 +1570,9 @@ function flushPendingQueue(){
       var fresh=loadPendingQueue();
       var extra=fresh.length>q.length?fresh.slice(q.length):[];
       savePendingQueue(remain.concat(extra));
-      if(remain.length===0&&extra.length===0&&q.length>0)showToast('✅ 未送信データを同期しました');
-      _pqFlushing=false;return}
+      var _drained=(remain.length===0&&extra.length===0);
+      if(_drained&&q.length>0)showToast('✅ 未送信データを同期しました');
+      _pqFlushing=false;_fin(_drained);return}
     var item=q[i++];
     apiPost(item.action,item.data||{})
       .then(function(r){if(!(r&&r.ok!==false))remain.push(item);next()})
@@ -1848,6 +1855,9 @@ var _saveTimer=null, _saveDirty=false;
 var _SAVE_DELAY_MS=300;
 function _persistNow(){
   _saveTimer=null;
+  // 自動ロック後は disk へ書き戻さない。ロック直前の同期完了で走る save()（syncFromAPI 末尾）が
+  // 消去済みの hbcr_v2 を個人情報ごと復活させるのを防ぐ。正本はサーバーにあり、再開時に読み直す。
+  if(_locked)return;
   if(!_saveDirty)return;
   _saveDirty=false;
   try{
@@ -4954,65 +4964,132 @@ function init(){
 }
 
 /* ════════ 自動ロック（共有端末の個人情報残留対策・2026-07-25） ════════
-   無操作 AUTOLOCK_MIN 分、またはページ離脱時に、端末に残る個人情報だけを消す。
+   無操作が AUTOLOCK_MIN 分続いたときだけ、端末に残る個人情報を消して画面を覆う。
 
    ★ データ保護を最優先する（dev-principles 原則4）。サーバーに正本が無い状態で消すと
-     記録が永久に失われるため、次の3条件が「すべて」成立する時だけ消す：
+     記録が永久に失われるため、次のすべてが成立する時だけ消す：
        1. apiUrl 設定済み（サーバーに正本がある）
-       2. 未送信キュー hbcr_pq が空（サーバー未到達の記録が無い）
-       3. 直近の同期が成功している（hbcr_last_sync_ts > 0）
-     1つでも欠けたら消さない＝機密性より記録の保全を優先する（M-015 と同型の事故を防ぐ）。
+       2. 送信待ち・送信中が皆無 — hbcr_pq（再送待ち）だけでなく、送信本流の
+          _writeQ / _writeSending / _staffSendQueue / _staffSending、および
+          _pqFlushing / _syncInFlight まで見る。
+          ※ hbcr_pq は「送信に失敗した分」のリトライ行列にすぎない。記録は apiPush() →
+            メモリ上の _writeQ を経てサーバーへ行き、失敗して初めて hbcr_pq に入る。
+            hbcr_pq だけを見ると「_writeQ で待機中／送信中の記録」を未送信と認識できず、
+            サーバー未到達のまま消して永久に失う（M-015 と同型）。
+       3. 消去の直前に同期が実際に成功する（doAutoLock でその場で syncFromAPI を実行して確認）。
+          navigator.onLine は到達性の証明にならない（施設Wi-Fiに繋がっていてもGASに届かない）。
+          hbcr_last_sync_ts>0 も「過去に一度成功した」証拠にすぎないため、直前の実測で担保する。
+     1つでも欠けたら消さない＝機密性より記録の保全を優先する。
+
+   ★ ページ離脱（pagehide）では消さない。離脱時はネットワーク完了を待てず（fetch は unload で
+     キャンセルされる。keepalive/sendBeacon 未使用）、送信中の記録を消す事故を原理的に防げない。
+     加えて pagehide は bfcache 入り（iOS のアプリ切替・戻る操作）でも発火するため、通常操作で
+     何十回も消去が走り、hbcr_last_sync_ts を毎回失って差分同期が全件同期に劣化する。
+     無操作 AUTOLOCK_MIN 分の経路なら送信本流は確実に枯れている。
 
    ★ hbcr_last_sync_ts も必ず一緒に消す。残すと次回が「差分同期」になり、
      消した本体データが戻らない（＝データ消失になる）。
    ★ 接続情報(hbcr_api_url/hbcr_api_token)と UI 状態(hbcr_view)は消さない。
      前者は再取得に必要、後者は個人情報を含まず「再読み込みで現在地を維持」の規約に従う。
    ★ su_residents_common（入居者マスタが唯一の書き手という契約の共有キー）は
-     当アプリからは消さない。他アプリの動作に影響するため、対応は入居者マスタ側の領分。 */
-var AUTOLOCK_MIN=30;
+     当アプリからは消さない。他アプリの動作に影響するため、対応は入居者マスタ側の領分。
+     ＝入居者名簿は端末に残る。ロック画面の文言もその通りに表示している。 */
+var AUTOLOCK_MIN=30;                  // 既定の無操作分数。D.cfg.autoLockMin で上書き可（夜勤帯の調整用）
 var _lockTimer=null,_locked=false;
+var _actSeq=0,_autoLockBusy=false;    // _actSeq: 操作の世代。判定中の操作再開を検出して中止する
+
+/* 実効の無操作分数。cfg は同期対象なので設定UIなしでも調整できる（5〜720分の範囲外は既定へ） */
+function autoLockMinutes(){
+  try{
+    var m=Number(D&&D.cfg&&D.cfg.autoLockMin);
+    if(m>=5&&m<=720)return m;
+  }catch(e){}
+  return AUTOLOCK_MIN;
+}
 
 /* 消してよいかの判定。1つでも欠ければ false（＝消さない） */
 function autoLockSafe(){
   try{
     if(!apiUrl)return false;                       // サーバー正本が無い＝localStorageが唯一の原本
     var q=loadPendingQueue();
-    if(q&&q.length)return false;                   // 未送信あり＝サーバー未到達
+    if(q&&q.length)return false;                   // 再送待ちあり＝サーバー未到達
+    // 送信本流（記録・職員）に待機中／送信中が残っていないか。ここが hbcr_pq では見えない
+    if(typeof _writeQ!=='undefined'&&_writeQ&&_writeQ.length)return false;
+    if(typeof _writeSending!=='undefined'&&_writeSending)return false;
+    if(typeof _staffSendQueue!=='undefined'&&_staffSendQueue&&_staffSendQueue.length)return false;
+    if(typeof _staffSending!=='undefined'&&_staffSending)return false;
+    if(typeof _pqFlushing!=='undefined'&&_pqFlushing)return false;      // 再送処理の途中
+    if(typeof _syncInFlight!=='undefined'&&_syncInFlight)return false;  // 同期の途中
     if(!_getLastSyncTs())return false;             // 同期実績が無い
     return true;
   }catch(e){return false}
 }
 
-/* 端末に残る個人情報を消す（記録本体・職員名・名簿キャッシュ・同期時刻） */
+/* 端末に残る個人情報を消す（記録本体・職員名・名簿キャッシュ・同期時刻）
+   キー名は定数がある分は定数を使う（リテラル二重管理での消し漏れ防止） */
 function autoLockWipe(){
   // 保留中の遅延保存を無効化してから消す（消した直後に上書きされるのを防ぐ＝btnClear と同じ作法）
   try{_saveDirty=false;if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}}catch(e){}
-  ['hbcr_v2','hbcr_v2_bak','hbcr_ls','hbcr_master_roster','hbcr_staffs_snapshot','hbcr_last_sync_ts']
-    .forEach(function(k){try{localStorage.removeItem(k)}catch(e){}});
+  ['hbcr_v2','hbcr_v2_bak','hbcr_ls',
+   MASTER_ROSTER_KEY,SYS_STAFF_SNAPSHOT_LOCAL_KEY,LAST_SYNC_KEY]
+    .forEach(function(k){try{if(k)localStorage.removeItem(k)}catch(e){}});
+}
+
+/* 画面に出ている個人情報も伏せる。#mLock を不透明にしても、開いたままの他モーダル
+   （記録詳細など）や背後の一覧が残っていては覆い切れないため、画面自体を閉じる。
+   復元は「再開する」の reload → restoreSc が担う（現在地は維持される）。 */
+function autoLockBlankScreen(){
+  try{$$('.mo').forEach(function(m){if(m&&m.id!=='mLock')m.classList.remove('on')})}catch(e){}
+  try{$$('.scr').forEach(function(s){s.classList.remove('on')})}catch(e){}
 }
 
 function resetAutoLockTimer(){
   if(_locked)return;
+  _actSeq++;                                       // 操作あり＝進行中の消去判定を無効化する
   if(_lockTimer!=null)clearTimeout(_lockTimer);
-  _lockTimer=setTimeout(doAutoLock,AUTOLOCK_MIN*60*1000);
+  _lockTimer=setTimeout(doAutoLock,autoLockMinutes()*60*1000);
 }
 
 function doAutoLock(){
-  if(_locked)return;
-  // まず未送信を送り切ってから判定する（送れれば条件2を満たせる）
-  try{if(apiUrl&&typeof flushPendingQueue==='function')flushPendingQueue()}catch(e){}
-  // フラッシュ完了を少し待って再判定。未完了ならキューが残るので「消さない」側に倒れる（安全側）
-  setTimeout(function(){
+  if(_locked||_autoLockBusy)return;
+  _autoLockBusy=true;
+  var seq=_actSeq;                                 // この時点の操作世代を記録
+  var settled=false,syncOk=false;
+
+  function finish(){
+    if(settled)return;settled=true;
+    _autoLockBusy=false;
     if(_locked)return;
-    if(!autoLockSafe()){
+    // 判定中に職員が操作を再開していたら消さない（入力途中のデータを落とさない）
+    if(seq!==_actSeq){resetAutoLockTimer();return}
+    if(!syncOk||!autoLockSafe()){
       try{showToast('⚠️ 未同期のため端末データを保持しました')}catch(e){}
       resetAutoLockTimer();                        // 次の無操作でまた試す
       return;
     }
-    _locked=true;
+    _locked=true;                                  // wipe より先に立てる（_persistNow の書き戻しを止める）
     autoLockWipe();
+    autoLockBlankScreen();
     var el=$('mLock');if(el)el.classList.add('on');
-  },1200);
+  }
+
+  // 判定が返らない場合の保険（apiPost のタイムアウト上限 30 秒）。切れても finish で再判定するだけ
+  var cap=setTimeout(finish,30000);
+  function done(){clearTimeout(cap);finish()}
+
+  try{
+    // ① 再送待ちを送り切る（完了コールバックで実際に待つ）
+    flushPendingQueue(function(){
+      // ② その場で同期して「いまサーバーに到達できる」ことを実測する。
+      //    成功すれば hbcr_last_sync_ts も更新され、サーバーが最新を持つことも確認できる。
+      try{
+        var p=syncFromAPI(false);
+        if(p&&typeof p.then==='function'){
+          p.then(function(r){syncOk=(r===true);done()},function(){done()});
+        }else{syncOk=(p===true);done()}
+      }catch(e){done()}
+    });
+  }catch(e){done()}
 }
 
 function setupAutoLock(){
@@ -5026,15 +5103,6 @@ function setupAutoLock(){
   // ロック解除＝再読み込み（サーバーから取り直し、restoreSc で直前の画面に戻る）
   var rb=$('mLockResume');
   if(rb)rb.addEventListener('click',function(){location.reload()});
-
-  /* ページ離脱時の消去。ブラウザは「タブを閉じた」と「再読み込み」を区別できないため
-     再読み込みでも発動する（データはサーバーから復元される）。
-     ただしオフライン時は復元できないので、その場合は消さない。 */
-  window.addEventListener('pagehide',function(){
-    if(_locked)return;
-    try{if(navigator.onLine===false)return}catch(e){}
-    if(autoLockSafe())autoLockWipe();
-  });
 
   resetAutoLockTimer();
 }
