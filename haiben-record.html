@@ -251,6 +251,8 @@ textarea{resize:vertical;min-height:76px}
 #mDet{z-index:320}
 /* 確認ダイアログは全モーダルの最前面 */
 #mConf{z-index:340}
+/* 自動ロックは確認ダイアログ・トースト(400)よりさらに前面（画面を確実に覆い隠す） */
+#mLock{z-index:500}
 .md{background:#fff;border-radius:var(--r);padding:22px;width:100%;max-width:440px;
   max-height:85vh;overflow-y:auto;box-shadow:0 3px 12px rgba(0,0,0,.15)}
 .md-t{font-size:16px;font-weight:700;margin-bottom:15px}
@@ -1024,6 +1026,12 @@ textarea{resize:vertical;min-height:76px}
   <div class="md-t">⚠️ 確認</div>
   <div id="mConfMsg" style="font-size:14px;line-height:1.6;margin-bottom:8px;white-space:pre-line"></div>
   <div class="md-f"><button class="bn bs" id="mConfNo">キャンセル</button><button class="bn br" id="mConfYes">実行する</button></div>
+</div></div>
+
+<div class="mo" id="mLock"><div class="md" style="max-width:360px;text-align:center">
+  <div class="md-t">🔒 画面をロックしました</div>
+  <div style="font-size:13px;line-height:1.7;color:var(--g6)">無操作が続いたため、この端末に残っていた記録を消去しました。<br>データはサーバーに保存されています。</div>
+  <div class="md-f" style="justify-content:center"><button class="bn bp" id="mLockResume">再開する</button></div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -4940,6 +4948,95 @@ function init(){
       apiSetStatus('of');
       $('apiStatus').textContent='GASデプロイ後に取得したURLを入力して「URLを保存・接続」を押してください。';
       showToast('🔌 連携を解除しました')})});
+
+  /* ── 自動ロック（共有端末の個人情報残留対策）の配線 ── */
+  setupAutoLock();
+}
+
+/* ════════ 自動ロック（共有端末の個人情報残留対策・2026-07-25） ════════
+   無操作 AUTOLOCK_MIN 分、またはページ離脱時に、端末に残る個人情報だけを消す。
+
+   ★ データ保護を最優先する（dev-principles 原則4）。サーバーに正本が無い状態で消すと
+     記録が永久に失われるため、次の3条件が「すべて」成立する時だけ消す：
+       1. apiUrl 設定済み（サーバーに正本がある）
+       2. 未送信キュー hbcr_pq が空（サーバー未到達の記録が無い）
+       3. 直近の同期が成功している（hbcr_last_sync_ts > 0）
+     1つでも欠けたら消さない＝機密性より記録の保全を優先する（M-015 と同型の事故を防ぐ）。
+
+   ★ hbcr_last_sync_ts も必ず一緒に消す。残すと次回が「差分同期」になり、
+     消した本体データが戻らない（＝データ消失になる）。
+   ★ 接続情報(hbcr_api_url/hbcr_api_token)と UI 状態(hbcr_view)は消さない。
+     前者は再取得に必要、後者は個人情報を含まず「再読み込みで現在地を維持」の規約に従う。
+   ★ su_residents_common（入居者マスタが唯一の書き手という契約の共有キー）は
+     当アプリからは消さない。他アプリの動作に影響するため、対応は入居者マスタ側の領分。 */
+var AUTOLOCK_MIN=30;
+var _lockTimer=null,_locked=false;
+
+/* 消してよいかの判定。1つでも欠ければ false（＝消さない） */
+function autoLockSafe(){
+  try{
+    if(!apiUrl)return false;                       // サーバー正本が無い＝localStorageが唯一の原本
+    var q=loadPendingQueue();
+    if(q&&q.length)return false;                   // 未送信あり＝サーバー未到達
+    if(!_getLastSyncTs())return false;             // 同期実績が無い
+    return true;
+  }catch(e){return false}
+}
+
+/* 端末に残る個人情報を消す（記録本体・職員名・名簿キャッシュ・同期時刻） */
+function autoLockWipe(){
+  // 保留中の遅延保存を無効化してから消す（消した直後に上書きされるのを防ぐ＝btnClear と同じ作法）
+  try{_saveDirty=false;if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}}catch(e){}
+  ['hbcr_v2','hbcr_v2_bak','hbcr_ls','hbcr_master_roster','hbcr_staffs_snapshot','hbcr_last_sync_ts']
+    .forEach(function(k){try{localStorage.removeItem(k)}catch(e){}});
+}
+
+function resetAutoLockTimer(){
+  if(_locked)return;
+  if(_lockTimer!=null)clearTimeout(_lockTimer);
+  _lockTimer=setTimeout(doAutoLock,AUTOLOCK_MIN*60*1000);
+}
+
+function doAutoLock(){
+  if(_locked)return;
+  // まず未送信を送り切ってから判定する（送れれば条件2を満たせる）
+  try{if(apiUrl&&typeof flushPendingQueue==='function')flushPendingQueue()}catch(e){}
+  // フラッシュ完了を少し待って再判定。未完了ならキューが残るので「消さない」側に倒れる（安全側）
+  setTimeout(function(){
+    if(_locked)return;
+    if(!autoLockSafe()){
+      try{showToast('⚠️ 未同期のため端末データを保持しました')}catch(e){}
+      resetAutoLockTimer();                        // 次の無操作でまた試す
+      return;
+    }
+    _locked=true;
+    autoLockWipe();
+    var el=$('mLock');if(el)el.classList.add('on');
+  },1200);
+}
+
+function setupAutoLock(){
+  // 操作のたびにタイマーを延長（capture で子要素の stopPropagation に邪魔されないようにする）
+  ['pointerdown','keydown'].forEach(function(ev){
+    document.addEventListener(ev,resetAutoLockTimer,true);
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible')resetAutoLockTimer();
+  });
+  // ロック解除＝再読み込み（サーバーから取り直し、restoreSc で直前の画面に戻る）
+  var rb=$('mLockResume');
+  if(rb)rb.addEventListener('click',function(){location.reload()});
+
+  /* ページ離脱時の消去。ブラウザは「タブを閉じた」と「再読み込み」を区別できないため
+     再読み込みでも発動する（データはサーバーから復元される）。
+     ただしオフライン時は復元できないので、その場合は消さない。 */
+  window.addEventListener('pagehide',function(){
+    if(_locked)return;
+    try{if(navigator.onLine===false)return}catch(e){}
+    if(autoLockSafe())autoLockWipe();
+  });
+
+  resetAutoLockTimer();
 }
 
 document.addEventListener('DOMContentLoaded',function(){
