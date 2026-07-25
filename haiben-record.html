@@ -1421,10 +1421,17 @@ async function syncFromAPI(showLoader,opts){
        マージ後に apiRes を見るとローカルの予定が混ざり、「サーバーが予定を持っている」と
        必ず誤判定する。それを根拠に移行完了フラグを立てると、GAS 未デプロイのまま
        移行済みと誤認して予定を失う（この修正が防ごうとしている事故そのもの）。 */
-    var _srvSchedIds={};
-    if(_schedHealing)apiRes.forEach(function(r){
-      if(r&&r.id!=null&&Array.isArray(r.schedule)){var k=toNum(r.id);if(k!==null)_srvSchedIds[k]=true}
-    });
+    var _srvSched={},_locSched={};
+    if(_schedHealing){
+      apiRes.forEach(function(r){
+        if(r&&r.id!=null&&Array.isArray(r.schedule)){var k=toNum(r.id);if(k!==null)_srvSched[k]=r.schedule.slice()}
+      });
+      // ローカル側もマージ前に退避する。サーバーが値を持つ入居者では下のマージでサーバーが勝ち、
+      // D.residents 側のローカル予定は失われるため、マージ後に読むと和集合が取れない。
+      localRes.forEach(function(r){
+        if(r&&r.id!=null&&Array.isArray(r.schedule)&&r.schedule.length){var k=toNum(r.id);if(k!==null)_locSched[k]=r.schedule.slice()}
+      });
+    }
     // APIを先に入れる（勝者）
     apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){
       var lr=localResById[k];
@@ -1499,19 +1506,34 @@ async function syncFromAPI(showLoader,opts){
     // 失敗しても false を返すだけで、ここまでの同期結果には影響しない）
     if(typeof syncMasterRoster==='function')syncMasterRoster();
     cleanData();save();
-    /* 排泄予定(schedule)の一度きりの移行。全件取得のときだけ判定する（差分では全入居者を見られない）。
-       サーバーが1件でも配列で返していれば列は実在する＝以後は通常の saveRes で維持されるため完了。
-       返していない間は毎回送り直す（同じ値の再送なので冪等）。GAS 未デプロイでも予定を失わない側に倒す。 */
+    /* 排泄予定(schedule)の一度きりの移行（2026-07-25）。
+       予定は長らく端末ごとの localStorage にしか無く、端末間で内容が食い違っている。
+       単純に「サーバーが持っていなければ送る」だけにすると、入居者ごとに最初に同期した端末の
+       予定がサーバーの正となり、他端末の予定が無言で消える（＝データ消失・原則4違反）。
+       そこで移行の間だけ サーバー ∪ ローカル の和集合を採る。どの端末の予定も落とさない。
+       和集合の副作用として「ある端末で消したはずの時刻」が復活しうるが、消えるより安全側。
+       移行完了後はサーバーが正となり、通常どおり削除が効く（空配列を明示して書くため）。 */
     if(_schedHealing){
       try{
-        // サーバーがまだ予定を持っていない入居者だけ送る（載っている分は再送しない）
-        var _need=D.residents.filter(function(r){
-          if(!r||r.id==null||r._seed)return false;
-          if(!Array.isArray(r.schedule)||!r.schedule.length)return false;
-          var k=toNum(r.id);
-          return k===null||!_srvSchedIds[k];
+        var _need=[],_merged=[];
+        D.residents.forEach(function(r){
+          if(!r||r.id==null||r._seed)return;
+          var k=toNum(r.id);if(k===null)return;
+          var srv=_srvSched[k];
+          var loc=_locSched[k]||[];   // ★マージ前のローカル値（マージ後は上書きされている）
+          if(srv===undefined){
+            // サーバーがまだ持っていない（列が無い/空セル）→ ローカルをそのまま載せる
+            if(loc.length){r.schedule=loc.slice();_need.push(r)}
+            return;
+          }
+          var u={},added=0;
+          srv.forEach(function(t){u[t]=1});
+          loc.forEach(function(t){if(!u[t]){u[t]=1;added++}});
+          if(added){
+            r.schedule=Object.keys(u).sort();
+            _need.push(r);_merged.push(r.id+':+'+added);
+          }
         });
-        _need.forEach(function(r){apiPush('saveRes',{resident:r})});
         /* 完了フラグは「送った」ではなく「サーバーに載ったことを次の同期で確認できた」時点で立てる。
            送信が届かない間（GAS未デプロイ・送信途中でタブを閉じた等）は _need が減らないため
            フラグが立たず、毎回送り直す（同じ値の再送＝冪等）。データを失わない側に倒す。 */
@@ -1519,7 +1541,10 @@ async function syncFromAPI(showLoader,opts){
           _schedHealNeeded=false;
           try{localStorage.setItem(SCHED_HEAL_KEY,'1')}catch(e){}
         }else{
-          console.log('[hbcr] 排泄予定をサーバーへ移行:',_need.length,'件（次回同期で反映を確認）');
+          _need.forEach(function(r){apiPush('saveRes',{resident:r})});
+          save();   // 和集合をローカルにも反映（画面が次の同期を待たずに正しくなる）
+          console.log('[hbcr] 排泄予定をサーバーへ移行:',_need.length,'件（次回同期で反映を確認）'
+            +(_merged.length?' / 他端末の予定を統合: '+_merged.join(', '):''));
         }
       }catch(e){console.error('[hbcr] schedule 移行に失敗（予定はローカルに保持）:',e)}
     }
