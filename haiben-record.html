@@ -2338,6 +2338,9 @@ function saveSchedFromModal(){
 }
 
 /* ═══════════ SCREEN NAV ═══════════ */
+/* 再読み込みで現在地を失わない（dev-principles 原則11）。保存するのは画面idのみ＝個人情報を含まない */
+var VIEW_KEY='hbcr_view';
+var VIEW_NAMES=['input','board','tl','staff','cfg'];
 function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav button').forEach(b=>b.classList.remove('on'));
   $('sc-'+name).classList.add('on');const nb=document.querySelector('.bnav button[data-sc="'+name+'"]');if(nb)nb.classList.add('on');
   if(name==='input')setNow();
@@ -2353,6 +2356,16 @@ function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav 
     if(typeof renderStaffList==='function')renderStaffList();
     if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
   }
+  /* 描画が通った画面だけを記憶する（描画で落ちる画面を復元し続けないよう最後に置く） */
+  try{if(VIEW_NAMES.indexOf(name)>=0)localStorage.setItem(VIEW_KEY,name)}catch(e){}
+}
+
+/* 起動時：前回の画面へ戻す。未知値・不正値・描画失敗は既定の「入力」へ落とす */
+function restoreSc(){
+  var v='';try{v=localStorage.getItem(VIEW_KEY)||''}catch(e){}
+  if(!v||v==='input')return;                       /* 入力はHTML既定のまま（setNow の二重実行も避ける） */
+  if(VIEW_NAMES.indexOf(v)<0||!$('sc-'+v))return;  /* 未知値・id欠落は既定へ */
+  try{showSc(v)}catch(e){console.warn('[hbcr] 画面復元に失敗:',e);try{showSc('input')}catch(e2){}}
 }
 
 /* ═══════════ RESIDENT SELECT ═══════════ */
@@ -4866,6 +4879,10 @@ function init(){
   apiToken=loadApiToken();
   if($('cfgApi'))$('cfgApi').value=apiUrl;
   if($('cfgApiToken'))$('cfgApiToken').value=apiToken;
+
+  /* 前回見ていた画面へ戻す（apiUrl 読込後＝設定画面を復元しても接続先が正しく出る） */
+  restoreSc();
+
   if(apiUrl){
     apiSetStatus('sy');
     syncFromAPI(true).then(ok=>{
