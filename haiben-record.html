@@ -1413,6 +1413,15 @@ async function syncFromAPI(showLoader,opts){
     // クライアント側のみで保持するフィールド（サーバーが返さない）はローカル値を保持
     var localResById={};localRes.forEach(function(r){if(r&&r.id!=null)localResById[toNum(r.id)]=r});
     var clientOnly=['schedule','cfg','laxNote','hospitalizations'];
+    /* schedule 移行の判定材料は「マージ前の生レスポンス」で取る（2026-07-25）。
+       下の clientOnly コピーは apiRes の要素そのもの（コピーではない）を書き換えるため、
+       マージ後に apiRes を見るとローカルの予定が混ざり、「サーバーが予定を持っている」と
+       必ず誤判定する。それを根拠に移行完了フラグを立てると、GAS 未デプロイのまま
+       移行済みと誤認して予定を失う（この修正が防ごうとしている事故そのもの）。 */
+    var _srvSchedIds={};
+    if(_schedHealing)apiRes.forEach(function(r){
+      if(r&&r.id!=null&&Array.isArray(r.schedule)){var k=toNum(r.id);if(k!==null)_srvSchedIds[k]=true}
+    });
     // APIを先に入れる（勝者）
     apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){
       var lr=localResById[k];
@@ -1492,16 +1501,23 @@ async function syncFromAPI(showLoader,opts){
        返していない間は毎回送り直す（同じ値の再送なので冪等）。GAS 未デプロイでも予定を失わない側に倒す。 */
     if(_schedHealing){
       try{
-        var _srvHasSched=apiRes.some(function(r){return r&&Array.isArray(r.schedule)});
+        // サーバーがまだ予定を持っていない入居者だけ送る（載っている分は再送しない）
         var _need=D.residents.filter(function(r){
-          return r&&r.id!=null&&Array.isArray(r.schedule)&&r.schedule.length&&!r._seed;
+          if(!r||r.id==null||r._seed)return false;
+          if(!Array.isArray(r.schedule)||!r.schedule.length)return false;
+          var k=toNum(r.id);
+          return k===null||!_srvSchedIds[k];
         });
         _need.forEach(function(r){apiPush('saveRes',{resident:r})});
-        if(_srvHasSched||!_need.length){
+        /* 完了フラグは「送った」ではなく「サーバーに載ったことを次の同期で確認できた」時点で立てる。
+           送信が届かない間（GAS未デプロイ・送信途中でタブを閉じた等）は _need が減らないため
+           フラグが立たず、毎回送り直す（同じ値の再送＝冪等）。データを失わない側に倒す。 */
+        if(!_need.length){
           _schedHealNeeded=false;
           try{localStorage.setItem(SCHED_HEAL_KEY,'1')}catch(e){}
+        }else{
+          console.log('[hbcr] 排泄予定をサーバーへ移行:',_need.length,'件（次回同期で反映を確認）');
         }
-        if(_need.length)console.log('[hbcr] 排泄予定をサーバーへ移行:',_need.length,'件 / 列あり:',_srvHasSched);
       }catch(e){console.error('[hbcr] schedule 移行に失敗（予定はローカルに保持）:',e)}
     }
     // 同期成功時に URL の保存を refresh（cookie 1年延長・バックアップ層も再書込）

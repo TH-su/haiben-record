@@ -442,25 +442,38 @@ function upsertRow_(name, defaultHeaders, obj, ensureCols){
   obj.updatedAt = now;  // ← Phase 2 B-2: 全保存で必ず更新される（既存通り）
   const objLc = {};
   Object.keys(obj).forEach(k => objLc[k.toLowerCase()] = obj[k]);
-  const rowVals = headers.map(h => {
+
+  /* 更新対象の既存行を先に特定して読む（2026-07-25）。
+     この関数は setValues で行全体を上書きするため、ペイロードに含まれない列は
+     既存値を据えないと消える。schedule は端末ごとに有無が異なる（予定を持たない端末からの
+     saveRes でも r をそのまま送る）ため、そのままだとサーバー側の予定が空で潰れる。 */
+  let rowIdx = -1;
+  if(last >= 2){
+    const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
+    for(let i=0;i<ids.length;i++){
+      if(String(ids[i][0])===String(obj.id)){ rowIdx = i+2; break; }
+    }
+  }
+  const existing = (rowIdx > 0) ? sh.getRange(rowIdx, 1, 1, headers.length).getValues()[0] : null;
+
+  const rowVals = headers.map((h, ci) => {
     const key = h.toLowerCase();
     if(key==='cfg' && obj.cfg) return JSON.stringify(obj.cfg);
-    // schedule は配列。空配列 [] は「予定を全解除した」という意味を持つため必ず書く。
-    // undefined/null のときだけ空セルにして、クライアント側の「ローカル値を保持」に委ねる。
-    if(key==='schedule') return Array.isArray(obj.schedule) ? JSON.stringify(obj.schedule) : '';
+    // schedule は配列。空配列 [] は「予定を全解除した」という明示の意思なので必ず書く。
+    // 配列で来ていないとき（その端末が予定を持っていないだけ）は既存セルを温存する。
+    if(key==='schedule'){
+      if(Array.isArray(obj.schedule)) return JSON.stringify(obj.schedule);
+      return existing ? existing[ci] : '';
+    }
     if(key==='active') return obj.active!==false;
     if(key==='hidden') return obj.hidden===true;
     const v = objLc[key];
     return (v==null)?'':v;
   });
-  if(last >= 2){
-    const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
-    for(let i=0;i<ids.length;i++){
-      if(String(ids[i][0])===String(obj.id)){
-        sh.getRange(i+2, 1, 1, headers.length).setValues([rowVals]);
-        return;
-      }
-    }
+
+  if(rowIdx > 0){
+    sh.getRange(rowIdx, 1, 1, headers.length).setValues([rowVals]);
+    return;
   }
   sh.appendRow(rowVals);
 }
