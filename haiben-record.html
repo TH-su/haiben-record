@@ -1245,6 +1245,16 @@ function saveApiToken(tk){
   _setCookie(API_TOKEN_COOKIE,tk,365);
   _idbSet(API_TOKEN_IDB_KEY,tk);
 }
+/* IndexedDB からのトークン復元が終わるまで「URLを保存・接続」を押させない。
+   復元が届く前に空欄で保存すると clearApiToken() が走り、IndexedDB に残った
+   最後の1コピーまで消える（＝認証が復旧不能になる）ため。 */
+var _apiTokenIdbPending=false;
+function _setApiSaveEnabled(on){
+  var b=$('btnApiSave');if(!b)return;
+  b.disabled=!on;
+  b.style.opacity=on?'':'.5';
+  b.title=on?'':'同期トークンを復元中です…';
+}
 function loadApiToken(){
   var t='';
   try{t=localStorage.getItem(API_TOKEN_KEY)||''}catch(e){}
@@ -1253,12 +1263,19 @@ function loadApiToken(){
   if(!t){t=_getCookie(API_TOKEN_COOKIE)||''}
   if(t)saveApiToken(t); // 復元できたら全層へ書き戻し
   if(!t){
+    // ここに来た時だけ IndexedDB が最後の砦。復元完了までは保存を止める
+    _apiTokenIdbPending=true;
+    _setApiSaveEnabled(false);
+    // IDB が開かない環境（プライベートモード等）でボタンが永久に無効化されない保険
+    var _idbCap=setTimeout(function(){_apiTokenIdbPending=false;_setApiSaveEnabled(true)},5000);
+    var _done=function(){clearTimeout(_idbCap);_apiTokenIdbPending=false;_setApiSaveEnabled(true)};
     _idbGet(API_TOKEN_IDB_KEY).then(function(v){
       if(v&&typeof v==='string'){
         saveApiToken(v);apiToken=v;
         if($('cfgApiToken')&&!$('cfgApiToken').value)$('cfgApiToken').value=v;
       }
-    });
+      _done();
+    },_done);
   }
   return t;
 }
@@ -4916,12 +4933,9 @@ function init(){
       }
     })}
 
-  $('btnApiSave').addEventListener('click',function(){
-    const url=$('cfgApi').value.trim();
-    if(!url){showToast('⚠️ URLを入力してください');return}
-    if(!url.startsWith('https://script.google.com/')){showToast('⚠️ GASのURLを確認してください');return}
-    // 同期トークンも同時に保存（空なら旧GAS互換の未認証モード）
-    const tk=$('cfgApiToken')?$('cfgApiToken').value.trim():'';
+  /* 保存の実行本体。btnApiSave から直接、または「保存済みトークンを空欄で消す」確認を経て呼ばれる。
+     従来の処理内容は変えていない（空欄＝旧GAS互換の未認証モードという仕様も維持）。 */
+  function _applyApiSave(url,tk){
     apiToken=tk;
     if(tk)saveApiToken(tk);else clearApiToken();
     apiUrl=url;saveApiUrl(url);
@@ -4936,7 +4950,29 @@ function init(){
         if(sc&&sc.id==='sc-tl')renderTL();
         showToast('✅ 接続・同期しました')
       }
-      else showToast('⚠️ URL確認後、再度お試しください')})});
+      else showToast('⚠️ URL確認後、再度お試しください')});
+  }
+
+  $('btnApiSave').addEventListener('click',function(){
+    const url=$('cfgApi').value.trim();
+    if(!url){showToast('⚠️ URLを入力してください');return}
+    if(!url.startsWith('https://script.google.com/')){showToast('⚠️ GASのURLを確認してください');return}
+    // IndexedDB からのトークン復元中は保存させない（最後の1コピーを消さないため）
+    if(_apiTokenIdbPending){showToast('⏳ 同期トークンを復元中です。数秒後にもう一度お試しください');return}
+    // 同期トークンも同時に保存（空なら旧GAS互換の未認証モード）
+    const tk=$('cfgApiToken')?$('cfgApiToken').value.trim():'';
+    /* 保存済みトークンを空欄保存で消すのは「認証なしモードへ戻す」意図的な操作のはず。
+       GAS 再デプロイでURLだけ貼り替える時に欄が空だと、押した瞬間に無言で認証が壊れ
+       「接続エラー」の原因が分からなくなるため、消える旨を明示して確認する。 */
+    if(!tk&&apiToken){
+      customConfirm('同期トークンが空欄です。\nこのまま保存すると、保存済みのトークンを削除して認証なしモードになります。\n\nGASのURLだけを貼り替えたい場合は、トークンも入力し直してください。').then(function(ok){
+        if(!ok)return;
+        _applyApiSave(url,'');
+      });
+      return;
+    }
+    _applyApiSave(url,tk);
+  });
 
   $('btnApiSync').addEventListener('click',async function(){
     if(!apiUrl){showToast('⚠️ 先にURLを保存してください');return}
