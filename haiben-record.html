@@ -1348,6 +1348,17 @@ function _setLastSyncTs(ts){try{localStorage.setItem(LAST_SYNC_KEY,String(ts))}c
 var DATEFIX_HEAL_KEY='hbcr_datefix_heal_v1';
 var _dateHealNeeded=(function(){try{return !localStorage.getItem(DATEFIX_HEAL_KEY)}catch(e){return false}})();
 
+/* 排泄予定(schedule)のサーバー移行（2026-07-25）。
+   schedule は長らく GAS の Residents 列に無く、端末の localStorage にしか存在しなかった。
+   自動ロックの消去が入ったことで「30分放置のたびに全入居者の予定が永久に消える」状態だったため、
+   GAS 側に列を追加し、既存の端末ローカル予定を一度だけサーバーへ送り上げる。
+   ★ 完了フラグは「サーバーが schedule を配列で返してきた（＝列が実在する）」ことを確認するまで
+     立てない。GAS 未デプロイの端末で押し切って移行済みと誤認し、予定を失う事故を防ぐ。
+   ★ 未送信が残る間は autoLockSafe() が false を返して消去しないため、
+     送信が届く前に消される経路は無い（_writeQ/hbcr_pq を見ている）。 */
+var SCHED_HEAL_KEY='hbcr_sched_heal_v1';
+var _schedHealNeeded=(function(){try{return !localStorage.getItem(SCHED_HEAL_KEY)}catch(e){return false}})();
+
 async function apiPost(action,data){
   if(!apiUrl)return null;
   data=data||{};
@@ -1376,7 +1387,10 @@ async function syncFromAPI(showLoader,opts){
     // opts.full=true で強制全件取得（初回・整合性確認時に使用）
     // 日付TZ修正の回復：未回復端末は最初の同期を一度だけ全件にして誤日付を是正
     var _healing=_dateHealNeeded;
-    var sinceTs=(opts.full||_healing)?0:_getLastSyncTs();
+    // schedule 移行中は全件取得にする。差分だと apiRes に入居者が現れず、
+    // 「サーバーが予定を持っているか」を全入居者について判定できないため。
+    var _schedHealing=_schedHealNeeded;
+    var sinceTs=(opts.full||_healing||_schedHealing)?0:_getLastSyncTs();
     var json=await apiGet({since:sinceTs});
     if(json.error)throw new Error(json.error);
     if(json.residents===undefined)throw new Error('レスポンス形式が不正です');
@@ -1473,6 +1487,23 @@ async function syncFromAPI(showLoader,opts){
     // 失敗しても false を返すだけで、ここまでの同期結果には影響しない）
     if(typeof syncMasterRoster==='function')syncMasterRoster();
     cleanData();save();
+    /* 排泄予定(schedule)の一度きりの移行。全件取得のときだけ判定する（差分では全入居者を見られない）。
+       サーバーが1件でも配列で返していれば列は実在する＝以後は通常の saveRes で維持されるため完了。
+       返していない間は毎回送り直す（同じ値の再送なので冪等）。GAS 未デプロイでも予定を失わない側に倒す。 */
+    if(_schedHealing){
+      try{
+        var _srvHasSched=apiRes.some(function(r){return r&&Array.isArray(r.schedule)});
+        var _need=D.residents.filter(function(r){
+          return r&&r.id!=null&&Array.isArray(r.schedule)&&r.schedule.length&&!r._seed;
+        });
+        _need.forEach(function(r){apiPush('saveRes',{resident:r})});
+        if(_srvHasSched||!_need.length){
+          _schedHealNeeded=false;
+          try{localStorage.setItem(SCHED_HEAL_KEY,'1')}catch(e){}
+        }
+        if(_need.length)console.log('[hbcr] 排泄予定をサーバーへ移行:',_need.length,'件 / 列あり:',_srvHasSched);
+      }catch(e){console.error('[hbcr] schedule 移行に失敗（予定はローカルに保持）:',e)}
+    }
     // 同期成功時に URL の保存を refresh（cookie 1年延長・バックアップ層も再書込）
     if(apiUrl)saveApiUrl(apiUrl);
     // Phase 2 B-2: 同期完了時刻を記録（次回は差分のみ取得）

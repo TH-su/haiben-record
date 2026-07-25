@@ -3,7 +3,9 @@
  * ============================================================ */
 const SS = SpreadsheetApp.getActiveSpreadsheet();
 
-const RES_DEFAULT_HEADERS = ['id','name','yomi','room','gender','active','hidden','laxNote','cfg'];
+// schedule（入居者ごとの排泄予定時刻 ["09:00", ...]）は 2026-07-25 追加。
+// それまで端末の localStorage にしか存在せず、自動ロックの消去で永久に失われる状態だった。
+const RES_DEFAULT_HEADERS = ['id','name','yomi','room','gender','active','hidden','laxNote','cfg','schedule'];
 const REC_DEFAULT_HEADERS = ['id','residentId','date','time','datetime','type',
   'urineAmt','urineColor','urineSrc','consistency','stoolAmt','stoolColor','stoolSrc',
   'medicine','tablets','notes','staff','createdAt','updatedAt'];
@@ -218,7 +220,7 @@ function doPost(e){
       case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
       case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
       case 'delRecord':  deleteRow_('Records',   body.id);                            return json({ok:true});
-      case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident); invalidateResidentsCache_(); return json({ok:true});
+      case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident, true); invalidateResidentsCache_(); return json({ok:true});
       case 'delRes':     deleteRow_('Residents', body.id);                            invalidateResidentsCache_(); return json({ok:true});
       case 'saveCfg':    writeConfig_(body.cfg);                                      return json({ok:true});
       default: return json({ok:false, error:'unknown action: '+action});
@@ -270,6 +272,22 @@ function getOrCreateSheet_(name, defaultHeaders){
     sh.getRange(1,1,1,defaultHeaders.length).setValues([defaultHeaders]);
   }
   return sh;
+}
+
+/** 既存シートに不足している既定列を「末尾に追加するだけ」行う（2026-07-25 追加）。
+ * getOrCreateSheet_ は既存シートのヘッダーを一切触らないため、RES_DEFAULT_HEADERS に
+ * 列を足しても既存スプレッドシートには反映されず、upsertRow_ が値を黙って捨てていた。
+ * ★ 追加のみ。既存列の削除・並べ替え・改名は行わない（利用者が足した独自列も壊さない）。
+ * ★ 書き込みが発生するのは不足列がある初回だけ。以降は no-op。
+ * 読み取り経路（doGet）からは呼ばず upsertRow_ からのみ呼ぶ（GETで書き込みを起こさないため）。 */
+function ensureHeaders_(sh, defaultHeaders){
+  if(!sh || !defaultHeaders || !defaultHeaders.length) return;
+  const lastCol = Math.max(1, sh.getLastColumn());
+  const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(v=>String(v).trim());
+  const lower = headers.map(h=>h.toLowerCase());
+  const missing = defaultHeaders.filter(h => lower.indexOf(String(h).toLowerCase()) < 0);
+  if(!missing.length) return;
+  sh.getRange(1, lastCol+1, 1, missing.length).setValues([missing]);
 }
 
 function readSheet_(name, defaultHeaders){
@@ -407,9 +425,13 @@ function invalidateResidentsCache_(){
   try{ CacheService.getScriptCache().remove(RESIDENTS_CACHE_KEY); }catch(e){}
 }
 
-function upsertRow_(name, defaultHeaders, obj){
+/* ensureCols=true のときだけ不足している既定列を追加する（2026-07-25）。
+   Residents（schedule 列の追加が必要）でのみ true を渡す。Records は列数が多く、
+   万一シートのヘッダーが既定と異なっていると大量の列を足してしまうため既定では触らない。 */
+function upsertRow_(name, defaultHeaders, obj, ensureCols){
   if(!obj) throw new Error('no object');
   const sh = getOrCreateSheet_(name, defaultHeaders);
+  if(ensureCols) ensureHeaders_(sh, defaultHeaders);   // 不足列を末尾に追加（初回のみ書き込み）
   const lastCol = sh.getLastColumn();
   const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(v=>String(v).trim());
   const last = sh.getLastRow();
@@ -423,6 +445,9 @@ function upsertRow_(name, defaultHeaders, obj){
   const rowVals = headers.map(h => {
     const key = h.toLowerCase();
     if(key==='cfg' && obj.cfg) return JSON.stringify(obj.cfg);
+    // schedule は配列。空配列 [] は「予定を全解除した」という意味を持つため必ず書く。
+    // undefined/null のときだけ空セルにして、クライアント側の「ローカル値を保持」に委ねる。
+    if(key==='schedule') return Array.isArray(obj.schedule) ? JSON.stringify(obj.schedule) : '';
     if(key==='active') return obj.active!==false;
     if(key==='hidden') return obj.hidden===true;
     const v = objLc[key];
@@ -487,6 +512,15 @@ function normalizeCell_(header, v){
   }
   if(header==='cfg' && typeof v==='string' && v.trim().startsWith('{')){
     try{ return JSON.parse(v); }catch(e){ return {}; }
+  }
+  // schedule は空セルのとき null を返す（'' ではない）。クライアントは「サーバーが値を持たない」と
+  // 判定してローカルの予定を保持できる（列追加直後の移行期に、既存の予定を消さないための要）。
+  // 壊れた JSON も null 扱い＝ローカル保持。誤って空配列で上書きするより安全側に倒す。
+  if(header==='schedule'){
+    if(typeof v==='string' && v.trim().startsWith('[')){
+      try{ const a = JSON.parse(v); return Array.isArray(a) ? a : null; }catch(e){ return null; }
+    }
+    return null;
   }
   if(header==='active'){
     if(v===''||v==null) return true;
