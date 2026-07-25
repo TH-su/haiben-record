@@ -4880,8 +4880,9 @@ function init(){
   if($('cfgApi'))$('cfgApi').value=apiUrl;
   if($('cfgApiToken'))$('cfgApiToken').value=apiToken;
 
-  /* 前回見ていた画面へ戻す（apiUrl 読込後＝設定画面を復元しても接続先が正しく出る） */
-  restoreSc();
+  /* 前回見ていた画面へ戻す（apiUrl 読込後＝設定画面を復元しても接続先が正しく出る）。
+     ここで例外が出ても以降のAPI保存・同期・解除の配線を飛ばさないよう二重に包む */
+  try{restoreSc()}catch(e){console.warn('[hbcr] 画面復元をスキップ:',e)}
 
   if(apiUrl){
     apiSetStatus('sy');
