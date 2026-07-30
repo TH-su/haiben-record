@@ -194,6 +194,9 @@ function doGet(e){
       records:   records,
       cfg:       readConfig_(),
       delta:     delta,
+      // 能力宣言（2026-07-30）: schedule 列を持ち saveSched を受け付けるサーバーであることを示す。
+      // クライアントはこれが 1 以上のときだけ排泄予定の移行完了フラグを立てる（旧版では undefined）。
+      schedVer:  1,
       serverTime: new Date().getTime()
     });
   }catch(err){
@@ -221,6 +224,7 @@ function doPost(e){
       case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
       case 'delRecord':  deleteRow_('Records',   body.id);                            return json({ok:true});
       case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident, true); invalidateResidentsCache_(); return json({ok:true});
+      case 'saveSched':  return json(saveSched_(body));
       case 'delRes':     deleteRow_('Residents', body.id);                            invalidateResidentsCache_(); return json({ok:true});
       case 'saveCfg':    writeConfig_(body.cfg);                                      return json({ok:true});
       default: return json({ok:false, error:'unknown action: '+action});
@@ -303,7 +307,9 @@ function readSheet_(name, defaultHeaders){
   const rows = sh.getRange(2,1,last-1,lastCol).getValues();
   return rows.map(row => {
     const o = {};
-    headers.forEach((h,i)=>{ if(h) o[h]=normalizeCell_(h,row[i]); });
+    // schedule だけは列名の大小を吸収してキー名を 'schedule' に正規化する（他の列は現状維持）。
+    // 'Schedule' 表記のシートでクライアントが値を受け取れず、移行が永久に完了しない事故を防ぐ。
+    headers.forEach((h,i)=>{ if(h) o[/^schedule$/i.test(h)?'schedule':h]=normalizeCell_(h,row[i]); });
     return o;
   }).filter(o => o.id!=null && o.id!=='');
 }
@@ -451,6 +457,9 @@ function upsertRow_(name, defaultHeaders, obj, ensureCols){
      この関数は setValues で行全体を上書きするため、ペイロードに含まれない列は
      既存値を据えないと消える。schedule は端末ごとに有無が異なる（予定を持たない端末からの
      saveRes でも r をそのまま送る）ため、そのままだとサーバー側の予定が空で潰れる。 */
+  /* schedule はこの経路では一切書かない（2026-07-30 変更）。書き手は saveSched_ のみ。
+     行丸ごと上書きのこの関数で書くと、古い予定を持つ端末の無関係な保存（非表示トグル等）や
+     hbcr_pq に残った古いペイロードの再送が、他端末の予定を無言で巻き戻す。 */
   let rowIdx = -1;
   if(last >= 2){
     const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
@@ -463,12 +472,8 @@ function upsertRow_(name, defaultHeaders, obj, ensureCols){
   const rowVals = headers.map((h, ci) => {
     const key = h.toLowerCase();
     if(key==='cfg' && obj.cfg) return JSON.stringify(obj.cfg);
-    // schedule は配列。空配列 [] は「予定を全解除した」という明示の意思なので必ず書く。
-    // 配列で来ていないとき（その端末が予定を持っていないだけ）は既存セルを温存する。
-    if(key==='schedule'){
-      if(Array.isArray(obj.schedule)) return JSON.stringify(obj.schedule);
-      return existing ? existing[ci] : '';
-    }
+    // schedule は常に既存セルを温存する（新規行は空）。配列で来ていても書かない＝ saveSched 専用。
+    if(key==='schedule') return existing ? existing[ci] : '';
     if(key==='active') return obj.active!==false;
     if(key==='hidden') return obj.hidden===true;
     const v = objLc[key];
@@ -480,6 +485,36 @@ function upsertRow_(name, defaultHeaders, obj, ensureCols){
     return;
   }
   sh.appendRow(rowVals);
+}
+
+/** 排泄予定(schedule)の専用書き込み（2026-07-30 追加）。
+ * body = {id, schedule:[...]}。対象入居者の schedule セル 1 つだけを setValue する。
+ * 行全体を書き換える upsertRow_ と分離したことで、古い予定を持つ端末の保存や
+ * 未送信キューの古い再送が他端末の予定を巻き戻す経路が無くなる。
+ * 行が無い場合は ok:false（クライアントは未送信キューに残し、先行する saveRes が
+ * 行を作った後の再送で成功する＝送信順・デプロイ順に依存しない）。 */
+function saveSched_(body){
+  if(!body || !Array.isArray(body.schedule)) return {ok:false, error:'invalid schedule'};
+  const sh = getOrCreateSheet_('Residents', RES_DEFAULT_HEADERS);
+  ensureHeaders_(sh, RES_DEFAULT_HEADERS);   // schedule 列が無ければ末尾に追加（初回のみ書き込み）
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(v=>String(v).trim());
+  const idCol = headers.findIndex(h=>h.toLowerCase()==='id');
+  if(idCol < 0) return {ok:false, error:'id列が見つかりません: Residents'};
+  const schedCol = headers.findIndex(h=>h.toLowerCase()==='schedule');   // 列名の大小は問わない
+  if(schedCol < 0) return {ok:false, error:'schedule列が見つかりません: Residents'};
+  const last = sh.getLastRow();
+  let rowIdx = -1;
+  if(last >= 2){
+    const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
+    for(let i=0;i<ids.length;i++){
+      if(String(ids[i][0])===String(body.id)){ rowIdx = i+2; break; }
+    }
+  }
+  if(rowIdx < 0) return {ok:false, error:'resident not found'};
+  sh.getRange(rowIdx, schedCol+1).setValue(JSON.stringify(body.schedule));
+  invalidateResidentsCache_();
+  return {ok:true};
 }
 
 function deleteRow_(name, id){
@@ -533,7 +568,7 @@ function normalizeCell_(header, v){
   // schedule は空セルのとき null を返す（'' ではない）。クライアントは「サーバーが値を持たない」と
   // 判定してローカルの予定を保持できる（列追加直後の移行期に、既存の予定を消さないための要）。
   // 壊れた JSON も null 扱い＝ローカル保持。誤って空配列で上書きするより安全側に倒す。
-  if(header==='schedule'){
+  if(String(header).toLowerCase()==='schedule'){
     if(typeof v==='string' && v.trim().startsWith('[')){
       try{ const a = JSON.parse(v); return Array.isArray(a) ? a : null; }catch(e){ return null; }
     }
