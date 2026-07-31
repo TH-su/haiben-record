@@ -875,7 +875,7 @@ textarea{resize:vertical;min-height:76px}
   <div id="mResMasterNote" style="display:none;margin:-6px 0 12px">
     <div style="display:flex;gap:7px;align-items:flex-start;background:#eef4fb;border:1px solid #b9d3ee;border-radius:6px;padding:8px 10px">
       <span aria-hidden="true" style="font-size:14px;line-height:1.5">🔒</span>
-      <span style="font-size:12px;color:#1a3d63;line-height:1.6">フリガナと居室番号は<strong>入居者マスタで管理</strong>されています。変更は入居者マスタから行ってください。</span>
+      <span style="font-size:12px;color:#1a3d63;line-height:1.6">フリガナ・居室番号・ステータス（在籍/退去）は<strong>入居者マスタで管理</strong>されています。変更は入居者マスタから行ってください。</span>
     </div>
   </div>
   <div class="fg"><label class="fl">性別</label>
@@ -1665,6 +1665,20 @@ function savePendingQueue(q){
     try{showToast('⚠️ 未送信データを保存できませんでした（容量不足）');}catch(e4){}
   }
 }
+/* 旧GAS（そのアクションを知らない版）からの応答か。
+   GAS 側 doPost の default は {ok:false,error:'unknown action: <名前>'} を返す。
+   これは「通信は届いたがサーバーがまだ古い」＝再送しても永久に同じ結果になる印。 */
+function isUnknownActionResp(r){
+  return !!(r && r.ok===false && typeof r.error==='string' && /unknown action/i.test(r.error));
+}
+/* 再送しても意味が無い（＝捨ててよい）送信か。
+   setMasterState は入居者マスタの入院フラグを立てるだけの併送で、値の正本はマスタ側にある。
+   旧GASに当たった分をキューに溜めても、GAS更新後に「古い入院状態」を送り直して
+   現在の状態を巻き戻す危険があるだけなので、その場で破棄する（状態は名簿同期で復元される）。
+   他のアクション（記録・入居者・予定）は従来どおり退避して再送する＝ここでは対象外。 */
+function isDroppableOnOldGas(action,resp){
+  return action==='setMasterState' && isUnknownActionResp(resp);
+}
 function enqueuePending(action,data){
   var q=loadPendingQueue();
   q.push({action:action,data:data,at:Date.now()});
@@ -1695,7 +1709,18 @@ function flushPendingQueue(done){
       _pqFlushing=false;_fin(_drained);return}
     var item=q[i++];
     apiPost(item.action,item.data||{})
-      .then(function(r){if(!(r&&r.ok!==false))remain.push(item);next()})
+      .then(function(r){
+        /* 既にキューへ入っている setMasterState も、旧GASに当たったら残さず捨てる
+           （残すと GAS 更新後に古い入院状態を送り直してマスタを巻き戻す）。
+           他のアクションは従来どおり remain へ戻して再送を続ける。 */
+        if(!(r&&r.ok!==false)){
+          if(isDroppableOnOldGas(item.action,r)){
+            console.log('[hbcr] setMasterState は旧GASのため破棄・状態は名簿同期で復元されます');
+          }else{
+            remain.push(item);
+          }
+        }
+        next()})
       .catch(function(){remain.push(item);next()})}
   next()}
 
@@ -1714,6 +1739,12 @@ function _writeDrain(){
   apiPost(item.action,item.data)
     .then(function(r){
       if(r&&r.ok!==false){
+        apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
+      }else if(isDroppableOnOldGas(item.action,r)){
+        /* 旧GAS＝再送しても通らない。キューに残さずここで捨てる。
+           入院状態そのものは入居者マスタ側が正本で、名簿同期のたびに読み直されるため失われない。
+           ※個人情報保護のため action 名だけを出す（masterId・氏名は出さない）。 */
+        console.log('[hbcr] setMasterState は旧GASのため破棄・状態は名簿同期で復元されます');
         apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
       }else{
         apiSetStatus('er','書き込みエラー');
@@ -2271,8 +2302,9 @@ function isHospNow(resident){
   return isCurrentlyHospitalized(resident);
 }
 /* 入院状態を入居者マスタへ併送する（masterId で紐づく入居者のみ）。
-   apiPush 経由のため、失敗時は既存の未送信キュー（hbcr_pq）に退避されて後で再送される。
-   旧GAS（setMasterState 未対応）では ok:false となりキューに残り、GAS 更新後の再送で回復する。
+   apiPush 経由のため、通信エラー時は既存の未送信キュー（hbcr_pq）に退避されて後で再送される。
+   旧GAS（setMasterState 未対応）では 'unknown action' が返るのでキューに残さず破棄する
+   （古い入院状態を後から送り直してマスタを巻き戻さないため。状態は名簿同期で復元される）。
    prevHosp＝編集直前の isCurrentlyHospitalized。真偽値が変わらない編集では送らない。
    過去分の入院履歴を後から追記・削除しただけでも「現在は入院していない」を送ってしまうと、
    他アプリ（現場タブレット・入居者マスタ）が立てたマスタの入院中フラグを誤って退院化する。
@@ -3506,12 +3538,19 @@ function renderCfg(){
       var histBtn=isInactive?'<button class="bn bs bsm res-hist" data-id="'+r.id+'">履歴</button>':'';
       var toggleLabel=isInactive?'在籍へ戻す':'退去';
       var toggleCls=isInactive?'res-restore':'res-leave';
+      /* 入居者マスタに紐づく人（masterId あり）の在籍/退去はマスタが正本。
+         ここで切り替えても次の名簿同期でマスタ値に戻される（＝操作が消えたように見える）ため、
+         ボタンを押せなくして操作先を明示する。masterId の無いローカル入居者は従来どおり操作可。 */
+      var masterOwned=(r.masterId!=null&&r.masterId!=='');
+      var toggleAttr=masterOwned
+        ?' disabled aria-disabled="true" title="入居者マスタで操作してください" style="opacity:.5;cursor:not-allowed"'
+        :'';
       var hideLabel=isHidden?'表示':'非表示';
       var hideCls=isHidden?'res-unhide':'res-hide';
       // 退去済には非表示・入院ボタン不要
       var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+r.id+'">'+hideLabel+'</button>';
       var hospBtn=isInactive?'':'<button class="bn bs bsm res-hosp" data-id="'+r.id+'" style="background:#ffebee;border-color:#c62828;color:#c62828">🏥 入院</button>';
-      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+r.name+'</b> <span style="font-size:12px;color:var(--g5)">'+r.room+'号室 / '+(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'">'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
+      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+r.name+'</b> <span style="font-size:12px;color:var(--g5)">'+r.room+'号室 / '+(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
     '<div style="margin-top:8px;font-size:12px;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
   // ボタンイベント
   $$('.res-edit').forEach(b=>b.addEventListener('click',function(){editRes(parseInt(this.dataset.id))}));
@@ -4393,6 +4432,9 @@ function setWaterCC(v){
 function resetWater(){ setWaterCC(0); }
 async function toggleResActive(id,makeActive){
   var r=D.residents.find(function(x){return x.id===id});if(!r)return;
+  /* マスタ紐づきの在籍状態はマスタが正本（画面のボタンも無効化してある）。
+     万一ここへ届いても書き換えずに操作先だけ案内する＝二重管理にしない。 */
+  if(r.masterId!=null&&r.masterId!==''){showToast('在籍・退去は入居者マスタで操作してください');return}
   if(!makeActive){
     var ok=await customConfirm(r.name+' を退去済にしますか？\n（過去の記録は保持され、履歴から閲覧できます）');
     if(!ok)return;
@@ -4416,10 +4458,13 @@ function toggleResHidden(id,makeHidden){
   showToast(makeHidden?'✅ 非表示にしました':'✅ 表示に戻しました');
 }
 
-/* 入居者マスタが正本の項目（フリガナ・居室番号）の編集可否を切り替える。
+/* 入居者マスタが正本の項目（フリガナ・居室番号・在籍状態）の編集可否を切り替える。
    マスタ連携済み（masterId あり）の入居者は mergeCommonResidents() が起動時と同期完了時に
    マスタ値で必ず上書きするため、ここで編集させると「保存できたのに次回起動で消える」ことになる。
-   → 編集不可にし、変更先が入居者マスタであることを画面上で明示する。 */
+   → 編集不可にし、変更先が入居者マスタであることを画面上で明示する。
+   ★ステータス（在籍中/退去済）も同じ扱い。設定一覧の「退去/在籍へ戻す」ボタンを無効化しても、
+     この編集モーダルのセレクトが残っていると同じ書き換えができてしまうため（入口を1つ残さない）。
+     セレクトは readOnly が効かないので disabled にする（値そのものは saveRes から読める）。 */
 function setMasterManagedFields(locked){
   ['mRY','mRR'].forEach(function(id){
     var el=$(id);if(!el)return;
@@ -4427,6 +4472,12 @@ function setMasterManagedFields(locked){
     if(locked){el.setAttribute('aria-describedby','mResMasterNote');el.style.background='var(--g1)';el.style.color='var(--g7)';el.style.cursor='not-allowed'}
     else{el.removeAttribute('aria-describedby');el.style.background='';el.style.color='';el.style.cursor=''}
   });
+  var sel=$('mRS');
+  if(sel){
+    sel.disabled=!!locked;
+    if(locked){sel.setAttribute('aria-describedby','mResMasterNote');sel.setAttribute('title','入居者マスタで操作してください');sel.style.background='var(--g1)';sel.style.color='var(--g7)';sel.style.cursor='not-allowed'}
+    else{sel.removeAttribute('aria-describedby');sel.removeAttribute('title');sel.style.background='';sel.style.color='';sel.style.cursor=''}
+  }
   var note=$('mResMasterNote');if(note)note.style.display=locked?'':'none';
 }
 function editRes(id){const r=D.residents.find(x=>x.id===id);if(!r)return;editResId=id;
@@ -4544,7 +4595,11 @@ function saveRes(){const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$(
   if(sw!=null)cfgOv.stoolWarnD=sw;if(sd!=null)cfgOv.stoolDangerD=sd;
   var hasCfg=Object.keys(cfgOv).length>0;
   let resObj;
-  if(editResId!==null){const r=D.residents.find(x=>x.id===editResId);if(r){r.name=nm;r.yomi=ym;r.room=rm;r.gender=gn;r.active=(st!=='inactive');r.laxNote=laxNote;if(hasCfg)r.cfg=cfgOv;else delete r.cfg;resObj=r}}
+  if(editResId!==null){const r=D.residents.find(x=>x.id===editResId);if(r){r.name=nm;r.yomi=ym;r.room=rm;r.gender=gn;
+    /* 在籍状態はマスタ紐づき者ではマスタが正本（セレクトも disabled）。
+       万一値が届いても書き換えない＝保存しても次の名簿同期で戻る二重管理を作らない。 */
+    if(r.masterId==null||r.masterId==='')r.active=(st!=='inactive');
+    r.laxNote=laxNote;if(hasCfg)r.cfg=cfgOv;else delete r.cfg;resObj=r}}
   else{var nid=nextResId();
     resObj={id:nid,name:nm,yomi:ym,room:rm,gender:gn,active:(st!=='inactive'),laxNote:laxNote};if(hasCfg)resObj.cfg=cfgOv;D.residents.push(resObj)}
   save();

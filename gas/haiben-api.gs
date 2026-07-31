@@ -320,8 +320,9 @@ function doPost(e){
       case 'saveSched':  return json(saveSched_(body));
       case 'delRes':     deleteRow_('Residents', body.id);                            invalidateResidentsCache_(); return json({ok:true});
       case 'saveCfg':    writeConfig_(body.cfg);                                      return json({ok:true});
-      // 入居者マスタの入院状態を更新（共通契約 C4）。旧版GASでは 'unknown action' となり
-      // クライアント側の未送信キューに残る → GAS 更新後の再送で自然に回復する（デプロイ順に非依存）。
+      // 入居者マスタの入院状態を更新（共通契約 C4）。旧版GASでは 'unknown action' となり、
+      // クライアントはその応答を見て再送せずに破棄する（古い入院状態の送り直しでマスタを
+      // 巻き戻さないため。状態そのものは名簿同期でマスタから読み直される＝デプロイ順に非依存）。
       case 'setMasterState': return json(setMasterState_(body));
       default: return json({ok:false, error:'unknown action: '+action});
     }
