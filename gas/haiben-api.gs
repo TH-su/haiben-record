@@ -125,7 +125,8 @@ function fetchMasterRoster_(){
     }
     try{
       const s = JSON.stringify(roster);
-      if(s.length <= 90000) cache.put(MASTER_ROSTER_CACHE_KEY, s, 600); // 100KB上限の防御・TTL 10分
+      // TTL 60秒（2026-08-01 状態伝播の高速化・凍結仕様S2。旧600秒）。キャッシュヒット時の処理は従来どおり軽量
+      if(s.length <= 90000) cache.put(MASTER_ROSTER_CACHE_KEY, s, 60); // 100KB上限の防御
     }catch(e){}
     return roster;
   }catch(err){
@@ -142,8 +143,35 @@ function fetchMasterRoster_(){
  *   3キーだけを更新して書き戻す（他のキーは触らず温存＝部分更新）。
  * ★ dataJson が JSON として解釈できない場合は書かずに ok:false を返す（既存データを壊さない安全側）。
  * ★ 直列化は doPost の LockService.getScriptLock()（既存作法）に乗る。
- * ★ 名簿キャッシュ（600秒）は状態変更のたびに無効化する。 */
+ * ★ 名簿キャッシュ（60秒）は状態変更のたびに無効化する。 */
 const MASTER_STATE_LOG_MAX = 50;   // stateLog は先頭追記・最大50件で切る（共通契約 C1）
+
+/** ── マスタ側「meta」タブ A1（状態更新のエポックms）への刻印（2026-08-01・P1） ──
+ * 排泄記録から入院/退院を書くと master.gs の STATE_REV は動かない（別GAS・別プロパティ）。
+ * そのため、この経路の変更だけが購読側（マスタ・週間計画・体重・薬学）へ伝わらず最大10分待たされていた。
+ * そこで master スプレッドシートに1セルのタブ 'meta' を置き、A1 に更新時刻（エポックms）を刻む。
+ * master.gs は ?action=stateRev の応答へ srev として同梱し、購読側は rev と srev の
+ * どちらかが動いたら名簿を取り直す＝排泄記録発の状態変化も60〜90秒で伝わる。
+ * ★書き手はこの関数だけ（master.gs は読むだけ）＝書き込み衝突ゼロ。
+ * ★刻印の失敗は握りつぶす（状態更新そのものは成功のまま返す。データ保全が上位・
+ *   次の変更で追いつく＋購読側は従来の周期同期でいずれ収束する）。 */
+const MASTER_META_SHEET_NAME = 'meta';   // master.gs 側の META_SHEET と同じ名前（1セルのみ）
+
+function touchMasterMeta_(ss){
+  try{
+    if(!ss) return false;
+    var sh = ss.getSheetByName(MASTER_META_SHEET_NAME);
+    // 無ければ作る。個人情報は一切書かない（A1 の数値1つだけ）
+    if(!sh) sh = ss.insertSheet(MASTER_META_SHEET_NAME);
+    if(!sh) return false;
+    sh.getRange(1,1).setValue(Date.now());
+    return true;
+  }catch(err){
+    // 権限不足・同時 insertSheet の競合など。本体（状態更新）の成否には影響させない
+    console.error('master meta touch skipped: ' + err);
+    return false;
+  }
+}
 
 function setMasterState_(body){
   if(!body || body.masterId==null || body.masterId==='') return {ok:false, error:'masterId がありません'};
@@ -151,7 +179,8 @@ function setMasterState_(body){
   if(!sheetId) return {ok:false, error:'MASTER_SHEET_ID が未設定です'};   // 連携未設定 ＝ 受け付けない
   const hz = (body.hospitalized === true || body.hospitalized === 'true');
   try{
-    const sh = SpreadsheetApp.openById(sheetId).getSheetByName(MASTER_SHEET_NAME);
+    const ss = SpreadsheetApp.openById(sheetId);
+    const sh = ss.getSheetByName(MASTER_SHEET_NAME);
     if(!sh) return {ok:false, error:'master シートが見つかりません'};
     const last = sh.getLastRow();
     if(last < 2) return {ok:false, error:'not found'};
@@ -190,6 +219,7 @@ function setMasterState_(body){
     obj.stateLog = log.slice(0, MASTER_STATE_LOG_MAX);
     cell.setValue(JSON.stringify(obj));
     try{ CacheService.getScriptCache().remove(MASTER_ROSTER_CACHE_KEY); }catch(e){}
+    touchMasterMeta_(ss);   // 書き込み成功時のみ刻印（失敗しても本体は ok:true のまま返す）
     return {ok:true, hospitalized:hz, hospitalizedAt:at};
   }catch(err){
     // 個人情報保護：body（masterId 以外の中身）はログに出さない
@@ -247,7 +277,9 @@ function doGet(e){
   // マスタ側の遅延・障害が記録同期のホットパスに一切影響しないようにする。
   if(params.action === 'masterRoster'){
     const mr = fetchMasterRoster_();
-    return json({ok:true, roster: mr || [], available: mr !== null});
+    // fetchedAt: サーバー応答時刻（クライアントの鮮度表示・デバッグ用。凍結仕様S2）。
+    // 名簿本体はこの時刻から最大でもキャッシュTTL（60秒）だけ古い可能性がある。個人情報は含まない。
+    return json({ok:true, roster: mr || [], available: mr !== null, fetchedAt: new Date().toISOString()});
   }
   try{
     // Phase 2 B-2: ?since= があれば updatedAt で差分フィルタ

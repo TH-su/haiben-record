@@ -2153,10 +2153,11 @@ function mergeCommonResidents(srcList, opts){
      連携契約で、フェイスシート・ケアスケジュール・体重管理の3アプリも読んでいる。専用キーに
      保存して影響を当アプリ内に閉じ込める。オフライン時は前回取得分を再利用する。 */
 const MASTER_ROSTER_KEY='hbcr_master_roster';
-/* 代理名簿取得のスロットル（共通契約 C8・2026-08-01）。前回成功から10分以内は取りに行かない。
+/* 代理名簿取得のスロットル（共通契約 C8・2026-08-01）。前回成功から50秒以内は取りに行かない
+   （状態伝播の高速化・凍結仕様S3で 600000→50000。サーバー側の60秒キャッシュが実質の律速）。
    保存するのは取得時刻（数値）だけで、氏名等の業務データは入れない。 */
 const MASTER_ROSTER_TS_KEY='hbcr_master_roster_ts';
-const MASTER_ROSTER_MIN_INTERVAL_MS=600000;
+const MASTER_ROSTER_MIN_INTERVAL_MS=50000;
 function loadStoredMasterRoster(){
   try{
     var raw=localStorage.getItem(MASTER_ROSTER_KEY);if(!raw)return null;
@@ -2165,7 +2166,7 @@ function loadStoredMasterRoster(){
 }
 async function syncMasterRoster(){
   if(!apiUrl)return false;
-  // C8 スロットル：前回成功から10分以内はスキップ（時刻が未来にずれている端末は取り直す）
+  // C8 スロットル：前回成功から50秒以内はスキップ（時刻が未来にずれている端末は取り直す）
   try{
     var _lastTs=Number(localStorage.getItem(MASTER_ROSTER_TS_KEY)||0);
     var _now=Date.now();
@@ -2196,6 +2197,46 @@ async function syncMasterRoster(){
     console.warn('[hbcr] マスタ名簿の取得に失敗（記録の同期は継続）:',e&&e.message);
     return false;
   }
+}
+/* ── 名簿の追い読みタイマー（2026-08-01・状態伝播の高速化 凍結仕様S3） ──
+   表示中のみ60秒間隔で syncMasterRoster を実行し、他端末で登録された入院・退去・居室変更を
+   数十秒で取り込む（従来は次の全体同期まで最大10分）。work-schedule の定期ポーリングと同型：
+   setInterval + document.hidden スキップ + 直近成功10秒スロットル + 失敗は次tick任せ。
+   実際の取得頻度は C8 スロットル（50秒）とサーバー側60秒キャッシュが律速するため tick は軽量。
+   名簿の追い読み専用＝記録同期（syncFromAPI）・mergeCommonResidents の適用経路には触れない。 */
+const MASTER_ROSTER_POLL_MS=60000;      // 60秒ごとに名簿を追い読み（可視タブのみ）
+const MASTER_ROSTER_POLL_GAP_MS=10000;  // 直近成功から10秒未満はskip（タブ復帰直後の重複防止）
+var _mrPollBound=false;                 // 一度だけ束縛ガード（init 二重呼びでもタイマーは1本）
+/* 実行中フラグ（2026-08-01 追加）。C8スロットルは「取得**成功**時刻」だけを見るため、
+   前回のGETが未完了（低速回線・タイムアウト待ちの最大20秒）の間に次のtickやタブ復帰が
+   重なると二重GETが出る窓があった。取得の開始〜完了までを1本に直列化して塞ぐ。
+   解除は成功・失敗どちらの経路でも必ず行う（立てっぱなしで追い読みが止まらないように）。 */
+var _mrPollBusy=false;
+function _mrPollTick(){
+  if(_mrPollBusy)return;  // 前回の取得が終わるまで次を出さない（二重GETの窓を塞ぐ）
+  var _mine=false;        // このtickでフラグを立てたか（他tickの実行中フラグを誤って倒さないため）
+  try{
+    if(!apiUrl||document.hidden)return;   // 未接続・非表示中は何もしない（表示中のみ動く）
+    var _last=Number(localStorage.getItem(MASTER_ROSTER_TS_KEY)||0);
+    var _now=Date.now();
+    if(_last>0&&_now>=_last&&(_now-_last)<MASTER_ROSTER_POLL_GAP_MS)return;
+    _mrPollBusy=true;_mine=true;
+    var _p=syncMasterRoster();   // 非同期・await しない。失敗は false が返るだけ＝次tickに任せる
+    if(_p&&typeof _p.then==='function'){
+      var _done=function(){_mrPollBusy=false};   // finally 相当（成功・失敗の両方で必ず解除）
+      _p.then(_done,_done);
+    }else{_mrPollBusy=false}
+  }catch(e){if(_mine)_mrPollBusy=false}   // タイマー内の例外は握りつぶす（他機能を巻き込まない）
+}
+function setupMasterRosterPoll(){
+  if(_mrPollBound)return;
+  _mrPollBound=true;
+  setInterval(_mrPollTick,MASTER_ROSTER_POLL_MS);
+  // タブ復帰時に即1回（10秒スロットル付き）＝離席から戻った瞬間に最新の在籍・入院状態へ
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden)return;
+    _mrPollTick();
+  });
 }
 /* 排泄記録の対象者か（targetExcretion===false の人のみ対象外。未設定/true は対象＝no-op安全） */
 function isExcretionTarget(r){return !r||r.targetExcretion!==false}
@@ -5181,6 +5222,10 @@ function init(){
         showToast('✅ APIと同期しました')
       }
     })}
+
+  /* 名簿の追い読みタイマーを起動（凍結仕様S3）。apiUrl 未設定でも起動してよい＝
+     tick 側で未接続を判定するため、後からURLを保存した端末も再読み込み無しで効き始める */
+  if(typeof setupMasterRosterPoll==='function')setupMasterRosterPoll();
 
   /* 保存の実行本体。btnApiSave から直接、または「保存済みトークンを空欄で消す」確認を経て呼ばれる。
      従来の処理内容は変えていない（空欄＝旧GAS互換の未認証モードという仕様も維持）。 */
