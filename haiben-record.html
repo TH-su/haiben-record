@@ -1372,7 +1372,9 @@ async function apiPost(action,data){
   var r=await fetchTO(apiUrl,{
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({action:action,record:data.record,id:data.id,resident:data.resident,schedule:data.schedule,cfg:data.cfg,token:apiToken||undefined})},30000);
+    // masterId/hospitalized は setMasterState 専用。他アクションでは undefined となり
+    // JSON.stringify で落ちるため、既存ペイロードは1バイトも変わらない。
+    body:JSON.stringify({action:action,record:data.record,id:data.id,resident:data.resident,schedule:data.schedule,cfg:data.cfg,masterId:data.masterId,hospitalized:data.hospitalized,token:apiToken||undefined})},30000);
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json()}
 
@@ -1432,7 +1434,10 @@ async function syncFromAPI(showLoader,opts){
     var mergedRes=[];
     // クライアント側のみで保持するフィールド（サーバーが返さない）はローカル値を保持
     var localResById={};localRes.forEach(function(r){if(r&&r.id!=null)localResById[toNum(r.id)]=r});
-    var clientOnly=['schedule','cfg','laxNote','hospitalizations'];
+    /* masterId / masterHosp は GAS の Residents シートに列が無く、サーバーからは返らない。
+       ここで温存しないと同期のたびにマスタ連携の紐づけ（masterId）と入院状態の写し（masterHosp）が
+       消え、退去・入院の鏡映（共通契約 C5/C6）が効かなくなる。 */
+    var clientOnly=['schedule','cfg','laxNote','hospitalizations','masterId','masterHosp'];
     /* schedule 移行の判定材料は「マージ前の生レスポンス」で取る（2026-07-25）。
        下の clientOnly コピーは apiRes の要素そのもの（コピーではない）を書き換えるため、
        マージ後に apiRes を見るとローカルの予定が混ざり、「サーバーが予定を持っている」と
@@ -2045,31 +2050,68 @@ function mergeCommonResidents(srcList, opts){
     var nm=_normName(r.name);if(nm&&!byName[nm])byName[nm]=r;
   });
   var changed=0;
+  var _leftN=0,_backN=0;   // C5 鏡映の件数（トーストは最後に1回だけ出す）
   list.forEach(function(c){
-    if(!c||c.masterId==null||c.active===false)return; // 退去者は取り込まない
+    if(!c||c.masterId==null)return;
+    /* ── 在籍状態の鏡映（共通契約 C5・2026-08-01 追加） ──
+       マスタの active を「正」として当アプリの在籍フラグへ両方向追従させる。
+       ★ 記録・入院履歴・予定は一切消さない（在籍フラグだけを切り替える）
+       ★ 対象は masterId で紐づく入居者のみ。ローカル限定の入居者（masterId なし）は従来どおり手動管理
+       ★ active が false 以外（true/未定義/不正値）は在籍扱い＝「消えるより残る」側に倒す */
+    var tgt=byMid[String(c.masterId)];
+    if(c.active===false){
+      if(tgt&&tgt.active!==false){
+        tgt.active=false;changed++;_leftN++;
+        /* サーバー（Residents シート）にも反映する。ローカルだけを変えると次回同期で
+           サーバーの active=true に戻され、鏡映と巻き戻しが毎回繰り返される。
+           送信経路・ペイロードは画面の「退去」ボタンと同一（失敗時は未送信キューで再送）。 */
+        if(typeof apiPush==='function')apiPush('saveRes',{resident:tgt});
+      }
+      return;   // 退去者は新規取り込みも項目更新もしない（従来どおり）
+    }
     // 排泄記録の対象判定：targetApps があり 'excretion' を含まなければ対象外(false)。
     // targetApps 自体が無ければ undefined（＝従来どおり表示の no-op 扱い）。
     var tExc=Array.isArray(c.targetApps)?(c.targetApps.indexOf('excretion')>=0):undefined;
-    var tgt=byMid[String(c.masterId)];
     if(!tgt){var nm=_normName(c.name);if(nm)tgt=byName[nm];}
     if(tgt){
-      if(tgt.masterId==null){tgt.masterId=c.masterId;changed++;}
+      if(tgt.masterId==null){tgt.masterId=c.masterId;byMid[String(c.masterId)]=tgt;changed++;}
       if(c.room&&tgt.room!==c.room){tgt.room=c.room;changed++;}
       if(c.careLevel&&tgt.careLevel!==c.careLevel){tgt.careLevel=c.careLevel;changed++;}
       if(c.kana&&tgt.yomi!==c.kana){tgt.yomi=c.kana;changed++;}
       if(tExc!==undefined&&tgt.targetExcretion!==tExc){tgt.targetExcretion=tExc;changed++;}
+      // C5: マスタが在籍 → 当アプリの退去フラグを解除（復帰）。記録はそのまま残る
+      if(tgt.active===false){
+        tgt.active=true;changed++;_backN++;
+        if(typeof apiPush==='function')apiPush('saveRes',{resident:tgt});
+      }
+      /* C6/C9: 入院状態はマスタの写し（master 常勝）。当アプリでは masterHosp を書き換えない。
+         キー自体が無い名簿（旧マスタ・旧GAS）では触らない＝「値を持たない」と「false の明示」を区別する。 */
+      if(Object.prototype.hasOwnProperty.call(c,'hospitalized')){
+        var hz=!!c.hospitalized;
+        if(tgt.masterHosp!==hz){tgt.masterHosp=hz;changed++;}
+      }
     }else{
       if(opts.noAdd)return;   // サーバー由来の名簿は対象アプリ情報を持たないため新規追加はしない（既存者の更新のみ）
       if(tExc===false)return; // 排泄対象外の master 入居者は当アプリに取り込まない
       if(!c.room)return;      // 居室なしは isValidRes で除外されるため取り込まない
       var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
-      D.residents.push({id:nextResId(),name:c.name||'',room:c.room,gender:g,
+      var nr={id:nextResId(),name:c.name||'',room:c.room,gender:g,
         yomi:c.kana||'',careLevel:c.careLevel||'',active:true,masterId:c.masterId,_fromMaster:true,
-        targetExcretion:(tExc===undefined?true:tExc)});
+        targetExcretion:(tExc===undefined?true:tExc)};
+      if(Object.prototype.hasOwnProperty.call(c,'hospitalized'))nr.masterHosp=!!c.hospitalized;
+      D.residents.push(nr);
+      byMid[String(c.masterId)]=nr;
       changed++;
     }
   });
   if(changed){_recIdx=null;save();}
+  // 在籍状態を自動で切り替えたことは黙って行わず、1回のトーストでまとめて知らせる（氏名は出さない）
+  if((_leftN||_backN)&&typeof showToast==='function'){
+    var _msg=[];
+    if(_leftN)_msg.push('退去 '+_leftN+'名');
+    if(_backN)_msg.push('在籍へ復帰 '+_backN+'名');
+    try{showToast('🔄 入居者マスタに合わせて'+_msg.join('・')+'を反映しました（記録は保持されています）')}catch(e){}
+  }
   return changed>0;
 }
 
@@ -2080,6 +2122,10 @@ function mergeCommonResidents(srcList, opts){
      連携契約で、フェイスシート・ケアスケジュール・体重管理の3アプリも読んでいる。専用キーに
      保存して影響を当アプリ内に閉じ込める。オフライン時は前回取得分を再利用する。 */
 const MASTER_ROSTER_KEY='hbcr_master_roster';
+/* 代理名簿取得のスロットル（共通契約 C8・2026-08-01）。前回成功から10分以内は取りに行かない。
+   保存するのは取得時刻（数値）だけで、氏名等の業務データは入れない。 */
+const MASTER_ROSTER_TS_KEY='hbcr_master_roster_ts';
+const MASTER_ROSTER_MIN_INTERVAL_MS=600000;
 function loadStoredMasterRoster(){
   try{
     var raw=localStorage.getItem(MASTER_ROSTER_KEY);if(!raw)return null;
@@ -2088,6 +2134,12 @@ function loadStoredMasterRoster(){
 }
 async function syncMasterRoster(){
   if(!apiUrl)return false;
+  // C8 スロットル：前回成功から10分以内はスキップ（時刻が未来にずれている端末は取り直す）
+  try{
+    var _lastTs=Number(localStorage.getItem(MASTER_ROSTER_TS_KEY)||0);
+    var _now=Date.now();
+    if(_lastTs>0&&_now>=_lastTs&&(_now-_lastTs)<MASTER_ROSTER_MIN_INTERVAL_MS)return false;
+  }catch(e){}
   try{
     var url=apiUrl+'?action=masterRoster';
     if(apiToken)url+='&token='+encodeURIComponent(apiToken);
@@ -2095,12 +2147,17 @@ async function syncMasterRoster(){
     if(!r.ok)return false;
     var j=await r.json();
     // available:false ＝ サーバー側でマスタ連携が未設定。静かに見送る（従来動作のまま）
-    if(!j||j.available!==true||!Array.isArray(j.roster)||!j.roster.length)return false;
+    if(!j||j.available!==true||!Array.isArray(j.roster))return false;
+    try{localStorage.setItem(MASTER_ROSTER_TS_KEY,String(Date.now()))}catch(e){}   // 取得成功の時刻（C8）
+    if(!j.roster.length)return false;
     try{localStorage.setItem(MASTER_ROSTER_KEY,JSON.stringify({v:1,updatedAt:new Date().toISOString(),residents:j.roster}))}catch(e){}
     var changed=mergeCommonResidents(j.roster,{noAdd:true});
     if(changed){
       if(typeof buildResSel==='function')buildResSel();
       if(typeof renderCfg==='function')renderCfg();
+      // 在籍・入院の鏡映（C5/C6）は一覧・時系列の表示にも効くため、この場で描画も更新する
+      if(typeof renderBoard==='function')renderBoard();
+      if(typeof renderTL==='function')renderTL();
     }
     return changed;
   }catch(e){
@@ -2203,6 +2260,30 @@ function getActiveHospAt(resident,datetimeStr){
 }
 function isCurrentlyHospitalized(resident){
   return !!getActiveHospAt(resident,new Date().toISOString());
+}
+/* いま入院中か（当アプリの入院履歴 ∪ 入居者マスタの入院フラグ）。2026-08-01 追加・共通契約 C6。
+   masterHosp は入居者マスタ（共有名簿／代理名簿）から反映した写しで、当アプリからは書き換えない
+   （＝マスタ常勝。書き込みは入院モーダル → setMasterState の一本道）。
+   ローカルの入院履歴（日時つき）は従来どおり保持し、期間判定・時間凍結もこれまで通り履歴で行う。 */
+function isHospNow(resident){
+  if(!resident)return false;
+  if(resident.masterHosp===true)return true;
+  return isCurrentlyHospitalized(resident);
+}
+/* 入院状態を入居者マスタへ併送する（masterId で紐づく入居者のみ）。
+   apiPush 経由のため、失敗時は既存の未送信キュー（hbcr_pq）に退避されて後で再送される。
+   旧GAS（setMasterState 未対応）では ok:false となりキューに残り、GAS 更新後の再送で回復する。
+   prevHosp＝編集直前の isCurrentlyHospitalized。真偽値が変わらない編集では送らない。
+   過去分の入院履歴を後から追記・削除しただけでも「現在は入院していない」を送ってしまうと、
+   他アプリ（現場タブレット・入居者マスタ）が立てたマスタの入院中フラグを誤って退院化する。
+   prevHosp が真偽値以外（省略）のときは従来どおり送る＝判断材料が無ければマスタを現状に合わせる。 */
+function pushMasterHospState(r,prevHosp){
+  if(!r||r.masterId==null||r.masterId==='')return;
+  if(typeof isUserRes==='function'&&!isUserRes(r))return;   // 職員（隠し入居者）は対象外
+  if(typeof apiPush!=='function')return;
+  var nowHosp=isCurrentlyHospitalized(r);
+  if(typeof prevHosp==='boolean'&&prevHosp===nowHosp)return;   // 現在の入院状態が変わらない後追い編集は併送しない
+  apiPush('setMasterState',{masterId:String(r.masterId),hospitalized:nowHosp});
 }
 /* 指定日にある入退院イベント（赤地/青地マーカーセル表示用） */
 function getHospEventsOnDate(resident,dateStr){
@@ -2817,6 +2898,10 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     var hospMarker='';
     if(admissionEvent)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院 '+admissionEvent.time+'</div>';
     if(isFullHosp)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>';
+    /* 入居者マスタ側だけで入院になっている人（当アプリに入院履歴が無い）にも同じバッジを出す。
+       過去日の表示は書き換えないよう「今日」を見ているときだけ。行のグレーアウト・間隔表示・
+       入力可否は入院履歴（日時）が根拠のまま＝既存挙動を変えない。 */
+    if(!hospMarker&&re.masterHosp===true&&date===today())hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>';
     return'<tr class="'+rc+'"'+(rowStyle?' style="'+rowStyle+'"':'')+'>'+
       '<td><strong>'+re.room+'</strong></td>'+
       '<td style="text-align:left;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+re.id+'">'+re.name+'</span>'+hospMarker+'</td>'+
@@ -2944,7 +3029,9 @@ function renderTL(){const date=$('tlDate').value||today();
     var nmContent=isFullHospTL
       ?'<span style="color:#424242">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'" style="color:#212121;text-decoration-color:#212121">'+re.name+'</span>'+fdBtn+
         '<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>'
-      :'<span style="color:var(--g5)">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'">'+re.name+'</span>'+fdBtn+offHtml;
+      :'<span style="color:var(--g5)">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'">'+re.name+'</span>'+fdBtn+
+        // 入居者マスタ側だけで入院中の人にもバッジを出す（今日の表示のみ。灰色化・入力可否は従来どおり履歴が根拠）
+        ((re.masterHosp===true&&date===today())?'<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>':'')+offHtml;
     return'<tr><td class="tl-nm"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
   $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
   setupTopScroll();
@@ -3414,8 +3501,8 @@ function renderCfg(){
       var badges='';
       if(isInactive)badges+='<span style="background:#9e9e9e;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-right:4px">退去済</span>';
       if(isHidden&&!isInactive)badges+='<span style="background:#fb8c00;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-right:4px">非表示</span>';
-      // 🏥 現在入院中ならバッジ表示
-      if(!isInactive&&isCurrentlyHospitalized(r))badges+='<span style="background:#c62828;color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">🏥 入院中</span>';
+      // 🏥 現在入院中ならバッジ表示（入居者マスタの入院フラグも統合＝isHospNow）
+      if(!isInactive&&isHospNow(r))badges+='<span style="background:#c62828;color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">🏥 入院中</span>';
       var histBtn=isInactive?'<button class="bn bs bsm res-hist" data-id="'+r.id+'">履歴</button>':'';
       var toggleLabel=isInactive?'在籍へ戻す':'退去';
       var toggleCls=isInactive?'res-restore':'res-leave';
@@ -4404,8 +4491,11 @@ function renderHospList(r){
       customPrompt({title:'退院日時を入力',message:'入院: '+hsp.admissionAt.replace('T',' '),value:defaultStr,type:'datetime-local'}).then(function(v){
         if(!v)return;
         if(new Date(v).getTime()<=new Date(hsp.admissionAt).getTime()){showToast('⚠️ 退院は入院より後の日時を入力してください','err');return}
+        var _wasHosp=isCurrentlyHospitalized(r);   // 編集前の「現在入院中か」（併送要否の判定用）
         hsp.dischargeAt=v;
         save();apiPush('saveRes',{resident:r});
+        // 入居者マスタへ入院状態を併送（masterId のある入居者のみ・共通契約 C4）
+        if(typeof pushMasterHospState==='function')pushMasterHospState(r,_wasHosp);
         // snapshot 経由で複数端末同期
         if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
         renderHospList(r);renderCfg();
@@ -4421,8 +4511,11 @@ function renderHospList(r){
       var hid=this.dataset.hid;
       customConfirm('この入院履歴を削除しますか？\n（記録データは保持されます）').then(function(ok){
         if(!ok)return;
+        var _wasHosp=isCurrentlyHospitalized(r);   // 編集前の「現在入院中か」（併送要否の判定用）
         r.hospitalizations=r.hospitalizations.filter(function(x){return x.id!==hid});
         save();apiPush('saveRes',{resident:r});
+        // 入居者マスタへ入院状態を併送（履歴削除で入院中でなくなる場合があるため。過去分の削除では送らない）
+        if(typeof pushMasterHospState==='function')pushMasterHospState(r,_wasHosp);
         // snapshot 経由で複数端末同期
         if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
         renderHospList(r);renderCfg();
@@ -4922,8 +5015,11 @@ function init(){
     // 重複防止：同じ admissionAt があれば上書き確認
     var existing=r.hospitalizations.find(function(h){return h.admissionAt===ad});
     if(existing){showToast('⚠️ 同じ入院日時の履歴が既に存在します','err');return}
+    var _wasHosp=isCurrentlyHospitalized(r);   // 編集前の「現在入院中か」（併送要否の判定用）
     r.hospitalizations.push({id:'hosp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),admissionAt:ad,dischargeAt:dc});
     save();apiPush('saveRes',{resident:r});
+    // 入居者マスタへ入院状態を併送（masterId のある入居者のみ・共通契約 C4。過去分の追記では送らない）
+    if(typeof pushMasterHospState==='function')pushMasterHospState(r,_wasHosp);
     // snapshot 経由で複数端末同期
     if(typeof pushStaffsSnapshot==='function')pushStaffsSnapshot();
     renderHospList(r);renderCfg();

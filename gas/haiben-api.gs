@@ -54,6 +54,25 @@ const MASTER_ROSTER_CACHE_KEY = 'master_roster_v1';
 const MASTER_SHEET_NAME = 'master';   // master.gs の MASTER_SHEET と同じ
 const MASTER_SAFE_COLS = ['id','name','kana','room','gender','careLevel','active'];
 
+/** dataJson から取り出してよい状態キー（2026-08-01 追加・共通契約 C3）。
+ * dataJson は医療情報等を含むため「安全列」ではない。MASTER_SAFE_COLS には入れず、
+ * この関数の中だけで列を引き、JSON.parse の直後に hospitalized / dischargeDate 以外は全て捨てる。
+ * 返す値は必ず boolean と 'YYYY-MM-DD' or '' に正規化する（要配慮の詳細は一切持ち出さない）。 */
+function _pickMasterState_(raw){
+  const out = {hospitalized:false, dischargeDate:''};
+  if(typeof raw !== 'string') return out;
+  const s = raw.trim();
+  if(s.charAt(0) !== '{') return out;
+  try{
+    const o = JSON.parse(s);
+    if(!o || typeof o !== 'object') return out;
+    out.hospitalized = (o.hospitalized === true || o.hospitalized === 'true');
+    const d = o.dischargeDate;
+    if(typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim())) out.dischargeDate = d.trim();
+  }catch(e){}   // 壊れた dataJson は「状態なし」扱い（読み取りで例外を出さない）
+  return out;
+}
+
 function fetchMasterRoster_(){
   const sheetId = PropertiesService.getScriptProperties().getProperty('MASTER_SHEET_ID');
   if(!sheetId) return null;   // 連携未設定 ＝ 従来動作
@@ -72,9 +91,11 @@ function fetchMasterRoster_(){
 
     const lastCol = sh.getLastColumn();
     const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(function(v){ return String(v).trim(); });
-    // 安全項目の列位置だけを引く。dataJson・targetApps は添字を取らない＝読み出し対象にしない。
+    // 安全項目の列位置だけを引く。targetApps は添字を取らない＝読み出し対象にしない。
+    // dataJson は _pickMasterState_ で hospitalized / dischargeDate の2キーだけを取り出すために引く。
     const idx = {};
     MASTER_SAFE_COLS.forEach(function(k){ idx[k] = headers.indexOf(k); });
+    const djIdx = headers.indexOf('dataJson');
     if(idx.id < 0){ console.error('masterRoster: id列が見つかりません（ヘッダー: ' + headers.join(',') + '）'); return null; }
 
     const rows = sh.getRange(2,1,last-1,lastCol).getValues();
@@ -84,8 +105,11 @@ function fetchMasterRoster_(){
       const r = rows[i];
       if(r[idx.id]==='' || r[idx.id]==null) continue;
       // 在籍判定は master.gs の _truthy と同じ規則（false/'false'/'退去'/空 を除外）
+      // 2026-08-01: 退去者も active:false として返す（購読側が在籍状態を鏡映するため＝共通契約 C5）。
+      // 既存クライアントは active===false の行を無視するため、返しても従来動作は変わらない。
       const act = idx.active>=0 ? r[idx.active] : true;
-      if(act===false || act==='false' || act==='退去' || act==='') continue;
+      const isAct = !(act===false || act==='false' || act==='退去' || act==='');
+      const st = (djIdx>=0) ? _pickMasterState_(r[djIdx]) : {hospitalized:false, dischargeDate:''};
       roster.push({
         masterId : String(r[idx.id]),
         name     : pick(r,'name'),
@@ -93,7 +117,10 @@ function fetchMasterRoster_(){
         room     : pick(r,'room'),
         gender   : pick(r,'gender'),
         careLevel: pick(r,'careLevel'),
-        active   : true
+        active   : isAct,
+        hospitalized : st.hospitalized,
+        // 退去日は退去者の行にだけ載せる（在籍者は常に ''）
+        dischargeDate: isAct ? '' : st.dischargeDate
       });
     }
     try{
@@ -105,6 +132,69 @@ function fetchMasterRoster_(){
     // 権限不足・ID誤り・マスタ側の障害いずれでも、記録の同期は止めない（安全側フォールバック）
     console.error('masterRoster read error: ' + err);
     return null;
+  }
+}
+
+/** ============ 入居者マスタの状態更新（2026-08-01 追加・共通契約 C4） ============
+ * body = {token(HAIBEN_TOKEN), masterId, hospitalized}
+ * 現場タブレット（排泄記録）で登録した入院/退院を、入居者マスタ側の dataJson に反映する。
+ * ★ master シートの該当行の dataJson セルだけを読み、hospitalized / hospitalizedAt / stateLog の
+ *   3キーだけを更新して書き戻す（他のキーは触らず温存＝部分更新）。
+ * ★ dataJson が JSON として解釈できない場合は書かずに ok:false を返す（既存データを壊さない安全側）。
+ * ★ 直列化は doPost の LockService.getScriptLock()（既存作法）に乗る。
+ * ★ 名簿キャッシュ（600秒）は状態変更のたびに無効化する。 */
+const MASTER_STATE_LOG_MAX = 50;   // stateLog は先頭追記・最大50件で切る（共通契約 C1）
+
+function setMasterState_(body){
+  if(!body || body.masterId==null || body.masterId==='') return {ok:false, error:'masterId がありません'};
+  const sheetId = PropertiesService.getScriptProperties().getProperty('MASTER_SHEET_ID');
+  if(!sheetId) return {ok:false, error:'MASTER_SHEET_ID が未設定です'};   // 連携未設定 ＝ 受け付けない
+  const hz = (body.hospitalized === true || body.hospitalized === 'true');
+  try{
+    const sh = SpreadsheetApp.openById(sheetId).getSheetByName(MASTER_SHEET_NAME);
+    if(!sh) return {ok:false, error:'master シートが見つかりません'};
+    const last = sh.getLastRow();
+    if(last < 2) return {ok:false, error:'not found'};
+    const lastCol = sh.getLastColumn();
+    const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(function(v){ return String(v).trim(); });
+    const idCol = headers.indexOf('id');
+    const djCol = headers.indexOf('dataJson');
+    if(idCol < 0) return {ok:false, error:'id列が見つかりません'};
+    if(djCol < 0) return {ok:false, error:'dataJson列が見つかりません'};
+    const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
+    let rowIdx = -1;
+    for(let i=0;i<ids.length;i++){
+      if(String(ids[i][0])===String(body.masterId)){ rowIdx = i+2; break; }
+    }
+    if(rowIdx < 0) return {ok:false, error:'not found'};
+
+    const cell = sh.getRange(rowIdx, djCol+1);
+    const raw = cell.getValue();
+    let obj = {};
+    if(raw !== '' && raw != null){
+      const s = String(raw).trim();
+      if(s.charAt(0) !== '{') return {ok:false, error:'dataJson の形式が不正です'};   // 書かずに中止
+      try{
+        const p = JSON.parse(s);
+        if(!p || typeof p !== 'object') return {ok:false, error:'dataJson の形式が不正です'};
+        obj = p;
+      }catch(err){
+        return {ok:false, error:'dataJson を解釈できません'};   // 壊れた JSON を上書きしない（原則4）
+      }
+    }
+    const at = new Date().toISOString();
+    obj.hospitalized = hz;
+    obj.hospitalizedAt = at;
+    const log = Array.isArray(obj.stateLog) ? obj.stateLog : [];
+    log.unshift({ts:at, src:'haiben', field:'hospitalized', val:hz});
+    obj.stateLog = log.slice(0, MASTER_STATE_LOG_MAX);
+    cell.setValue(JSON.stringify(obj));
+    try{ CacheService.getScriptCache().remove(MASTER_ROSTER_CACHE_KEY); }catch(e){}
+    return {ok:true, hospitalized:hz, hospitalizedAt:at};
+  }catch(err){
+    // 個人情報保護：body（masterId 以外の中身）はログに出さない
+    console.error('setMasterState error: ' + err);
+    return {ok:false, error:String(err)};
   }
 }
 
@@ -138,9 +228,12 @@ function checkMasterLink(){
   const roster = fetchMasterRoster_();
   if(roster === null){ console.log('→ 読み取りに失敗しました。上に出ているエラーログを確認してください。'); return; }
   console.log('★★★ 成功 ★★★');
-  console.log('在籍者: ' + roster.length + '件'
-    + ' / 居室あり: ' + roster.filter(function(r){ return r.room; }).length + '件'
-    + ' / かなあり: ' + roster.filter(function(r){ return r.kana; }).length + '件');
+  const _act = roster.filter(function(r){ return r.active; });
+  console.log('在籍者: ' + _act.length + '件'
+    + ' / 退去者: ' + (roster.length - _act.length) + '件'
+    + ' / 入院中: ' + roster.filter(function(r){ return r.hospitalized; }).length + '件'
+    + ' / 居室あり: ' + _act.filter(function(r){ return r.room; }).length + '件'
+    + ' / かなあり: ' + _act.filter(function(r){ return r.kana; }).length + '件');
   console.log('※氏名は表示していません');
 }
 
@@ -227,6 +320,9 @@ function doPost(e){
       case 'saveSched':  return json(saveSched_(body));
       case 'delRes':     deleteRow_('Residents', body.id);                            invalidateResidentsCache_(); return json({ok:true});
       case 'saveCfg':    writeConfig_(body.cfg);                                      return json({ok:true});
+      // 入居者マスタの入院状態を更新（共通契約 C4）。旧版GASでは 'unknown action' となり
+      // クライアント側の未送信キューに残る → GAS 更新後の再送で自然に回復する（デプロイ順に非依存）。
+      case 'setMasterState': return json(setMasterState_(body));
       default: return json({ok:false, error:'unknown action: '+action});
     }
   }catch(err){
