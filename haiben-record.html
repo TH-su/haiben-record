@@ -3251,11 +3251,11 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
   if($('mDetEdit'))$('mDetEdit').style.display='';
   if($('mDetHist'))$('mDetHist').style.display='';
   const res=D.residents.find(x=>x.id===r.residentId);
-  let h='<div style="margin-bottom:10px"><b>'+(res?res.name:'不明')+'</b> <span style="color:var(--g5)">'+(res?res.room+'号室':'')+'</span></div>';
+  let h='<div style="margin-bottom:10px"><b>'+escapeHtmlText(res?res.name:'不明')+'</b> <span style="color:var(--g5)">'+(res?escapeHtmlText(res.room)+'号室':'')+'</span></div>';
   h+='<div style="font-size:13px;margin-bottom:10px">📅 '+r.date+'　🕐 '+r.time+'</div>';
   if(r.type==='laxative'){
     h+='<div class="hi" style="margin-bottom:8px;background:#f3e5f5;border-left:4px solid #7b1fa2;padding:8px 12px;border-radius:6px"><b style="color:#6a1b9a">💊 下剤</b>'
-      +(r.medicine?'<div>薬剤: '+r.medicine+'</div>':'')
+      +(r.medicine?'<div>薬剤: '+escapeHtmlText(r.medicine)+'</div>':'')
       +(r.tablets?'<div>錠数: '+r.tablets+'錠</div>':'')
       +'</div>';
   }else if(r.type==='water'){
@@ -3266,8 +3266,8 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
     if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);h+='<div class="hi s" style="margin-bottom:8px"><b style="color:var(--s)">🟤 排便</b>'+(c?'<div>性状: '+c+'</div>':'')+(r.stoolAmt?'<div>量: '+r.stoolAmt+'</div>':'')+(r.stoolColor?'<div>色: '+r.stoolColor+'</div>':'')+'</div>'}
   }
   if(Number(r.waterCC)>0)h+='<div class="hi" style="margin-bottom:8px;background:#e3f2fd;border-left:4px solid #1976d2;padding:8px 12px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:6px">'+waterSvg('1.3em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
-  if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size:13px;margin-top:6px">📝 '+r.notes+'</div>';
-  if(r.staff)h+='<div style="margin-top:8px;font-size:12px;color:var(--g5)">記録者: '+r.staff+'</div>';
+  if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size:13px;margin-top:6px">📝 '+escapeHtmlText(r.notes)+'</div>';
+  if(r.staff)h+='<div style="margin-top:8px;font-size:12px;color:var(--g5)">記録者: '+escapeHtmlText(r.staff)+'</div>';
   $('mDetC').innerHTML=h;$('mDet').classList.add('on')}
 
 /* ═══════════ MULTI DETAIL (同一時間帯の複数記録) ═══════════ */
@@ -3283,8 +3283,8 @@ function showDetMulti(recs){
   const typeLbl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導',water:'水分のみ'};
   const typeColor={urine:'var(--u)',stool:'var(--s)',both:'#e91e63',laxative:'#7b1fa2',none:'#607d8b',water:'#0d47a1'};
 
-  let h='<div style="margin-bottom:12px"><b>'+(res?res.name:'不明')+'</b>'
-    +'<span style="color:var(--g5);margin-left:8px">'+(res?res.room+'号室':'')+'</span>'
+  let h='<div style="margin-bottom:12px"><b>'+escapeHtmlText(res?res.name:'不明')+'</b>'
+    +'<span style="color:var(--g5);margin-left:8px">'+(res?escapeHtmlText(res.room)+'号室':'')+'</span>'
     +'<span style="background:var(--pri);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px">'+recs.length+'件</span>'
     +'</div>';
 
@@ -3316,15 +3316,15 @@ function showDetMulti(recs){
     // 下剤情報
     if(r.type==='laxative'){
       h+='<div class="hi" style="margin-bottom:6px;background:#f3e5f5;border-left:4px solid #7b1fa2;padding:6px 10px;border-radius:6px"><b style="color:#6a1b9a">💊 下剤</b>'
-        +(r.medicine?'<div>薬剤: '+r.medicine+'</div>':'')
+        +(r.medicine?'<div>薬剤: '+escapeHtmlText(r.medicine)+'</div>':'')
         +(r.tablets?'<div>錠数: '+r.tablets+'錠</div>':'')
         +'</div>'}
     // 水分摂取
     if(Number(r.waterCC)>0){
       h+='<div class="hi" style="margin-bottom:6px;background:#e3f2fd;border-left:4px solid #1976d2;padding:6px 10px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:4px">'+waterSvg('1.2em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
     }
-    if(r.notes)h+='<div style="padding:6px 8px;background:var(--g0);border-radius:6px;font-size:12px">📝 '+r.notes+'</div>';
-    if(r.staff)h+='<div style="margin-top:6px;font-size:11px;color:var(--g5)">記録者: '+r.staff+'</div>';
+    if(r.notes)h+='<div style="padding:6px 8px;background:var(--g0);border-radius:6px;font-size:12px">📝 '+escapeHtmlText(r.notes)+'</div>';
+    if(r.staff)h+='<div style="margin-top:6px;font-size:11px;color:var(--g5)">記録者: '+escapeHtmlText(r.staff)+'</div>';
     h+='</div>';
   });
 
@@ -3381,7 +3381,7 @@ function _histRowHtml(r,_wsvgSm){
   var tl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導'}[r.type]
           || (r.type==='water' ? ('<span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分のみ</span>') : r.type);
   var isLax=(r.type==='laxative'),isNone=(r.type==='none'),isWater=(r.type==='water');
-  var laxInfo=isLax?((r.medicine||'-')+' '+(r.tablets?r.tablets+'錠':'')):'';
+  var laxInfo=isLax?(escapeHtmlText(r.medicine||'-')+' '+(r.tablets?escapeHtmlText(r.tablets)+'錠':'')):'';
   var waterCell=(Number(r.waterCC)>0)?'<span class="water-mark">'+_wsvgSm+Number(r.waterCC)+'cc</span>':'-';
   return'<tr'+(isLax?' style="background:#f3e5f5"':isNone?' style="background:#eceff1"':isWater?' style="background:#e3f2fd"':'')+'><td>'+r.date+'</td><td>'+r.time+'</td><td class="'+tc+'">'+tl+'</td>'+
     '<td>'+(isLax||isNone||isWater?'-':(r.urineAmt?fmtUA(r.urineAmt):'-'))+'</td>'+
@@ -3389,8 +3389,8 @@ function _histRowHtml(r,_wsvgSm){
     '<td'+(isLax?' colspan="3" style="text-align:left"':isNone?' colspan="3" style="text-align:left;color:var(--g5)"':isWater?' colspan="3" style="text-align:left;color:#0d47a1"':'')+'>'+(isLax?laxInfo:isNone?'排泄なし':isWater?'水分のみ':(fmtCons(r)||'-'))+'</td>'+
     (isLax||isNone||isWater?'':'<td>'+(r.stoolAmt||'-')+'</td><td>'+(r.stoolColor||'-')+'</td>')+
     '<td>'+waterCell+'</td>'+
-    '<td style="text-align:left;white-space:normal;max-width:100px;word-break:break-all">'+(r.notes||'')+'</td>'+
-    '<td>'+(r.staff||'')+'</td></tr>';
+    '<td style="text-align:left;white-space:normal;max-width:100px;word-break:break-all">'+escapeHtmlText(r.notes||'')+'</td>'+
+    '<td>'+escapeHtmlText(r.staff||'')+'</td></tr>';
 }
 function _histAppendChunk(chunkSize){
   if(!_histState)return;
@@ -3605,7 +3605,7 @@ function renderCfg(){
       // 退去済には非表示・入院ボタン不要
       var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+r.id+'">'+hideLabel+'</button>';
       var hospBtn=isInactive?'':'<button class="bn bs bsm res-hosp" data-id="'+r.id+'" style="background:#ffebee;border-color:#c62828;color:#c62828">🏥 入院</button>';
-      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+escapeHtmlText(r.name)+'</b> <span style="font-size:12px;color:var(--g5)">'+escapeHtmlText(r.room)+'号室 / '+(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
+      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+escapeHtmlText(r.name)+'</b> <span style="font-size:12px;color:var(--g5)">'+escapeHtmlText(r.room)+'号室 / '+escapeHtmlText(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
     '<div style="margin-top:8px;font-size:12px;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
   // ボタンイベント
   $$('.res-edit').forEach(b=>b.addEventListener('click',function(){editRes(parseInt(this.dataset.id))}));
