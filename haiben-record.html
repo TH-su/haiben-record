@@ -29,6 +29,16 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
   position:sticky;top:0;z-index:100;box-shadow:0 3px 12px rgba(0,0,0,.15);
   display:flex;align-items:center;justify-content:space-between}
 .hdr h1{font-size:17px;font-weight:700}.hdr-sub{font-size:12px;opacity:.85;margin-top:2px}
+/* 入居者マスタから本人単位で開いた時の確認バー（誰を開いているかを常に見せる＝取り違え防止）。
+   ヘッダ直下に貼り付き、スクロールしても消えない（.hdr は sticky・自然高さ）。 */
+.frombar{position:sticky;top:56px;z-index:99;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 14px;
+  background:var(--warn-bg);border-bottom:1px solid var(--warn-tx);font-size:13px;color:var(--warn-tx)}
+.frombar b{font-size:15px}
+.frombar button{min-height:44px;padding:6px 14px;border:1px solid var(--warn-tx);border-radius:6px;
+  background:#fff;color:var(--warn-tx);font-size:13px;cursor:pointer}
+.frombar button:focus-visible{outline:2px solid var(--warn-tx);outline-offset:1px}
+@media print{.frombar{display:none !important}}
 /* アプリ間ジャンプ（care-schedule / daycare-roster と同じ見た目。共通部品が無いため各ファイルに持つ） */
 .hdr-btn{min-height:40px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);
   color:#fff;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
@@ -434,6 +444,9 @@ textarea{resize:vertical;min-height:76px}
     <div style="font-size:12px;opacity:.85" id="hTime"></div>
   </div>
 </header>
+
+<!-- 入居者マスタから本人単位で開いた時の確認バー（誰を開いているかを示す＝取り違え防止）。既定は非表示 -->
+<div class="frombar" id="fromMaster" role="status" aria-live="polite" style="display:none"></div>
 
 <!-- ローディングオーバーレイ -->
 <div class="ld-ov" id="ldOv"><div class="ld-ring"></div><div class="ld-msg" id="ldMsg">同期中...</div><div class="ld-hint">タップで閉じる</div></div>
@@ -4668,6 +4681,71 @@ function impJSON(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader()
   rd.readAsText(f);e.target.value=''}
 function dl(c,n,t){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:t}));a.download=n;a.click()}
 
+/* ═══════════ 入居者マスタからの本人単位リンク（?masterId=） ═══════════
+   ★URLの masterId は入居者マスタ側のID。このアプリの主キー（r.id・数値）とは別物なので、
+     必ず residents を走査して r.id に変換してから使う。
+   ★該当者が居なければ入居者を選ばないまま理由を出す。別人を選択したままにしない。
+   ★氏名はURLから受け取らない。表示するのはこのアプリが持つ正本の氏名だけ。
+   ★このアプリは接続URLの救済に location.hash を使うため、こちらは search を使う（衝突しない）。 */
+function hbReadMasterIdParam(){
+  var p=null;try{p=new URLSearchParams(location.search)}catch(e){return null}
+  if(!p||!p.get('masterId'))return null;
+  var id=String(p.get('masterId')).trim();
+  if(!/^[0-9A-Za-z_-]{1,32}$/.test(id)){showToast('⚠️ 指定された入居者を開けませんでした');return null}
+  return id;
+}
+function hbClearMasterIdParam(){try{if(location.search)history.replaceState(null,'',location.pathname)}catch(e){}}
+function hbSetFromMasterBar(state,name){
+  var bar=document.getElementById('fromMaster');if(!bar)return;
+  if(state==='off'){bar.style.display='none';bar.innerHTML='';return}
+  bar.innerHTML=(state==='ok')
+    ? '<span>入居者マスタから開いています：<b>'+escapeHtmlText(name||'')+'</b></span><button type="button" id="fromMasterClose">解除</button>'
+    : (state==='gone')
+    ? '<span><b>'+escapeHtmlText(name||'')+'</b>さんは退去済み等のため選択できません（入居者は未選択にしました）</span><button type="button" id="fromMasterClose">閉じる</button>'
+    : '<span>入居者マスタから開こうとしましたが、<b>この方は排泄ケア記録に登録されていません</b>（入居者は未選択にしました）</span><button type="button" id="fromMasterClose">閉じる</button>';
+  bar.style.display='flex';
+  var c=document.getElementById('fromMasterClose');
+  if(c)c.addEventListener('click',function(){hbDropMasterPending();hbSetFromMasterBar('off')});
+}
+/* 名簿がサーバ同期で後から揃う端末のための保留。
+   ★職員が入居者を選んだ／画面を切り替えたら破棄する。破棄しないと、同期完了時の再適用が
+     入力途中の選択を無言で差し替え、別人の記録として保存されてしまう。 */
+var hbMasterPending=null;
+function hbDropMasterPending(){hbMasterPending=null}
+function hbApplyMasterIdParam(isRetry){
+  var mid=isRetry?hbMasterPending:hbReadMasterIdParam();
+  if(!mid)return;
+  if(!isRetry)hbClearMasterIdParam();   // URLから即座に落とす（リロードで勝手に開き直さない）
+  var list=(typeof D!=='undefined'&&D&&D.residents)||[],hit=null;
+  for(var i=0;i<list.length;i++){
+    if(list[i].masterId!=null&&String(list[i].masterId)===String(mid)){hit=list[i];break}
+  }
+  if(!hit){
+    /* ★該当者が居ないのに前回の別人が選ばれたままだと、その人に記録してしまう。
+       選択を空へ戻し、職員に明示的に選び直させる。名簿待ちの可能性は保留に残す。 */
+    hbMasterPending=mid;
+    ci.rid=null; try{buildResSel()}catch(e){}
+    hbSetFromMasterBar('fail');return;
+  }
+  hbMasterPending=null;
+  if(hit.active===false){   // 退去済みは選択肢に出ないため、開いたことにしない
+    ci.rid=null; try{buildResSel()}catch(e){}
+    hbSetFromMasterBar('gone',hit.name);return;
+  }
+  /* ci.rid を先に入れてから選択肢を作る。buildResSel は排泄対象外でも
+     ci.rid の人だけは選択肢に残す作りなので、この順序でないと選べない。 */
+  ci.rid=hit.id;
+  buildResSel();
+  /* ★再適用（同期後）では画面を動かさない。showSc は setNow() で記録時刻を現在へ戻すため、
+     職員が入力中の画面を引き戻してしまう。 */
+  if(!isRetry)showSc('input');
+  /* 選択が本当にその方になったかを確認する。選択肢に出ない条件だと空のまま「開いています」に
+     なってしまうため。 */
+  var sel=document.getElementById('resSel');
+  if(sel&&String(sel.value)!==String(hit.id)){ci.rid=null;try{buildResSel()}catch(e){}hbSetFromMasterBar('gone',hit.name);return}
+  hbSetFromMasterBar('ok',hit.name);
+}
+
 /* ═══════════ INIT ═══════════ */
 function init(){
   load();
@@ -4713,7 +4791,7 @@ function init(){
   })});
 
   // 入居者プルダウン
-  $('resSel').addEventListener('change',function(){var v=this.value;ci.rid=v?parseInt(v):null;if(isNaN(ci.rid))ci.rid=null});
+  $('resSel').addEventListener('change',function(){hbDropMasterPending();var v=this.value;ci.rid=v?parseInt(v):null;if(isNaN(ci.rid))ci.rid=null});
 
   // 排泄種別（同じボタンを再クリックすると選択解除）
   $$('.type-btn').forEach(b=>b.addEventListener('click',function(){
@@ -5210,6 +5288,9 @@ function init(){
   /* 前回見ていた画面へ戻す（apiUrl 読込後＝設定画面を復元しても接続先が正しく出る）。
      ここで例外が出ても以降のAPI保存・同期・解除の配線を飛ばさないよう二重に包む */
   try{restoreSc()}catch(e){console.warn('[hbcr] 画面復元をスキップ:',e)}
+  /* ★画面復元の「後」に呼ぶ＝入居者マスタからの指定を優先させる。
+     ここで失敗しても以降の同期・配線を止めない。 */
+  try{hbApplyMasterIdParam()}catch(e){console.warn('[hbcr] 本人単位リンクをスキップ:',e)}
 
   if(apiUrl){
     apiSetStatus('sy');
@@ -5219,6 +5300,10 @@ function init(){
         var sc=document.querySelector('.scr.on');
         if(sc&&sc.id==='sc-board')renderBoard();
         if(sc&&sc.id==='sc-tl')renderTL();
+        /* 名簿がサーバ同期で初めて揃う端末では、起動時点では該当者が見つからない。
+           ★初回に見つからなかった場合だけ、しかも職員がまだ入居者を選んでいない場合だけ再試行する。
+             無条件に再適用すると、入力途中の選択を差し替えて別人の記録にしてしまう。 */
+        try{ if(hbMasterPending) hbApplyMasterIdParam(true); }catch(e){}
         showToast('✅ APIと同期しました')
       }
     })}
