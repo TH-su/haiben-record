@@ -2524,7 +2524,7 @@ function openSchedModal(){
   var sel=$('mSchRes');var act=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name})
     .sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
-    act.map(function(r){return'<option value="'+r.id+'">'+r.room+'　'+r.name+'</option>'}).join('');
+    act.map(function(r){return'<option value="'+escapeHtmlText(r.id)+'">'+escapeHtmlText(r.room)+'　'+escapeHtmlText(r.name)+'</option>'}).join('');
   // 入力中の入居者をデフォルト選択
   var preset=$('resSel')?$('resSel').value:'';if(preset)sel.value=preset;
   $('mSchTime').value='';
@@ -2677,7 +2677,7 @@ function resSortAiu(a,b){return resSortKey(a).localeCompare(resSortKey(b),'ja')}
 function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(isExcretionTarget(r)||(ci&&ci.rid===r.id))})
   .sort(resSortAiu);const cv=ci.rid;
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
-    a.map(r=>'<option value="'+r.id+'"'+(cv===r.id?' selected':'')+'>'+r.name+'　'+r.room+'号室</option>').join('');
+    a.map(r=>'<option value="'+escapeHtmlText(r.id)+'"'+(cv===r.id?' selected':'')+'>'+escapeHtmlText(r.name)+'　'+escapeHtmlText(r.room)+'号室</option>').join('');
   if(ci.rid)sel.value=ci.rid}
 
 /* ═══════════ INPUT ═══════════ */
@@ -2954,7 +2954,8 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     const dLax=dAll.filter(function(r){return r.type==='laxative'})
       .sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
     var laxHtml=dLax.length?'<div style="margin-top:4px">'+dLax.map(function(r){
-      return'<span class="lax-mk" title="'+(r.staff||'')+'">💊 '+r.time+' '+(r.medicine||'')+(r.tablets?' '+r.tablets+'錠':'')+'</span>'
+      /* 職員名・薬剤名は自由入力。属性・本文とも必ずエスケープする（引用符を含むと属性が壊れる） */
+      return'<span class="lax-mk" title="'+escapeHtmlText(r.staff||'')+'">💊 '+escapeHtmlText(r.time||'')+' '+escapeHtmlText(r.medicine||'')+(r.tablets?' '+escapeHtmlText(r.tablets)+'錠':'')+'</span>'
     }).join(' ')+'</div>':'';
     // 経過時間下の日付差ラベル (例: -1, -2) ― 表示中日付と最終記録日の差
     // プラス値（未来の記録）は表示しない
@@ -2989,8 +2990,8 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
        入力可否は入院履歴（日時）が根拠のまま＝既存挙動を変えない。 */
     if(!hospMarker&&re.masterHosp===true&&date===today())hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>';
     return'<tr class="'+rc+'"'+(rowStyle?' style="'+rowStyle+'"':'')+'>'+
-      '<td><strong>'+re.room+'</strong></td>'+
-      '<td style="text-align:left;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+re.id+'">'+re.name+'</span>'+hospMarker+'</td>'+
+      '<td><strong>'+escapeHtmlText(re.room)+'</strong></td>'+
+      '<td style="text-align:left;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+hospMarker+'</td>'+
       '<td style="white-space:nowrap">'+(lu?'<b>'+fmtLast(lu,date)+'</b>':'<span class="nr">未記録</span>')+'</td>'+
       '<td><span class="eb '+ub+'">'+fmtEl(uh)+'</span>'+uOffHtml+'</td>'+
       '<td>'+du.length+'回'+(tU>0?'<div style="font-size:10px;color:var(--u)">'+tU+'ml</div>':'')+(tU===0&&du.some(r=>typeof r.urineAmt==='string'&&r.urineAmt)?'<div style="font-size:10px;color:var(--u)">'+du.filter(r=>typeof r.urineAmt==='string'&&r.urineAmt).map(r=>r.urineAmt).join('・')+'</div>':'')+'</td>'+
@@ -3113,9 +3114,9 @@ function renderTL(){const date=$('tlDate').value||today();
     var isFullHospTL=isFullHospDay(re,date);
     var nmCellStyle=isFullHospTL?' style="background:#9e9e9e;color:#424242"':'';
     var nmContent=isFullHospTL
-      ?'<span style="color:#424242">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'" style="color:#212121;text-decoration-color:#212121">'+re.name+'</span>'+fdBtn+
+      ?'<span style="color:#424242">'+escapeHtmlText(re.room)+'</span><br><span class="tl-nm-link" data-hist="'+escapeHtmlText(re.id)+'" style="color:#212121;text-decoration-color:#212121">'+escapeHtmlText(re.name)+'</span>'+fdBtn+
         '<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>'
-      :'<span style="color:var(--g5)">'+re.room+'</span><br><span class="tl-nm-link" data-hist="'+re.id+'">'+re.name+'</span>'+fdBtn+
+      :'<span style="color:var(--g5)">'+escapeHtmlText(re.room)+'</span><br><span class="tl-nm-link" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+fdBtn+
         // 入居者マスタ側だけで入院中の人にもバッジを出す（今日の表示のみ。灰色化・入力可否は従来どおり履歴が根拠）
         ((re.masterHosp===true&&date===today())?'<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>':'')+offHtml;
     return'<tr><td class="tl-nm"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
@@ -3478,7 +3479,7 @@ function openLaxModal(presetRid,editId){
   var a=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name})
     .sort(resSortAiu);
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
-    a.map(function(r){return'<option value="'+r.id+'">'+r.name+'　'+r.room+'号室</option>'}).join('');
+    a.map(function(r){return'<option value="'+escapeHtmlText(r.id)+'">'+escapeHtmlText(r.name)+'　'+escapeHtmlText(r.room)+'号室</option>'}).join('');
   // 初期値
   var nowISO=nowLocalDTStr();
   // 未来時刻を入力できないように max をセット
@@ -3604,7 +3605,7 @@ function renderCfg(){
       // 退去済には非表示・入院ボタン不要
       var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+r.id+'">'+hideLabel+'</button>';
       var hospBtn=isInactive?'':'<button class="bn bs bsm res-hosp" data-id="'+r.id+'" style="background:#ffebee;border-color:#c62828;color:#c62828">🏥 入院</button>';
-      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+r.name+'</b> <span style="font-size:12px;color:var(--g5)">'+r.room+'号室 / '+(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
+      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+escapeHtmlText(r.name)+'</b> <span style="font-size:12px;color:var(--g5)">'+escapeHtmlText(r.room)+'号室 / '+(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
     '<div style="margin-top:8px;font-size:12px;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
   // ボタンイベント
   $$('.res-edit').forEach(b=>b.addEventListener('click',function(){editRes(parseInt(this.dataset.id))}));
