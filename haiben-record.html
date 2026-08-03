@@ -922,6 +922,13 @@ textarea{resize:vertical;min-height:76px}
       <input type="datetime-local" id="mHospDischarge" style="width:100%;padding:8px;border:1px solid var(--g3);border-radius:6px"></div>
     <button class="bn bp bsm" id="mHospAdd" style="width:100%;background:#c62828">🏥 入院を登録</button>
   </div>
+  <!-- 入院状態の正本は入居者マスタである、と画面で明示する（2026-08-03・入口一本化のA案）。
+       現場が最初に気づくため登録はここでも行えるが、値の正は常に入居者マスタ側にある。 -->
+  <div style="font-size:11px;color:#0d47a1;line-height:1.6;background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;padding:8px 10px;margin-bottom:8px">
+    🏠 <b>入院・退院の正本は「入居者マスタ」です。</b>ここで登録した内容は入居者マスタへ自動送信され、
+    通所利用表・週間計画・体重管理にも共通で反映されます。<br>
+    ⚠️ 他アプリと食い違って見える時は<b>入居者マスタの表示が正</b>です（この画面ではなく入居者マスタで直してください）。
+  </div>
   <div style="font-size:11px;color:var(--g6);line-height:1.6;background:#f5f5f5;border-radius:6px;padding:8px 10px">
     💡 入院日時を登録すると一覧・時系列に <span style="background:#c62828;color:#fff;padding:1px 6px;border-radius:3px;font-weight:700">入院</span> と表示され、その期間中の記録入力ができなくなります。<br>
     💡 退院日時を登録すると <span style="background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-weight:700">退院</span> マーカーが表示され、入力が再開できます。<br>
@@ -4633,7 +4640,9 @@ function renderHospList(r){
         renderHospList(r);renderCfg();
         if(typeof renderBoard==='function')renderBoard();
         if(typeof renderTL==='function')renderTL();
-        showToast('✅ 退院日時を登録しました');
+        showToast((r.masterId!=null&&r.masterId!=='')
+          ? '✅ 退院日時を登録し、入居者マスタへ送信しました（他アプリにも反映されます）'
+          : '✅ 退院日時を登録しました（⚠️ 入居者マスタ未連携のため、この端末のみ）');
       });
     });
   });
@@ -5226,7 +5235,11 @@ function init(){
     renderHospList(r);renderCfg();
     if(typeof renderBoard==='function')renderBoard();
     if(typeof renderTL==='function')renderTL();
-    showToast('✅ 入院を登録しました');
+    /* 正本（入居者マスタ）へ届いたかを文言で分ける（2026-08-03・A案）。
+       マスタ未連携の入居者はこの端末だけの記録になるため、その旨をはっきり伝える。 */
+    showToast((r.masterId!=null&&r.masterId!=='')
+      ? '✅ 入院を登録し、入居者マスタへ送信しました（他アプリにも反映されます）'
+      : '✅ 入院を登録しました（⚠️ 入居者マスタ未連携のため、この端末のみ）');
     // 新規入力欄をクリア
     $('mHospAdmit').value='';$('mHospDischarge').value='';
   });
