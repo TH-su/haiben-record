@@ -2075,6 +2075,23 @@ function _normName(s){return String(s==null?'':s).replace(/\s+/g,'').trim()}
    srcList … 名簿配列を外から渡す（サーバー代理取得した名簿を適用する経路で使う）
    opts.noAdd … 未登録の入居者を新規追加しない。サーバー由来の名簿は targetApps を持たない
                 （master.gs の getRosterSafe が返さない）ため、これが無いと排泄ケア対象外の方まで取り込まれる。 */
+/* 名簿の鮮度（ミリ秒・取れなければ0）。proxy=true は代理名簿（サーバー直取得）／false は共有名簿。 */
+function _rosterFreshness(proxy){
+  try{
+    if(proxy){
+      var t=Number(localStorage.getItem(MASTER_ROSTER_TS_KEY)||0);
+      if(t>0)return t;
+      var pr=localStorage.getItem(MASTER_ROSTER_KEY);
+      if(!pr)return 0;
+      var pd=JSON.parse(pr);var pt=Date.parse(pd&&pd.updatedAt);
+      return pt>0?pt:0;
+    }
+    var raw=localStorage.getItem(SU_COMMON_KEY);
+    if(!raw)return 0;
+    var d=JSON.parse(raw);var ct=Date.parse(d&&d.updatedAt);
+    return ct>0?ct:0;
+  }catch(e){return 0}
+}
 function mergeCommonResidents(srcList, opts){
   opts=opts||{};
   var list;
@@ -2086,6 +2103,15 @@ function mergeCommonResidents(srcList, opts){
     list=(data&&Array.isArray(data.residents))?data.residents:null;
   }
   if(!list||!list.length)return false;
+  /* 入院状態だけは「新しい方の名簿」を採用する（2026-08-03・実障害の対策）。
+     共有名簿 su_residents_common は【入居者マスタをその端末で開いた時にしか更新されない】ため、
+     サーバーから直接取る代理名簿より古いことがある。古い側で masterHosp を上書きすると、
+     現に入院中の方が「入院していない」に戻り、入院表示と入力ロックが外れる（実際に発生）。
+     在籍・居室等の他項目は従来どおり（マスタ常勝）＝今回の変更は入院状態のみに限定する。
+     どちらかの時刻が取れない時は上書きする＝判断材料が無ければ従来の挙動を変えない。 */
+  var _isProxy=Array.isArray(srcList);
+  var _thisTs=_rosterFreshness(_isProxy), _otherTs=_rosterFreshness(!_isProxy);
+  var _hospStale=(_thisTs>0&&_otherTs>0&&_thisTs<_otherTs);
   if(!Array.isArray(D.residents))D.residents=[];
   var byMid={},byName={};
   D.residents.forEach(function(r){
@@ -2130,7 +2156,7 @@ function mergeCommonResidents(srcList, opts){
       }
       /* C6/C9: 入院状態はマスタの写し（master 常勝）。当アプリでは masterHosp を書き換えない。
          キー自体が無い名簿（旧マスタ・旧GAS）では触らない＝「値を持たない」と「false の明示」を区別する。 */
-      if(Object.prototype.hasOwnProperty.call(c,'hospitalized')){
+      if(Object.prototype.hasOwnProperty.call(c,'hospitalized')&&!_hospStale){
         var hz=!!c.hospitalized;
         if(tgt.masterHosp!==hz){tgt.masterHosp=hz;changed++;}
       }
@@ -2142,7 +2168,7 @@ function mergeCommonResidents(srcList, opts){
       var nr={id:nextResId(),name:c.name||'',room:c.room,gender:g,
         yomi:c.kana||'',careLevel:c.careLevel||'',active:true,masterId:c.masterId,_fromMaster:true,
         targetExcretion:(tExc===undefined?true:tExc)};
-      if(Object.prototype.hasOwnProperty.call(c,'hospitalized'))nr.masterHosp=!!c.hospitalized;
+      if(Object.prototype.hasOwnProperty.call(c,'hospitalized')&&!_hospStale)nr.masterHosp=!!c.hospitalized;
       D.residents.push(nr);
       byMid[String(c.masterId)]=nr;
       changed++;
