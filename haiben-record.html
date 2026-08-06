@@ -781,6 +781,20 @@ textarea{resize:vertical;min-height:76px}
     </div>
     <div id="resList"></div>
   </div>
+  <!-- ══ マスタ連携の点検（2026-08-06 追加） ══
+       入居者マスタとの紐づけ（masterId）は端末ローカルにしか無いため、端末データ消去の後などに
+       別人を指したままになりうる。その状態は「氏名は正しいのに居室・フリガナだけ別人」に見え、
+       居室・フリガナは編集画面で読み取り専用なので現場では直せない。ここで点検と修復を行う。
+       ★このカードは紐づけのある入居者が1人も居ない端末では出さない（現場の画面を増やさない）。 -->
+  <div class="cd" id="cdLinkAudit" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h3 style="font-size:13px;font-weight:700;color:var(--g7)">🔗 マスタ連携の点検</h3>
+      <button class="bn bs bsm" id="btnLinkRecheck">🔄 点検</button>
+    </div>
+    <div id="linkAuditSum" style="font-size:12.5px;color:var(--g7);line-height:1.7"></div>
+    <div id="linkAuditList" style="margin-top:8px"></div>
+    <div id="linkAuditActs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
+  </div>
   <div class="cd">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <h3 style="font-size:13px;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
@@ -1445,7 +1459,11 @@ async function syncFromAPI(showLoader,opts){
       if(r.id!=null)r.id=toNum(r.id);
       if(r.name!=null)r.name=String(r.name).trim();
       if(r.room!=null)r.room=String(r.room).trim();
-      if(r.active===undefined||r.active===null||r.active==='TRUE'||r.active===true)r.active=true;else r.active=false}});
+      if(r.active===undefined||r.active===null||r.active==='TRUE'||r.active===true)r.active=true;else r.active=false;
+      /* 将来サーバーが masterId 列を持った時に備える。空セルは「値なし」＝キーごと落として
+         ローカルの紐づけを温存する（multi-device-sync 原則4・null と空の区別）。 */
+      if(r.masterId==='')delete r.masterId;
+      _bumpResIdHw(r.id);}});   // サーバーで使われている id を高水位に取り込む（再採番衝突の防止）
     apiRec.forEach(function(r){if(r&&r.residentId!=null)r.residentId=toNum(r.residentId)});
     // マージ: API優先（サーバーが真実のソース）。同じIDはAPI側で上書き、ローカルのみのIDは保持（オフライン作成分）
     var localRes=Array.isArray(D.residents)?D.residents:[];
@@ -1457,7 +1475,15 @@ async function syncFromAPI(showLoader,opts){
     /* masterId / masterHosp は GAS の Residents シートに列が無く、サーバーからは返らない。
        ここで温存しないと同期のたびにマスタ連携の紐づけ（masterId）と入院状態の写し（masterHosp）が
        消え、退去・入院の鏡映（共通契約 C5/C6）が効かなくなる。 */
-    var clientOnly=['schedule','cfg','laxNote','hospitalizations','masterId','masterHosp'];
+    var clientOnly=['schedule','cfg','laxNote','hospitalizations'];
+    /* ★同一性を決める項目は別扱い（2026-08-06）
+       masterId / masterHosp / midAck は「この行が入居者マスタの誰か」を決める値。
+       id が一致するだけで無条件に引き継ぐと、端末データ消去後の再採番で id が入れ替わった時に
+       別人の紐づけが移植され、以後マスタ由来の居室・フリガナが別人のもので上書きされる
+       （＝氏名だけ正しく他が混線する事故の供給源）。氏名が一致する時だけ引き継ぐ。
+       業務データ側（schedule/cfg/laxNote/hospitalizations）は従来どおり無条件に温存する
+       ＝旧GAS応答で予定が消える経路を新たに作らない（原則4・最小変更）。 */
+    var clientOnlyIdent=['masterId','masterHosp','midAck'];
     /* schedule 移行の判定材料は「マージ前の生レスポンス」で取る（2026-07-25）。
        下の clientOnly コピーは apiRes の要素そのもの（コピーではない）を書き換えるため、
        マージ後に apiRes を見るとローカルの予定が混ざり、「サーバーが予定を持っている」と
@@ -1477,7 +1503,14 @@ async function syncFromAPI(showLoader,opts){
     // APIを先に入れる（勝者）
     apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){
       var lr=localResById[k];
-      if(lr){clientOnly.forEach(function(f){if(r[f]==null&&lr[f]!=null)r[f]=lr[f]})}
+      if(lr){
+        clientOnly.forEach(function(f){if(r[f]==null&&lr[f]!=null)r[f]=lr[f]});
+        if(_normNameX(r.name)===_normNameX(lr.name)){
+          clientOnlyIdent.forEach(function(f){if(r[f]==null&&lr[f]!=null)r[f]=lr[f]});
+        }else if(lr.masterId!=null&&lr.masterId!==''){
+          _linkDropN++;   // 氏名が違うので紐づけを引き継がなかった（点検パネルに件数で出す）
+        }
+      }
       mergedRes.push(r);seenResId[k]=true}}});
     // ローカルのみのID（未送信・サンプルデータ以外）を追加
     localRes.forEach(function(r){if(r&&r.id!=null&&!r._seed){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
@@ -1934,9 +1967,24 @@ function cleanData(){
   // 保持期間より古い記録をローカルからのみ整理（サーバーは全量保持）
   pruneOldLocalRecords();
 }
+/* ── 入居者idの高水位（2026-08-06 追加） ──
+   localStorage に「これまで見た入居者idの最大値」だけを数値1個で持つ。
+   ★自動ロック（autoLockWipe）の消去対象には【入れない】。氏名・記録・名簿を一切含まない
+     単なる最大値であり、消すと端末データ消去のたびに採番が 1 から始まってサーバーの
+     若い id とぶつかる（＝紐づけが別人へ移る混線の再発経路）。
+     個人情報の保全という消去の趣旨を損なわずに、衝突だけを防ぐための例外。 */
+var RES_ID_HW_KEY='hbcr_res_id_hw';
+function _resIdHw(){try{var v=Number(localStorage.getItem(RES_ID_HW_KEY)||0);return(isFinite(v)&&v>0)?v:0}catch(e){return 0}}
+function _bumpResIdHw(n){
+  var v=toNum(n);if(v===null||!(v>0))return;
+  try{if(v>_resIdHw())localStorage.setItem(RES_ID_HW_KEY,String(v))}catch(e){}
+}
 function nextResId(){
   var ids=D.residents.map(function(r){return toNum(r.id)}).filter(function(v){return v!==null});
-  return ids.length?Math.max.apply(null,ids)+1:1}
+  var mx=ids.length?Math.max.apply(null,ids):0;
+  var next=Math.max(mx,_resIdHw())+1;
+  _bumpResIdHw(next);
+  return next}
 function load(){
   var s=null;
   // Phase 1 A-2: _storageGet が圧縮/非圧縮を自動判別（旧バージョン互換）
@@ -1955,12 +2003,19 @@ function load(){
     }
   }else{
     isNew=true;
-    D={residents:[
-    {id:1,name:'見本 はな（サンプル）',room:'101',gender:'女性',active:true,_seed:true},
-    {id:2,name:'見本 じろう（サンプル）',room:'102',gender:'男性',active:true,_seed:true},
-    {id:3,name:'見本 さちこ（サンプル）',room:'103',gender:'女性',active:true,_seed:true},
-    {id:4,name:'見本 いちろう（サンプル）',room:'104',gender:'男性',active:true,_seed:true},
-    {id:5,name:'見本 せつこ（サンプル）',room:'105',gender:'女性',active:true,_seed:true}],records:[],cfg:null}
+    /* ★サンプル5件は「まだサーバーに繋いでいない端末」だけに出す（2026-08-06）
+       接続URLが保存済みの端末で hbcr_v2 が無い＝自動ロックの消去・ブラウザのデータ消去の直後。
+       ここで id=1〜5 を占有すると、続く起動時マージのローカル採番がサーバーの若い id と
+       ぶつかり、同期の突合で別人の紐づけ（masterId）が移植される（混線の発生源）。
+       空で始めれば、直後の同期がサーバーの正しい id・氏名・居室をそのまま持ってくる。 */
+    D=_hasApiUrlStored()
+      ?{residents:[],records:[],cfg:null}
+      :{residents:[
+        {id:1,name:'見本 はな（サンプル）',room:'101',gender:'女性',active:true,_seed:true},
+        {id:2,name:'見本 じろう（サンプル）',room:'102',gender:'男性',active:true,_seed:true},
+        {id:3,name:'見本 さちこ（サンプル）',room:'103',gender:'女性',active:true,_seed:true},
+        {id:4,name:'見本 いちろう（サンプル）',room:'104',gender:'男性',active:true,_seed:true},
+        {id:5,name:'見本 せつこ（サンプル）',room:'105',gender:'女性',active:true,_seed:true}],records:[],cfg:null};
   }
   if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
   if(!Number(D.cfg.localKeepDays))D.cfg.localKeepDays=180; // 端末保持期間の既定（日）
@@ -2099,6 +2154,107 @@ function _rosterFreshness(proxy){
     return ct>0?ct:0;
   }catch(e){return 0}
 }
+
+/* ══════════ 入居者マスタとの紐づけ検証（2026-08-06 追加） ══════════
+   ★何のための仕組みか
+     masterId は Residents シートに列が無い【端末ローカル値】で、同期時に clientOnly として
+     温存されるだけ。そのため「端末データ消去 → 起動時に共有名簿をローカル採番で丸ごと登録 →
+     直後の同期でサーバー行と id を奪い合う」の順で、氏名はサーバーの正しい値のまま
+     masterId だけが別人へ移る事故が起きうる。masterId が別人を指すと
+     mergeCommonResidents が別人の居室・フリガナ・介護度を毎分書き込み続け、
+     氏名だけ正しく他が混線した状態が固定される（サーバーに列が無いので自己修復しない）。
+   ★対策の芯は1つ
+     「masterId で引いた名簿行の氏名が、当アプリの氏名と一致する時だけ使う」。
+     masterId は氏名×名簿から毎回導出し直せる派生値として扱い、貯めた値を無条件に信じない。
+   ★_normNameX は【比較専用】。表示にも保存にも絶対に使わない
+     （dev-principles 原則6・固有名詞を勝手に「修正」しない）。 */
+/* 氏名の異体字（人名で実際に揺れるものだけ）。比較の時だけ左辺を右辺へ寄せる。 */
+var _NAMEX_MAP={'髙':'高','﨑':'崎','濵':'浜','濱':'浜','邊':'辺','邉':'辺','齋':'斎','齊':'斎',
+  '澤':'沢','德':'徳','眞':'真','嶋':'島','嶌':'島','冨':'富','栁':'柳','桒':'桑','郞':'郎',
+  '曾':'曽','舘':'館','淵':'渕','籔':'薮','藪':'薮','萬':'万','國':'国','榮':'栄','壽':'寿'};
+function _normNameX(s){
+  var t=_normName(s);
+  /* NFKC で全角英数・半角カナ・合成文字を吸収する（非対応環境では素通り＝従来比較のまま） */
+  try{ if(t&&typeof t.normalize==='function') t=t.normalize('NFKC'); }catch(e){}
+  t=t.replace(/[ヶヵ]/g,'ケ').replace(/[・･,、.．]/g,'');
+  var out='';
+  for(var i=0;i<t.length;i++){var c=t.charAt(i);out+=(_NAMEX_MAP[c]||c)}
+  return out;
+}
+/* 名簿の索引。代理名簿（サーバー直取得・新しい）を先に入れ、共有名簿で補完する。
+   ★どちらも読めなければ null＝「判定不能」。呼び出し側は null のとき何も書き換えない。
+   ★byName / nameCount は【在籍者のみ】で作る（退去済の同名行で一意判定を潰さないため）。 */
+function buildRosterIndex(){
+  var rows=[],seen={};
+  var proxy=null;try{proxy=(typeof loadStoredMasterRoster==='function')?loadStoredMasterRoster():null}catch(e){}
+  var common=null;
+  try{
+    var raw=localStorage.getItem(SU_COMMON_KEY);
+    if(raw){var d=JSON.parse(raw);if(d&&Array.isArray(d.residents))common=d.residents}
+  }catch(e){}
+  if(!proxy&&!common)return null;
+  function push(list){
+    if(!Array.isArray(list))return;
+    list.forEach(function(c){
+      if(!c||c.masterId==null||c.masterId==='')return;
+      var k=String(c.masterId);
+      if(seen[k])return;          // 先勝ち＝代理名簿（新しい方）を採る
+      seen[k]=true;rows.push(c);
+    });
+  }
+  push(proxy);push(common);
+  if(!rows.length)return null;
+  var byMid={},byName={},nameCount={};
+  rows.forEach(function(c){
+    byMid[String(c.masterId)]=c;
+    if(c.active===false)return;   // 在籍者だけで氏名索引を作る
+    var nx=_normNameX(c.name);
+    if(!nx)return;
+    nameCount[nx]=(nameCount[nx]||0)+1;
+    if(!byName[nx])byName[nx]=c;
+  });
+  return {byMid:byMid,byName:byName,nameCount:nameCount,size:rows.length,
+          freshAt:Math.max(_rosterFreshness(true),_rosterFreshness(false))};
+}
+/* 紐づけの判定（読み取りのみ・書き込み副作用なし＝原則9）
+     'none'     … masterId 未設定（ローカル管理の入居者）
+     'ok'       … masterId の名簿行が在り、氏名も一致（＝正常）
+     'mismatch' … masterId の名簿行は在るが氏名が別人（＝混線）
+     'unknown'  … masterId が名簿に無い（退去済・名簿が古い・名簿なし＝判定不能）
+   ★midAck（表記ゆれを人が確認済み）が立っている行は 'ok' として扱う。 */
+function checkResLink(r,idx){
+  if(!r)return 'none';
+  if(typeof isUserRes==='function'&&!isUserRes(r))return 'none';
+  if(r.masterId==null||r.masterId==='')return 'none';
+  if(!idx)return 'unknown';
+  var c=idx.byMid[String(r.masterId)];
+  if(!c)return 'unknown';
+  if(r.midAck===true)return 'ok';
+  var a=_normNameX(r.name),b=_normNameX(c.name);
+  if(!a||!b)return 'unknown';   // どちらかが空＝判定材料なし。mismatch に倒さない
+  return (a===b)?'ok':'mismatch';
+}
+/* 名簿1件と当アプリ1件の氏名が同一人物とみなせるか（merge の内側で使う軽量版） */
+function _midNameOk(tgt,c){
+  if(!tgt||!c)return false;
+  if(tgt.midAck===true)return true;   // 表記ゆれを人が確認済み
+  var a=_normNameX(tgt.name),b=_normNameX(c.name);
+  if(!a||!b)return true;              // 判定材料が無ければ従来動作を変えない
+  return a===b;
+}
+/* 診断カウンタ（画面表示用。個人情報は持たない） */
+var _linkFreezeN=0;   // 誤リンクを検出して適用を見送った件数（直近の merge）
+var _linkDropN=0;     // 同期時に氏名不一致で masterId の引き継ぎを止めた件数（累計）
+/* 接続URLが保存済みか（load() は apiUrl 代入より前に走るため、変数ではなく保存値を見る） */
+function _hasApiUrlStored(){
+  try{
+    if(localStorage.getItem(API_KEY))return true;
+    if(localStorage.getItem(API_KEY_BAK))return true;
+    if(localStorage.getItem(API_KEY_BAK2))return true;
+  }catch(e){}
+  return false;
+}
+
 function mergeCommonResidents(srcList, opts){
   opts=opts||{};
   var list;
@@ -2121,13 +2277,25 @@ function mergeCommonResidents(srcList, opts){
   var _hospStale=(_thisTs>0&&_otherTs>0&&_thisTs<_otherTs);
   if(!Array.isArray(D.residents))D.residents=[];
   var byMid={},byName={};
+  /* 氏名索引は比較用の正規化キー（_normNameX）で作る。在籍者を優先し、退去済は在籍者が
+     居ないときだけ採る（退去済の古い行に名簿を貼り付けないため）。 */
   D.residents.forEach(function(r){
     if(!isUserRes(r))return; // 職員（隠し入居者）には絶対に触れない
     if(r.masterId!=null)byMid[String(r.masterId)]=r;
-    var nm=_normName(r.name);if(nm&&!byName[nm])byName[nm]=r;
+    var nm=_normNameX(r.name);if(!nm)return;
+    var cur=byName[nm];
+    if(!cur||(cur.active===false&&r.active!==false))byName[nm]=r;
+  });
+  /* 名簿側の氏名件数（在籍者のみ）。氏名フォールバックは「一意のときだけ」許可する。 */
+  var listNameCnt={};
+  list.forEach(function(c){
+    if(!c||c.masterId==null||c.active===false)return;
+    var nx=_normNameX(c.name);if(!nx)return;
+    listNameCnt[nx]=(listNameCnt[nx]||0)+1;
   });
   var changed=0;
   var _leftN=0,_backN=0;   // C5 鏡映の件数（トーストは最後に1回だけ出す）
+  var _freezeN=0;          // 誤リンクを検出して適用を見送った件数
   list.forEach(function(c){
     if(!c||c.masterId==null)return;
     /* ── 在籍状態の鏡映（共通契約 C5・2026-08-01 追加） ──
@@ -2136,6 +2304,12 @@ function mergeCommonResidents(srcList, opts){
        ★ 対象は masterId で紐づく入居者のみ。ローカル限定の入居者（masterId なし）は従来どおり手動管理
        ★ active が false 以外（true/未定義/不正値）は在籍扱い＝「消えるより残る」側に倒す */
     var tgt=byMid[String(c.masterId)];
+    /* ★誤リンクの遮断（2026-08-06）
+       masterId は一致しているのに氏名が別人＝端末に残った紐づけが壊れている。
+       この行には【在籍鏡映も入院鏡映も居室・フリガナ・介護度の更新も一切適用しない】。
+       ここで凍結せずに下の氏名フォールバックへ落とすと、別人の行を書き換える経路が残る。
+       凍結したことは設定画面の「マスタ連携の点検」に件数で出す（無言で止めない）。 */
+    if(tgt&&!_midNameOk(tgt,c)){_freezeN++;return}
     if(c.active===false){
       if(tgt&&tgt.active!==false){
         tgt.active=false;changed++;_leftN++;
@@ -2149,9 +2323,19 @@ function mergeCommonResidents(srcList, opts){
     // 排泄記録の対象判定：targetApps があり 'excretion' を含まなければ対象外(false)。
     // targetApps 自体が無ければ undefined（＝従来どおり表示の no-op 扱い）。
     var tExc=Array.isArray(c.targetApps)?(c.targetApps.indexOf('excretion')>=0):undefined;
-    if(!tgt){var nm=_normName(c.name);if(nm)tgt=byName[nm];}
+    /* ★氏名フォールバックは条件付き（2026-08-06）
+       ①名簿の在籍者にその氏名が【ちょうど1人】しか居ない（同姓同名・旧姓の二重登録で貼り付かない）
+       ②当アプリ側の相手が【まだ未連携】（別の masterId が付いている行に上書きしない）
+       ①②のどちらかを満たさなければ紐づけない＝「間違って結ぶ」より「結ばない」を選ぶ。 */
+    if(!tgt){
+      var nm=_normNameX(c.name);
+      if(nm&&listNameCnt[nm]===1){
+        var cand=byName[nm];
+        if(cand&&(cand.masterId==null||cand.masterId===''))tgt=cand;
+      }
+    }
     if(tgt){
-      if(tgt.masterId==null){tgt.masterId=c.masterId;byMid[String(c.masterId)]=tgt;changed++;}
+      if(tgt.masterId==null||tgt.masterId===''){tgt.masterId=c.masterId;byMid[String(c.masterId)]=tgt;changed++;}
       if(c.room&&tgt.room!==c.room){tgt.room=c.room;changed++;}
       if(c.careLevel&&tgt.careLevel!==c.careLevel){tgt.careLevel=c.careLevel;changed++;}
       if(c.kana&&tgt.yomi!==c.kana){tgt.yomi=c.kana;changed++;}
@@ -2181,6 +2365,10 @@ function mergeCommonResidents(srcList, opts){
       changed++;
     }
   });
+  /* 凍結件数は「この名簿での判定結果」なので毎回入れ替える（累積しない）。
+     0 件になったら点検パネルの警告も自動で消える＝直ったことが画面で分かる。 */
+  _linkFreezeN=_freezeN;
+  _invalidateLinkIdx();   // 名簿・紐づけが動いた可能性があるので判定索引を作り直させる
   if(changed){_recIdx=null;save();}
   // 在籍状態を自動で切り替えたことは黙って行わず、1回のトーストでまとめて知らせる（氏名は出さない）
   if((_leftN||_backN)&&typeof showToast==='function'){
@@ -2210,10 +2398,12 @@ function loadStoredMasterRoster(){
     var d=JSON.parse(raw);return (d&&Array.isArray(d.residents)&&d.residents.length)?d.residents:null;
   }catch(e){return null}
 }
-async function syncMasterRoster(){
+/* force=true は「マスタ連携の点検」からの手動実行専用。C8 スロットルだけを飛ばす
+   （人が押した1回に対して古い名簿で判断させないため）。定期ポーリングからは渡さない。 */
+async function syncMasterRoster(force){
   if(!apiUrl)return false;
   // C8 スロットル：前回成功から50秒以内はスキップ（時刻が未来にずれている端末は取り直す）
-  try{
+  if(!force)try{
     var _lastTs=Number(localStorage.getItem(MASTER_ROSTER_TS_KEY)||0);
     var _now=Date.now();
     if(_lastTs>0&&_now>=_lastTs&&(_now-_lastTs)<MASTER_ROSTER_MIN_INTERVAL_MS)return false;
@@ -2229,6 +2419,7 @@ async function syncMasterRoster(){
     try{localStorage.setItem(MASTER_ROSTER_TS_KEY,String(Date.now()))}catch(e){}   // 取得成功の時刻（C8）
     if(!j.roster.length)return false;
     try{localStorage.setItem(MASTER_ROSTER_KEY,JSON.stringify({v:1,updatedAt:new Date().toISOString(),residents:j.roster}))}catch(e){}
+    _invalidateLinkIdx();   // 新しい名簿が入った＝紐づけ判定を作り直す
     var changed=mergeCommonResidents(j.roster,{noAdd:true});
     if(changed){
       if(typeof buildResSel==='function')buildResSel();
@@ -2385,9 +2576,21 @@ function isCurrentlyHospitalized(resident){
    ローカルの入院履歴（日時つき）は従来どおり保持し、期間判定・時間凍結もこれまで通り履歴で行う。 */
 function isHospNow(resident){
   if(!resident)return false;
-  if(resident.masterHosp===true)return true;
+  /* ★紐づけが別人を指している行では masterHosp（マスタの写し）を信用しない（2026-08-06）。
+     別人の入院中フラグでこの方の入力がロックされる／入院バッジが出るのを防ぐ。
+     ローカルの入院履歴による判定は従来どおり効かせる（現場が自分で登録した事実は残す）。 */
+  if(resident.masterHosp===true&&_linkStateOf(resident)!=='mismatch')return true;
   return isCurrentlyHospitalized(resident);
 }
+/* 紐づけ判定のキャッシュ付きラッパ（描画ループから何度も呼ばれるため索引を作り置きする）。
+   索引は名簿の再取得・修復のたびに _invalidateLinkIdx() で捨てる。 */
+var _linkIdxCache=null;
+function _linkIdx(){
+  if(_linkIdxCache===null)_linkIdxCache=buildRosterIndex()||false;
+  return _linkIdxCache||null;
+}
+function _invalidateLinkIdx(){_linkIdxCache=null}
+function _linkStateOf(r){return checkResLink(r,_linkIdx())}
 /* 入院状態を入居者マスタへ併送する（masterId で紐づく入居者のみ）。
    apiPush 経由のため、通信エラー時は既存の未送信キュー（hbcr_pq）に退避されて後で再送される。
    旧GAS（setMasterState 未対応）では 'unknown action' が返るのでキューに残さず破棄する
@@ -2399,6 +2602,14 @@ function isHospNow(resident){
 function pushMasterHospState(r,prevHosp){
   if(!r||r.masterId==null||r.masterId==='')return;
   if(typeof isUserRes==='function'&&!isUserRes(r))return;   // 職員（隠し入居者）は対象外
+  /* ★紐づけが別人を指している間は入居者マスタへ書かない（2026-08-06）。
+     ここは当アプリから他アプリへ出る唯一の書き込み経路で、誤った masterId のまま送ると
+     別人のマスタ行に「入院中」が立ち、共有名簿を読む全アプリへ伝播する。
+     設定画面の「マスタ連携の点検」で修復するまで送信を止める（記録・履歴は通常どおり残る）。 */
+  if(_linkStateOf(r)==='mismatch'){
+    try{showToast('⚠️ この方の入居者マスタとの紐づけがずれています。設定→マスタ連携の点検で修復してください（入院状態はマスタへ送っていません）')}catch(e){}
+    return;
+  }
   if(typeof apiPush!=='function')return;
   var nowHosp=isCurrentlyHospitalized(r);
   if(typeof prevHosp==='boolean'&&prevHosp===nowHosp)return;   // 現在の入院状態が変わらない後追い編集は併送しない
@@ -3655,6 +3866,233 @@ function renderCfg(){
   if($('cfgApi'))$('cfgApi').value=apiUrl||'';
   if($('apiStatus')&&apiUrl)$('apiStatus').textContent='接続URL: '+apiUrl.slice(0,60)+'...';
   renderStaffList();
+  if(typeof renderLinkAudit==='function')renderLinkAudit();
+}
+
+/* ══════════════════════════════════════════════════════════
+   マスタ連携の点検・修復（2026-08-06 追加）
+   ──────────────────────────────────────────────────────────
+   何を直すか: masterId（入居者マスタとの紐づけ番号）が別人を指している行。
+     この状態だと mergeCommonResidents が別人の居室・フリガナ・介護度を書き込み続け、
+     「氏名は正しいのに他が混線」して見える。居室・フリガナは編集画面で読み取り専用なので
+     現場では直せない。ここで検出して張り直す。
+   絶対に触らないもの: 氏名(name)・入居者id(id)・記録(D.records)・排泄予定(schedule)・
+     入院履歴(hospitalizations)・職員の隠し行。
+   ══════════════════════════════════════════════════════════ */
+var LINK_BAK_KEY='hbcr_link_bak';          // 修復直前のフルバックアップ（氏名・記録を含む）
+var LINK_BAK_TTL_MS=7*24*3600*1000;        // 7日で自動失効（端末に個人情報を残し続けない）
+
+/* 判定だけを行う（書き込み副作用なし）。戻り値の items には DOM も文字列連結も含めない。 */
+function auditResLinks(){
+  var idx=buildRosterIndex();
+  var rows=(Array.isArray(D.residents)?D.residents:[])
+    .filter(isValidRes).filter(isUserRes)
+    .filter(function(r){return r.active!==false});
+  var out={idx:idx,total:rows.length,ok:0,none:0,items:[],fixable:0,manual:0};
+  rows.forEach(function(r){
+    var st=checkResLink(r,idx);
+    if(st==='ok'){out.ok++;return}
+    if(st==='none'){out.none++;return}
+    /* mismatch＝別人を指している／unknown＝指し先が名簿に無い（マスタで消された・名簿が古い）。
+       どちらも「今の紐づけは使えない」状態なので同じ扱いにする。名簿そのものが無い場合は
+       idx===null で全件 unknown になるため、その時は1件も出さない（判定不能で騒がない）。 */
+    if(!idx)return;
+    var nx=_normNameX(r.name);
+    var cand=(nx&&idx.nameCount[nx]===1)?idx.byName[nx]:null;
+    if(cand&&String(cand.masterId)===String(r.masterId))cand=null;   // 同じ相手なら直す意味がない
+    if(cand)out.fixable++;else out.manual++;
+    out.items.push({r:r,kind:st,linked:idx.byMid[String(r.masterId)]||null,cand:cand});
+  });
+  return out;
+}
+
+/* 画面へ反映（読み取り専用）。名簿が無い端末・紐づけが1件も無い端末ではカードごと隠す。 */
+function renderLinkAudit(){
+  var card=$('cdLinkAudit');if(!card)return;
+  var a=auditResLinks();
+  var hasAnyLink=(a.ok+a.items.length)>0;
+  if(!hasAnyLink&&!_linkFreezeN&&!_linkDropN){card.style.display='none';return}
+  card.style.display='';
+  var fresh=(a.idx&&a.idx.freshAt)?new Date(a.idx.freshAt).toLocaleString('ja-JP'):'—';
+  var sum='在籍 '+a.total+'名 ／ 正常 '+a.ok+' ／ <b style="color:'+(a.items.length?'#c62828':'var(--g7)')+'">要修復 '+a.items.length+'</b> ／ 未連携 '+a.none+'<br>'
+        +'<span style="font-size:11.5px">名簿の取得: '+escapeHtmlText(fresh)+(a.idx?('（'+a.idx.size+'名）'):'（取得できていません）')+'</span>';
+  if(_linkFreezeN)sum+='<br><span style="font-size:11.5px;color:#c62828">紐づけのずれを検出したため、'+_linkFreezeN+'名の居室・フリガナの自動更新を止めています</span>';
+  if(_linkDropN)sum+='<br><span style="font-size:11.5px;color:var(--g7)">同期時に氏名が合わず引き継がなかった紐づけ: '+_linkDropN+'件</span>';
+  $('linkAuditSum').innerHTML=sum;
+
+  $('linkAuditList').innerHTML=!a.items.length?'':a.items.map(function(x,i){
+    var r=x.r,lk=x.linked,cd=x.cand;
+    var now='現在: '+escapeHtmlText(r.room||'')+'号室 / '+escapeHtmlText(r.yomi||'（ヨミなし）');
+    var lkTxt=lk?('紐づけ先: '+escapeHtmlText(lk.name||'')+'（'+escapeHtmlText(lk.room||'')+'号室）')
+                :'紐づけ先: 名簿に見つかりません';
+    var cdTxt=cd?('<span style="color:#1557b0">→ 修復後: '+escapeHtmlText(cd.room||'')+'号室 / '+escapeHtmlText(cd.kana||'（ヨミなし）')+'</span>')
+                :'<span style="color:#c62828">→ 名簿に同じ氏名の在籍者が居ない（または複数）ため自動では直せません</span>';
+    return '<div style="border:1px solid var(--g3);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
+      +'<div><b>'+escapeHtmlText(r.name)+'</b></div>'
+      +'<div style="font-size:12px;color:var(--g7)">'+now+'</div>'
+      +'<div style="font-size:12px;color:var(--g7)">'+lkTxt+'</div>'
+      +'<div style="font-size:12px;margin-top:2px">'+cdTxt+'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
+      +'<button class="bn bs bsm link-ack" data-id="'+r.id+'" style="min-height:32px">この紐づけは正しい（表記ゆれ）</button>'
+      +'<button class="bn bs bsm link-unlink" data-id="'+r.id+'" style="min-height:32px">連携を外して手入力する</button>'
+      +'</div></div>';
+  }).join('');
+
+  var acts=[];
+  if(a.fixable)acts.push('<button class="bn bp bsm" id="btnLinkFix" style="min-height:44px">🔧 紐づけを修復（'+a.fixable+'名）</button>');
+  acts.push('<button class="bn bs bsm" id="btnLinkCopy" style="min-height:44px">📋 診断サマリをコピー</button>');
+  if(_hasLinkBackup())acts.push('<button class="bn bs bsm" id="btnLinkRestore" style="min-height:44px">↩️ バックアップから戻す</button>',
+                                '<button class="bn bs bsm" id="btnLinkBakClear" style="min-height:44px">🗑 バックアップを消す</button>');
+  $('linkAuditActs').innerHTML=acts.join('');
+
+  $$('.link-ack').forEach(function(b){b.addEventListener('click',function(){linkAck(parseInt(this.dataset.id))})});
+  $$('.link-unlink').forEach(function(b){b.addEventListener('click',function(){linkUnlink(parseInt(this.dataset.id))})});
+  if($('btnLinkFix'))$('btnLinkFix').addEventListener('click',repairResLinks);
+  if($('btnLinkCopy'))$('btnLinkCopy').addEventListener('click',copyLinkAudit);
+  if($('btnLinkRestore'))$('btnLinkRestore').addEventListener('click',restoreLinkBackup);
+  if($('btnLinkBakClear'))$('btnLinkBakClear').addEventListener('click',clearLinkBackup);
+}
+
+/* 表記ゆれ（旧字体など）で氏名が一致しないが紐づけ自体は正しい、と人が確認した印。
+   これが立つと checkResLink は 'ok' を返し、マスタ由来の更新が従来どおり再開する。 */
+function linkAck(id){
+  var r=(D.residents||[]).find(function(x){return toNum(x.id)===toNum(id)});
+  if(!r)return;
+  customConfirm('「'+r.name+'」さんの紐づけを「正しい（表記ゆれ）」として扱います。\n以後この方の居室・フリガナは入居者マスタの値で自動更新されます。よろしいですか？').then(function(ok){
+    if(!ok)return;
+    r.midAck=true;save();_invalidateLinkIdx();
+    if(typeof mergeCommonResidents==='function')mergeCommonResidents();
+    renderCfg();buildResSel();
+    showToast('✅ 表記ゆれとして登録しました');
+  });
+}
+/* 連携を外す。氏名・記録・予定・入院履歴には触れない。外すと編集画面で居室・フリガナを手入力できる。
+   ★次の名簿同期で「名簿にその氏名の在籍者が1人だけ」なら自動で正しく張り直される（それが正解）。 */
+function linkUnlink(id){
+  var r=(D.residents||[]).find(function(x){return toNum(x.id)===toNum(id)});
+  if(!r)return;
+  customConfirm('「'+r.name+'」さんの入居者マスタとの連携を外します。\n・記録・排泄予定・入院履歴は残ります\n・居室とフリガナを編集画面で手入力できるようになります\nよろしいですか？').then(function(ok){
+    if(!ok)return;
+    delete r.masterId;delete r.midAck;delete r.masterHosp;
+    save();_invalidateLinkIdx();
+    apiPush('saveRes',{resident:r});
+    renderCfg();buildResSel();
+    showToast('✅ 連携を外しました（編集から居室・フリガナを入力できます）');
+  });
+}
+
+/* 氏名を含まない診断サマリ。件数と id・masterId・判定種別だけをクリップボードへ入れる。 */
+function copyLinkAudit(){
+  var a=auditResLinks();
+  var o={app:'haiben-record',at:new Date().toISOString(),
+    roster:a.idx?{size:a.idx.size,freshAt:a.idx.freshAt}:null,
+    total:a.total,ok:a.ok,none:a.none,fixable:a.fixable,manual:a.manual,
+    freeze:_linkFreezeN,drop:_linkDropN,
+    items:a.items.map(function(x){return {id:x.r.id,mid:String(x.r.masterId),kind:x.kind,
+      linked:x.linked?String(x.linked.masterId):null,cand:x.cand?String(x.cand.masterId):null}})};
+  var txt=JSON.stringify(o);
+  var done=function(){showToast('📋 コピーしました（氏名は含まれていません）')};
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done,function(){_copyFallback(txt,done)});return}
+  }catch(e){}
+  _copyFallback(txt,done);
+}
+function _copyFallback(txt,done){
+  try{
+    var ta=document.createElement('textarea');ta.value=txt;
+    ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);
+    ta.select();document.execCommand('copy');document.body.removeChild(ta);done();
+  }catch(e){showToast('⚠️ コピーできませんでした')}
+}
+
+function _hasLinkBackup(){
+  try{
+    var raw=_storageGet(LINK_BAK_KEY);if(!raw)return false;
+    var o=JSON.parse(raw);
+    if(!o||!o.ts||(Date.now()-o.ts)>LINK_BAK_TTL_MS){clearLinkBackup();return false}
+    return true;
+  }catch(e){return false}
+}
+function clearLinkBackup(){
+  try{localStorage.removeItem(LINK_BAK_KEY)}catch(e){}
+  if($('cdLinkAudit'))renderLinkAudit();
+}
+function _saveLinkBackup(){
+  var ok=false;
+  try{_storageSet(LINK_BAK_KEY,JSON.stringify({v:1,ts:Date.now(),data:D}));ok=true}catch(e){}
+  /* 端末の localStorage が一杯でも、ファイルとして手元に残れば戻せる。両方失敗したら修復しない。 */
+  try{
+    var d=new Date(),p=function(n){return(n<10?'0':'')+n};
+    dl(JSON.stringify(D),'haiben-修復前バックアップ-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())+'.json','application/json');
+    ok=true;
+  }catch(e){}
+  return ok;
+}
+function restoreLinkBackup(){
+  var raw=null;try{raw=_storageGet(LINK_BAK_KEY)}catch(e){}
+  var o=null;try{o=raw?JSON.parse(raw):null}catch(e){}
+  if(!o||!o.data||!Array.isArray(o.data.residents)){showToast('⚠️ 端末にバックアップがありません（ダウンロードしたJSONは設定の「読み込み」から戻せます）');return}
+  customConfirm('修復を実行する直前の状態に戻します。\n修復のあとに入力した記録も一緒に戻る（消える）ことがあります。\n本当に戻しますか？').then(function(ok){
+    if(!ok)return;
+    D=o.data;save();flushSave();
+    showToast('↩️ 戻しました。画面を読み込み直します');
+    setTimeout(function(){location.reload()},600);
+  });
+}
+
+/* 修復本体。実行前ゲートが1つでも欠けたら何もしない（multi-device-sync 原則8）。 */
+async function repairResLinks(){
+  if(!apiUrl){showToast('⚠️ サーバーに接続していない端末では修復できません');return}
+  var q=loadPendingQueue();
+  if(q&&q.length){showToast('⚠️ 未送信のデータが '+q.length+' 件残っています。🔄 更新で同期してから実行してください');return}
+  if((typeof _writeQ!=='undefined'&&_writeQ&&_writeQ.length)||(typeof _writeSending!=='undefined'&&_writeSending)
+   ||(typeof _staffSendQueue!=='undefined'&&_staffSendQueue&&_staffSendQueue.length)||(typeof _staffSending!=='undefined'&&_staffSending)
+   ||(typeof _pqFlushing!=='undefined'&&_pqFlushing)||(typeof _syncInFlight!=='undefined'&&_syncInFlight)){
+    showToast('⚠️ 送信中の処理があります。少し待ってからもう一度押してください');return;
+  }
+  if(!_getLastSyncTs()){showToast('⚠️ まだ一度も同期できていません。🔄 更新で同期してから実行してください');return}
+
+  /* 名簿は「今この場で取り直したもの」だけを使う（古い名簿で古い居室に戻さない） */
+  showToast('⏳ 入居者マスタの名簿を取得しています…');
+  var got=false;
+  try{got=await syncMasterRoster(true)}catch(e){got=false}
+  _invalidateLinkIdx();
+  var a=auditResLinks();
+  if(!a.idx||!a.idx.size){showToast('⚠️ 入居者マスタの名簿を取得できませんでした。修復は行いません');return}
+  if(!got&&(Date.now()-(a.idx.freshAt||0))>10*60*1000){
+    showToast('⚠️ 名簿が最新ではありません（取得に失敗）。接続を確認してからもう一度押してください');return;
+  }
+  var targets=a.items.filter(function(x){return !!x.cand});
+  if(!targets.length){showToast('✅ 自動で修復できる紐づけはありません');renderLinkAudit();return}
+
+  if(!await customConfirm('紐づけのずれを '+targets.length+'名分、入居者マスタに合わせて直します。\n\n・氏名は変更しません\n・これまでの記録・排泄予定・入院履歴は変更しません\n・居室とフリガナが入居者マスタの値になります\n\n続けますか？'))return;
+  if(!await customConfirm('実行前のバックアップを端末に保存し、JSONファイルも自動でダウンロードします。\n（ダウンロードしたファイルは消さずに保管してください）\n\n修復を実行してよろしいですか？'))return;
+
+  if(!_saveLinkBackup()){showToast('⚠️ バックアップを作成できませんでした。修復は行いません');return}
+
+  var n=0;
+  targets.forEach(function(x){
+    var r=x.r,c=x.cand;
+    r.masterId=c.masterId;
+    delete r.midAck;                                  // 張り直したので「表記ゆれ確認済み」は不要
+    if(c.room&&r.room!==c.room)r.room=c.room;         // 空の居室では上書きしない（isValidRes で消えるため）
+    if(c.kana&&r.yomi!==c.kana)r.yomi=c.kana;
+    if(c.careLevel&&r.careLevel!==c.careLevel)r.careLevel=c.careLevel;
+    if(Object.prototype.hasOwnProperty.call(c,'hospitalized'))r.masterHosp=!!c.hospitalized;
+    n++;
+    apiPush('saveRes',{resident:r});                  // サーバーに焼き付いた値も是正する
+  });
+  _recIdx=null;save();flushSave();_invalidateLinkIdx();
+  /* 張り直した紐づけで名簿をもう一度当てる。ここで凍結件数（_linkFreezeN）が計算し直され、
+     直った分だけ警告が消える＝画面が実態と合う。冪等なので値は動かない。 */
+  _linkDropN=0;
+  if(typeof mergeCommonResidents==='function')mergeCommonResidents();
+  _invalidateLinkIdx();
+  var after=auditResLinks();
+  renderCfg();buildResSel();
+  if(typeof renderBoard==='function')renderBoard();
+  if(typeof renderTL==='function')renderTL();
+  showToast('✅ 修復 '+n+'名 ／ 要手動 '+after.manual+'名（氏名と記録は変更していません）');
 }
 
 /* ========================================================
@@ -4787,8 +5225,14 @@ function init(){
   load();
   // 旧バージョン（999999単一行・特殊record）の遺留物を起動時に掃除
   if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
-  // 入居者マスタの共通情報を起動時に自動取り込み（連携キーが無ければ無処理）
-  if(typeof mergeCommonResidents==='function')mergeCommonResidents();
+  /* 入居者マスタの共通情報を起動時に自動取り込み（連携キーが無ければ無処理）
+     ★サーバー連携済みの端末では noAdd＝「同期でサーバーの id を受け取る前に新規採番しない」。
+       端末データ消去の直後に名簿を丸ごとローカル採番で登録すると、直後の同期でサーバー行と
+       id を奪い合い、紐づけ（masterId）だけが別人へ移る（2026-08-06 混線の発生源）。
+       既存者の居室・フリガナの更新は noAdd でも従来どおり効く。新規入居者の取り込みは
+       同期完了後のマージ（syncFromAPI 内）が noAdd 無しで行うので失われない。
+       未連携端末（接続URL未保存）は従来どおり新規追加する＝オフライン運用を壊さない。 */
+  if(typeof mergeCommonResidents==='function')mergeCommonResidents(null,{noAdd:_hasApiUrlStored()});
   // 前回サーバーから取得したマスタ名簿を起動時にも適用（オフライン・同期前でも最新の居室を表示）
   if(typeof loadStoredMasterRoster==='function'){
     var _mr0=loadStoredMasterRoster();
@@ -5203,6 +5647,13 @@ function init(){
   }
   if($('btnStaffRefresh')) $('btnStaffRefresh').addEventListener('click',_refreshFromServer);
   if($('btnCfgRefresh')) $('btnCfgRefresh').addEventListener('click',_refreshFromServer);
+  /* マスタ連携の点検（名簿を取り直してから判定し直す。書き込みはしない＝原則9） */
+  if($('btnLinkRecheck')) $('btnLinkRecheck').addEventListener('click',function(){
+    showToast('⏳ 名簿を取得して点検します…');
+    var p=(typeof syncMasterRoster==='function')?syncMasterRoster(true):null;
+    var fin=function(){_invalidateLinkIdx();renderLinkAudit();showToast('✅ 点検しました')};
+    if(p&&typeof p.then==='function')p.then(fin,fin);else fin();
+  });
   $('btnAddRes').addEventListener('click',function(){editResId=null;$('mResT').textContent='入居者を追加';
     $('mRN').value='';if($('mRY'))$('mRY').value='';$('mRR').value='';$('mRG').value='女性';if($('mRS'))$('mRS').value='active';
     if($('mRLax'))$('mRLax').value='';
@@ -5266,7 +5717,9 @@ function init(){
         if(!ok2)return;
         // 保留中の遅延保存をキャンセルしてから削除（削除後に上書きされるのを防ぐ）
         _saveDirty=false;if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}
-        localStorage.removeItem('hbcr_v2');location.reload()})})});
+        localStorage.removeItem('hbcr_v2');
+        try{localStorage.removeItem(LINK_BAK_KEY)}catch(e){}  // 修復前バックアップも消す（氏名・記録を含む）
+        location.reload()})})});
 
   // 詳細モーダル
   $('mDetDel').addEventListener('click',function(){if(!curRecId)return;
@@ -5496,8 +5949,11 @@ function autoLockSafe(){
 function autoLockWipe(){
   // 保留中の遅延保存を無効化してから消す（消した直後に上書きされるのを防ぐ＝btnClear と同じ作法）
   try{_saveDirty=false;if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}}catch(e){}
+  /* ★hbcr_res_id_hw（入居者idの高水位）はここに入れない。氏名も記録も含まない数値1個で、
+     消すと再採番がサーバーの若いidと衝突し、紐づけが別人へ移る事故が再発する（2026-08-06）。
+     ★LINK_BAK_KEY（修復前バックアップ）は氏名・記録を含むので必ず消す。 */
   ['hbcr_v2','hbcr_v2_bak','hbcr_ls',
-   MASTER_ROSTER_KEY,SYS_STAFF_SNAPSHOT_LOCAL_KEY,LAST_SYNC_KEY]
+   MASTER_ROSTER_KEY,SYS_STAFF_SNAPSHOT_LOCAL_KEY,LAST_SYNC_KEY,LINK_BAK_KEY]
     .forEach(function(k){try{if(k)localStorage.removeItem(k)}catch(e){}});
 }
 
