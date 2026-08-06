@@ -902,7 +902,7 @@ textarea{resize:vertical;min-height:76px}
   <div id="mResMasterNote" style="display:none;margin:-6px 0 12px">
     <div style="display:flex;gap:7px;align-items:flex-start;background:#eef4fb;border:1px solid #b9d3ee;border-radius:6px;padding:8px 10px">
       <span aria-hidden="true" style="font-size:14px;line-height:1.5">🔒</span>
-      <span style="font-size:12px;color:#1a3d63;line-height:1.6">フリガナ・居室番号・ステータス（在籍/退去）は<strong>入居者マスタで管理</strong>されています。変更は入居者マスタから行ってください。</span>
+      <span style="font-size:12px;color:#1a3d63;line-height:1.6">居室番号・ステータス（在籍/退去）は<strong>入居者マスタで管理</strong>されています。変更は入居者マスタから行ってください。フリガナはこの画面で入力・訂正できます（空欄の間だけマスタの値を自動補完します）。</span>
     </div>
   </div>
   <div class="fg"><label class="fl">性別</label>
@@ -2128,7 +2128,7 @@ function flushSave(){
    同一オリジンの共有キー su_residents_common（入居者マスタが書き出す識別/表示用の
    共通項目のみ）を読み、当アプリの入居者へ自動反映する。
    ・連携キーが無い/空なら完全に無処理（既存挙動を一切変えない）
-   ・masterId（無ければ氏名）で突合。一致したら居室・介護度・ふりがなを更新し masterId 付与
+   ・masterId（無ければ氏名）で突合。一致したら居室・介護度を更新（ふりがなは空欄補完のみ・2026-08-07）し masterId 付与
    ・当アプリに居ない在籍 master 入居者は新規追加（居室必須＝妥当性条件を満たす者のみ）
    ・記録・cfg・予定・入院情報など当アプリ固有データには一切触れない（非破壊・冪等） */
 var SU_COMMON_KEY='su_residents_common';
@@ -2161,7 +2161,7 @@ function _rosterFreshness(proxy){
      温存されるだけ。そのため「端末データ消去 → 起動時に共有名簿をローカル採番で丸ごと登録 →
      直後の同期でサーバー行と id を奪い合う」の順で、氏名はサーバーの正しい値のまま
      masterId だけが別人へ移る事故が起きうる。masterId が別人を指すと
-     mergeCommonResidents が別人の居室・フリガナ・介護度を毎分書き込み続け、
+     mergeCommonResidents が別人の居室・介護度（空欄ならフリガナも）を毎分書き込み続け、
      氏名だけ正しく他が混線した状態が固定される（サーバーに列が無いので自己修復しない）。
    ★対策の芯は1つ
      「masterId で引いた名簿行の氏名が、当アプリの氏名と一致する時だけ使う」。
@@ -2338,7 +2338,10 @@ function mergeCommonResidents(srcList, opts){
       if(tgt.masterId==null||tgt.masterId===''){tgt.masterId=c.masterId;byMid[String(c.masterId)]=tgt;changed++;}
       if(c.room&&tgt.room!==c.room){tgt.room=c.room;changed++;}
       if(c.careLevel&&tgt.careLevel!==c.careLevel){tgt.careLevel=c.careLevel;changed++;}
-      if(c.kana&&tgt.yomi!==c.kana){tgt.yomi=c.kana;changed++;}
+      /* ふりがなは空欄補完のみ（2026-08-07）。現場で先に判明する属性のため、当アプリの手入力を
+         マスタ配信（約50秒周期のマージ）で巻き戻さない。マスタ側で直した修正は既入力行には届かない
+         （訂正はこの画面のフリガナ欄で行う＝mRY はロック対象外）。空白だけの値は空欄として扱う。 */
+      if(c.kana&&!String(tgt.yomi||'').trim()){tgt.yomi=c.kana;changed++;}
       if(tExc!==undefined&&tgt.targetExcretion!==tExc){tgt.targetExcretion=tExc;changed++;}
       // C5: マスタが在籍 → 当アプリの退去フラグを解除（復帰）。記録はそのまま残る
       if(tgt.active===false){
@@ -2381,8 +2384,8 @@ function mergeCommonResidents(srcList, opts){
 }
 
 /* ── 入居者マスタ名簿のサーバー取得（2026-07-22 追加） ──
-   排泄記録GASが入居者マスタGASから代理取得した名簿を受け取り、既存入居者の居室・フリガナ・
-   要介護度の更新にだけ使う。これにより、入居者マスタを開かない現場端末にも最新の居室が届く。
+   排泄記録GASが入居者マスタGASから代理取得した名簿を受け取り、既存入居者の居室・要介護度の
+   更新（フリガナは空欄補完のみ）にだけ使う。これにより、入居者マスタを開かない現場端末にも最新の居室が届く。
    ※共有キー su_residents_common には書かない。あのキーは「入居者マスタが唯一の書き手」という
      連携契約で、フェイスシート・ケアスケジュール・体重管理の3アプリも読んでいる。専用キーに
      保存して影響を当アプリ内に閉じ込める。オフライン時は前回取得分を再利用する。 */
@@ -3873,8 +3876,8 @@ function renderCfg(){
    マスタ連携の点検・修復（2026-08-06 追加）
    ──────────────────────────────────────────────────────────
    何を直すか: masterId（入居者マスタとの紐づけ番号）が別人を指している行。
-     この状態だと mergeCommonResidents が別人の居室・フリガナ・介護度を書き込み続け、
-     「氏名は正しいのに他が混線」して見える。居室・フリガナは編集画面で読み取り専用なので
+     この状態だと mergeCommonResidents が別人の居室・介護度（空欄ならフリガナも）を書き込み続け、
+     「氏名は正しいのに他が混線」して見える。居室は編集画面で読み取り専用なので
      現場では直せない。ここで検出して張り直す。
    絶対に触らないもの: 氏名(name)・入居者id(id)・記録(D.records)・排泄予定(schedule)・
      入院履歴(hospitalizations)・職員の隠し行。
@@ -3958,7 +3961,7 @@ function renderLinkAudit(){
 function linkAck(id){
   var r=(D.residents||[]).find(function(x){return toNum(x.id)===toNum(id)});
   if(!r)return;
-  customConfirm('「'+r.name+'」さんの紐づけを「正しい（表記ゆれ）」として扱います。\n以後この方の居室・フリガナは入居者マスタの値で自動更新されます。よろしいですか？').then(function(ok){
+  customConfirm('「'+r.name+'」さんの紐づけを「正しい（表記ゆれ）」として扱います。\n以後この方の居室は入居者マスタの値で自動更新されます（フリガナは空欄の時だけ補完）。よろしいですか？').then(function(ok){
     if(!ok)return;
     r.midAck=true;save();_invalidateLinkIdx();
     if(typeof mergeCommonResidents==='function')mergeCommonResidents();
@@ -4984,15 +4987,18 @@ function toggleResHidden(id,makeHidden){
   showToast(makeHidden?'✅ 非表示にしました':'✅ 表示に戻しました');
 }
 
-/* 入居者マスタが正本の項目（フリガナ・居室番号・在籍状態）の編集可否を切り替える。
+/* 入居者マスタが正本の項目（居室番号・在籍状態）の編集可否を切り替える。
    マスタ連携済み（masterId あり）の入居者は mergeCommonResidents() が起動時と同期完了時に
    マスタ値で必ず上書きするため、ここで編集させると「保存できたのに次回起動で消える」ことになる。
    → 編集不可にし、変更先が入居者マスタであることを画面上で明示する。
+   ★フリガナ（mRY）は 2026-08-07 からロック対象外。マージが空欄補完のみになり上書きが起きないため、
+     誤ったヨミの訂正場所はこの画面（現場）になる（ロックしたままだと、マスタ側の修正も既入力行へは
+     届かない仕様のため、どこからも直せない閉ループになる）。
    ★ステータス（在籍中/退去済）も同じ扱い。設定一覧の「退去/在籍へ戻す」ボタンを無効化しても、
      この編集モーダルのセレクトが残っていると同じ書き換えができてしまうため（入口を1つ残さない）。
      セレクトは readOnly が効かないので disabled にする（値そのものは saveRes から読める）。 */
 function setMasterManagedFields(locked){
-  ['mRY','mRR'].forEach(function(id){
+  ['mRR'].forEach(function(id){
     var el=$(id);if(!el)return;
     el.readOnly=!!locked;
     if(locked){el.setAttribute('aria-describedby','mResMasterNote');el.style.background='var(--g1)';el.style.color='var(--g7)';el.style.cursor='not-allowed'}
@@ -5229,7 +5235,7 @@ function init(){
      ★サーバー連携済みの端末では noAdd＝「同期でサーバーの id を受け取る前に新規採番しない」。
        端末データ消去の直後に名簿を丸ごとローカル採番で登録すると、直後の同期でサーバー行と
        id を奪い合い、紐づけ（masterId）だけが別人へ移る（2026-08-06 混線の発生源）。
-       既存者の居室・フリガナの更新は noAdd でも従来どおり効く。新規入居者の取り込みは
+       既存者の居室（と空欄フリガナの補完）の更新は noAdd でも従来どおり効く。新規入居者の取り込みは
        同期完了後のマージ（syncFromAPI 内）が noAdd 無しで行うので失われない。
        未連携端末（接続URL未保存）は従来どおり新規追加する＝オフライン運用を壊さない。 */
   if(typeof mergeCommonResidents==='function')mergeCommonResidents(null,{noAdd:_hasApiUrlStored()});
