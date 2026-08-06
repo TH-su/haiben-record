@@ -51,7 +51,7 @@ function authError_(){
  * 読み出すのは識別・表示用の安全項目のみ。dataJson（医療情報等）は列添字すら取らない。
  * 返す形は呼び出し側の契約（masterId/name/kana/room/gender/careLevel/active）を変えない。 */
 const MASTER_ROSTER_CACHE_KEY = 'master_roster_v1';
-const MASTER_SHEET_NAME = 'master';   // master.gs の MASTER_SHEET と同じ
+const MASTER_SHEET_NAME = 'master';   // master.gs の MASTER_SHEET と同じ（master.gs の正本はテーマ側 gas/。2026-08-07 からローカルgit管理・このリポの凍結コピーは同日削除済み）
 const MASTER_SAFE_COLS = ['id','name','kana','room','gender','careLevel','active'];
 
 /** dataJson から取り出してよい状態キー（2026-08-01 追加・共通契約 C3）。
