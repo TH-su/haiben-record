@@ -4,3 +4,4 @@
 # ローカル運用ファイル（公開しない）
 CLAUDE.md
 .claude/
+tests/
