@@ -28,20 +28,20 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
 .hdr{background:linear-gradient(135deg,#1565c0,#1a73e8);color:#fff;padding:14px 18px;
   position:sticky;top:0;z-index:100;box-shadow:0 3px 12px rgba(0,0,0,.15);
   display:flex;align-items:center;justify-content:space-between}
-.hdr h1{font-size:17px;font-weight:700}.hdr-sub{font-size:12px;opacity:.85;margin-top:2px}
+.hdr h1{font-size: 1.0625rem;font-weight:700}.hdr-sub{font-size: 0.75rem;opacity:.85;margin-top:2px}
 /* 入居者マスタから本人単位で開いた時の確認バー（誰を開いているかを常に見せる＝取り違え防止）。
    ヘッダ直下に貼り付き、スクロールしても消えない（.hdr は sticky・自然高さ）。 */
 .frombar{position:sticky;top:56px;z-index:99;
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 14px;
-  background:var(--warn-bg);border-bottom:1px solid var(--warn-tx);font-size:13px;color:var(--warn-tx)}
-.frombar b{font-size:15px}
+  background:var(--warn-bg);border-bottom:1px solid var(--warn-tx);font-size: 0.8125rem;color:var(--warn-tx)}
+.frombar b{font-size: 0.9375rem}
 .frombar button{min-height:44px;padding:6px 14px;border:1px solid var(--warn-tx);border-radius:6px;
-  background:#fff;color:var(--warn-tx);font-size:13px;cursor:pointer}
+  background:#fff;color:var(--warn-tx);font-size: 0.8125rem;cursor:pointer}
 .frombar button:focus-visible{outline:2px solid var(--warn-tx);outline-offset:1px}
 @media print{.frombar{display:none !important}}
 /* アプリ間ジャンプ（care-schedule / daycare-roster と同じ見た目。共通部品が無いため各ファイルに持つ） */
 .hdr-btn{min-height:40px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);
-  color:#fff;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+  color:#fff;border-radius:6px;padding:6px 12px;font-size: 0.8125rem;cursor:pointer;white-space:nowrap}
 .hdr-btn:hover{background:rgba(255,255,255,.28)}
 .hdr-btn:focus-visible{outline:2px solid #fff;outline-offset:1px}
 
@@ -49,11 +49,11 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
 .bnav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--g2);
   display:flex;z-index:100;box-shadow:0 -2px 10px rgba(0,0,0,.1)}
 .bnav button{flex:1;display:flex;flex-direction:column;align-items:center;padding:7px 4px 5px;
-  cursor:pointer;border:none;background:none;color:var(--g5);font-size:10px;gap:2px;
+  cursor:pointer;border:none;background:none;color:var(--g5);font-size: 0.625rem;gap:2px;
   transition:color .2s;font-family:inherit}
 .bnav button.on{color:var(--pri)}
 .bnav svg{width:22px;height:22px}
-.bnav button[data-sc="cfg"],.bnav button[data-sc="staff"]{flex:0 0 44px;opacity:.55;font-size:9px}
+.bnav button[data-sc="cfg"],.bnav button[data-sc="staff"]{flex:0 0 44px;opacity:.55;font-size: 0.5625rem}
 .bnav button[data-sc="cfg"] svg,.bnav button[data-sc="staff"] svg{width:16px;height:16px}
 .bnav button[data-sc="cfg"].on,.bnav button[data-sc="staff"].on{opacity:1}
 
@@ -63,18 +63,18 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
 
 /* card */
 .cd{background:#fff;border-radius:var(--r);padding:15px;margin-bottom:14px;box-shadow:var(--sh)}
-.cd-t{font-size:13px;font-weight:700;color:var(--g7);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.cd-t{font-size: 0.8125rem;font-weight:700;color:var(--g7);margin-bottom:12px;display:flex;align-items:center;gap:6px}
 
 /* form */
 .fg{margin-bottom:14px}
-.fl{display:block;font-size:12px;font-weight:700;color:var(--g7);margin-bottom:7px}
+.fl{display:block;font-size: 0.75rem;font-weight:700;color:var(--g7);margin-bottom:7px}
 input[type="text"],input[type="datetime-local"],input[type="date"],
 input[type="number"],textarea{
   width:100%;padding:9px 11px;border:2px solid var(--g2);border-radius:8px;
-  font-size:14px;font-family:inherit;color:var(--g9);background:#fff;
+  font-size: 0.875rem;font-family:inherit;color:var(--g9);background:#fff;
   transition:border-color .2s;-webkit-appearance:none}
 select{width:100%;padding:10px 12px;border:2px solid var(--g2);border-radius:8px;
-  font-size:14px;font-family:inherit;color:var(--g9);background:#fff;
+  font-size: 0.875rem;font-family:inherit;color:var(--g9);background:#fff;
   transition:border-color .2s;cursor:pointer;appearance:auto;-webkit-appearance:menulist}
 input:focus,textarea:focus,select:focus{outline:none;border-color:var(--pri)}
 textarea{resize:vertical;min-height:76px}
@@ -82,7 +82,7 @@ textarea{resize:vertical;min-height:76px}
 /* type selector */
 .type-sel{display:flex;gap:10px}
 .type-btn{flex:1;padding:13px 6px;border:2px solid var(--g2);border-radius:10px;
-  cursor:pointer;background:#fff;text-align:center;font-size:14px;font-weight:700;
+  cursor:pointer;background:#fff;text-align:center;font-size: 0.875rem;font-weight:700;
   transition:all .18s;font-family:inherit}
 .type-btn.su{background:var(--u-bg);border-color:var(--u);color:var(--u)}
 .type-btn.ss{background:var(--s-bg);border-color:var(--s);color:var(--s)}
@@ -93,22 +93,22 @@ textarea{resize:vertical;min-height:76px}
 /* quick buttons */
 .qg{display:flex;gap:8px;flex-wrap:wrap}
 .qb{padding:7px 14px;border:2px solid var(--g2);border-radius:20px;cursor:pointer;
-  background:#fff;font-size:13px;transition:all .18s;font-family:inherit}
+  background:#fff;font-size: 0.8125rem;transition:all .18s;font-family:inherit}
 .qb.on{background:var(--pri);border-color:var(--pri);color:#fff}
 
 /* color buttons */
 .cr{display:flex;gap:7px;flex-wrap:wrap}
 .cb{display:flex;align-items:center;gap:5px;padding:5px 11px;border:2px solid var(--g2);
-  border-radius:20px;cursor:pointer;background:#fff;font-size:12px;transition:all .18s;font-family:inherit}
+  border-radius:20px;cursor:pointer;background:#fff;font-size: 0.75rem;transition:all .18s;font-family:inherit}
 .cd-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
 .cb.on{border-color:var(--pri);background:var(--pri-l)}
 
 /* consistency buttons */
 .cons-g{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .cons-b{border:2px solid var(--g2);border-radius:10px;padding:10px 6px;cursor:pointer;
-  background:#fff;font-size:13px;font-weight:700;font-family:inherit;text-align:center;
+  background:#fff;font-size: 0.8125rem;font-weight:700;font-family:inherit;text-align:center;
   line-height:1.4;transition:all .18s;display:flex;flex-direction:column;align-items:center;gap:3px}
-.cons-b small{font-size:10px;font-weight:400;color:var(--g6)}
+.cons-b small{font-size: 0.625rem;font-weight:400;color:var(--g6)}
 .cons-b[data-s="watery"]{border-color:#f9a825}
 .cons-b[data-s="loose"]{border-color:#ff8f00}
 .cons-b[data-s="soft"]{border-color:#8bc34a}
@@ -125,7 +125,7 @@ textarea{resize:vertical;min-height:76px}
 
 /* submit */
 .btn-go{width:100%;padding:15px;background:var(--pri);color:#fff;border:none;
-  border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer;
+  border-radius:var(--r);font-size: 1rem;font-weight:700;cursor:pointer;
   transition:background .2s;font-family:inherit}
 .btn-go:hover{background:var(--pri-d)}.btn-go:active{transform:scale(.98)}
 
@@ -139,19 +139,19 @@ textarea{resize:vertical;min-height:76px}
   position:sticky;top:52px;background:var(--g0);z-index:50;padding:8px 0;
   border-bottom:1px solid var(--g2)}
 @media(max-height:640px){.bd-hdr{top:48px;padding:6px 0}}
-.bd-hdr input[type="date"]{width:auto;min-height:44px;padding:6px 10px;font-size:14px;
+.bd-hdr input[type="date"]{width:auto;min-height:44px;padding:6px 10px;font-size: 0.875rem;
   border:1px solid var(--g2);border-radius:8px;touch-action:manipulation}
 .dn-grp{display:inline-flex;gap:4px;flex-wrap:wrap}
-.dn-grp button{padding:10px 10px;font-size:12px}
+.dn-grp button{padding:10px 10px;font-size: 0.75rem}
 .dn-grp button.on{background:#1565c0;color:#fff;border-color:#0d47a1;font-weight:700}
 .lax-tab.on{background:#7b1fa2;color:#fff;border-color:#4a148c;font-weight:700;box-shadow:0 0 0 2px #ce93d8 inset}
 .bd-hdr .rf-sp{margin-left:16px}
 .bd-w{overflow:auto;border-radius:var(--r);box-shadow:var(--sh);max-height:calc(100vh - 180px)}
 .bt{width:100%;border-collapse:separate;border-spacing:0;background:#fff;min-width:680px}
-.bt th{background:#1565c0;color:#fff;padding:9px 10px;text-align:center;font-size:11px;font-weight:700;white-space:nowrap;position:sticky;top:0;z-index:3}
+.bt th{background:#1565c0;color:#fff;padding:9px 10px;text-align:center;font-size: 0.6875rem;font-weight:700;white-space:nowrap;position:sticky;top:0;z-index:3}
 .bt thead tr:nth-child(2) th{top:35px;z-index:3}
 .bt th.hu{background:#1976d2}.bt th.hs{background:#5d4037}
-.bt td{padding:9px 10px;border-bottom:1px solid var(--g1);font-size:12px;text-align:center;vertical-align:middle;background:#fff}
+.bt td{padding:9px 10px;border-bottom:1px solid var(--g1);font-size: 0.75rem;text-align:center;vertical-align:middle;background:#fff}
 .bt tr:last-child td{border-bottom:none}
 /* 排尿列(3-5)/排便列(6-9)の列別うすい色分け */
 .bt td:nth-child(3),.bt td:nth-child(4),.bt td:nth-child(5){background:#f0f8fc}
@@ -178,27 +178,27 @@ textarea{resize:vertical;min-height:76px}
 .bt tr.hosp-full td .eb,.bt tr.hosp-full td .tg,.bt tr.hosp-full td .nr{opacity:.55}
 .bt tr.hosp-full td [data-hist]{color:#fff !important;text-decoration-color:#fff !important}
 
-.eb{display:inline-block;padding:2px 7px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap}
+.eb{display:inline-block;padding:2px 7px;border-radius:12px;font-size: 0.6875rem;font-weight:700;white-space:nowrap}
 .eb-ok{background:var(--ok-l);color:var(--ok)}
 .eb-w{background:var(--warn-bg);color:var(--warn-tx)}
 .eb-ng{background:var(--ng-l);color:var(--ng)}
-.nr{color:var(--g5);font-style:italic;font-size:11px}
+.nr{color:var(--g5);font-style:italic;font-size: 0.6875rem}
 
 /* timeline */
 .tl-w{overflow:auto;max-height:calc(100vh - 220px);border-radius:var(--r);box-shadow:var(--sh);background:#fff}
 .tl-stop{overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:4px;background:#f5f5f5;border-radius:6px;border:1px solid var(--g2)}
 .tl-stop-inner{height:1px}
 .tl-t{border-collapse:separate;border-spacing:0;width:max-content}
-.tl-t th,.tl-t td{border:1px solid var(--g2);font-size:12px}
+.tl-t th,.tl-t td{border:1px solid var(--g2);font-size: 0.75rem}
 .tl-t th{background:var(--g1);text-align:center;padding:4px 2px;white-space:nowrap;position:sticky;top:0;z-index:3}
 .tl-t thead tr:nth-child(2) th{top:28px;z-index:3}
-.tl-t th.hr-top{font-weight:700;font-size:13px;border-bottom:none}
-.tl-t th.hr-sub{font-size:11px;color:var(--g6);border-top:none;padding:1px 2px;line-height:1.1}
-.tl-t th.hr-sub .hr-h{display:block;font-size:10px;color:#1565c0;font-weight:700}
-.tl-t th.hr-sub .hr-m{display:block;font-size:9px;color:var(--g6)}
+.tl-t th.hr-top{font-weight:700;font-size: 0.8125rem;border-bottom:none}
+.tl-t th.hr-sub{font-size: 0.6875rem;color:var(--g6);border-top:none;padding:1px 2px;line-height:1.1}
+.tl-t th.hr-sub .hr-h{display:block;font-size: 0.625rem;color:#1565c0;font-weight:700}
+.tl-t th.hr-sub .hr-m{display:block;font-size: 0.5625rem;color:var(--g6)}
 /* 氏名列ヘッダーは最上位 z-index */
 .tl-t thead th:first-child{left:0;z-index:5;background:#e8eaed}
-.tl-nm{white-space:nowrap;padding:5px 10px;font-size:13px;font-weight:700;
+.tl-nm{white-space:nowrap;padding:5px 10px;font-size: 0.8125rem;font-weight:700;
   background:var(--g0);border-right:2px solid var(--g3);min-width:96px;position:sticky;left:0;z-index:2}
 .tl-c{width:32px;min-width:32px;height:38px;text-align:center;vertical-align:middle;padding:2px;background:#fff}
 .tl-t tbody tr:nth-child(even) td{background:#f7f7f7}
@@ -208,28 +208,28 @@ textarea{resize:vertical;min-height:76px}
 .tl-c{position:relative;cursor:pointer}
 .tl-c.sched::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;border-radius:50%;border:3px solid #9e9e9e;pointer-events:none;z-index:0;box-sizing:border-box;background:rgba(255,255,255,0.6)}
 .tl-c.sched > *{position:relative;z-index:1}
-.tl-c.sched .sch-lbl{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:10px;font-weight:700;color:#424242;white-space:nowrap;pointer-events:none;z-index:1;line-height:1;text-shadow:0 0 2px #fff,0 0 2px #fff}
+.tl-c.sched .sch-lbl{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size: 0.625rem;font-weight:700;color:#424242;white-space:nowrap;pointer-events:none;z-index:1;line-height:1;text-shadow:0 0 2px #fff,0 0 2px #fff}
 .ev-d{width:10px;height:10px;border-radius:50%;display:inline-block;margin:0 1px}
 .ev-d.u{background:var(--u)}.ev-d.s{background:#a1887f}.ev-d.b{background:#e91e63}
 .ev-d.l{background:#ffd600;border:1px solid #f9a825;box-sizing:border-box}
 /* 排泄元マーカー（タイムライン用） */
-.ev-m{display:inline-block;font-size:15px;line-height:1;margin:0 1px;vertical-align:middle;font-weight:700}
+.ev-m{display:inline-block;font-size: 0.9375rem;line-height:1;margin:0 1px;vertical-align:middle;font-weight:700}
 .ev-m.us{color:#0d47a1}   /* 自尿: 濃い青の○ */
 .ev-m.up{color:#4fc3f7}   /* パッド内排尿: 水色の● */
 .ev-m.st{color:#4e342e}   /* トイレ排便: 濃い茶の△ */
 .ev-m.sp{color:#c8a97e}   /* パッド内排便: ベージュの▲ */
 /* 排泄元トグル（入力画面用） */
 .src-g{display:flex;gap:8px;flex-wrap:wrap}
-.src-b{flex:1;min-width:110px;padding:10px 14px;border:2px solid var(--g2);border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;color:var(--g7);transition:all .15s}
+.src-b{flex:1;min-width:110px;padding:10px 14px;border:2px solid var(--g2);border-radius:8px;background:#fff;cursor:pointer;font-size: 0.875rem;font-weight:600;color:var(--g7);transition:all .15s}
 .src-b.on{background:#e3f2fd;border-color:#1565c0;color:#0d47a1}
 .src-b.on.pad{background:#e1f5fe;border-color:#4fc3f7;color:#01579b}
 .src-b.on.stp{background:#f5ecd9;border-color:#c8a97e;color:#5d4037}
-.lax-mk{display:inline-block;font-size:10px;padding:1px 4px;border-radius:3px;background:#f3e5f5;color:#6a1b9a;font-weight:700;border:1px solid #ce93d8;white-space:nowrap}
+.lax-mk{display:inline-block;font-size: 0.625rem;padding:1px 4px;border-radius:3px;background:#f3e5f5;color:#6a1b9a;font-weight:700;border:1px solid #ce93d8;white-space:nowrap}
 .bn.blax{background:#7b1fa2;color:#fff}
 .bn.blax:hover{background:#6a1b9a}
-.tl-info{font-size:10px;line-height:1.15;color:var(--g7);white-space:nowrap;display:block}
+.tl-info{font-size: 0.625rem;line-height:1.15;color:var(--g7);white-space:nowrap;display:block}
 .tl-leg{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}
-.tl-leg-i{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--g7)}
+.tl-leg-i{display:flex;align-items:center;gap:5px;font-size: 0.8125rem;color:var(--g7)}
 
 /* settings */
 .rli{display:flex;align-items:center;justify-content:space-between;
@@ -238,7 +238,7 @@ textarea{resize:vertical;min-height:76px}
 
 /* buttons */
 .bn{padding:9px 18px;border-radius:8px;border:none;cursor:pointer;
-  font-size:13px;font-weight:700;font-family:inherit;transition:background .15s,opacity .15s;
+  font-size: 0.8125rem;font-weight:700;font-family:inherit;transition:background .15s,opacity .15s;
   /* タッチ遅延（300ms）を除去し即時反応にする */
   touch-action:manipulation;
   -webkit-tap-highlight-color:rgba(0,0,0,0.08);
@@ -251,7 +251,7 @@ textarea{resize:vertical;min-height:76px}
 .br{background:var(--ng);color:#fff}
 .br:active{opacity:.8}
 /* bsm: タップ領域を最低44pxに拡大（見た目は変えず、内側だけ広げる） */
-.bsm{padding:10px 14px;font-size:12px;min-height:44px;min-width:44px}
+.bsm{padding:10px 14px;font-size: 0.75rem;min-height:44px;min-width:44px}
 
 /* modal */
 .mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;
@@ -267,7 +267,7 @@ textarea{resize:vertical;min-height:76px}
 #mLock{z-index:500;background:var(--g0)}
 .md{background:#fff;border-radius:var(--r);padding:22px;width:100%;max-width:440px;
   max-height:85vh;overflow-y:auto;box-shadow:0 3px 12px rgba(0,0,0,.15)}
-.md-t{font-size:16px;font-weight:700;margin-bottom:15px}
+.md-t{font-size: 1rem;font-weight:700;margin-bottom:15px}
 .md-f{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
 
 /* history */
@@ -275,9 +275,9 @@ textarea{resize:vertical;min-height:76px}
 .hi.u{border-color:var(--u);background:var(--u-bg)}
 .hi.s{border-color:var(--s);background:var(--s-bg)}
 .hi.b{border-color:#e91e63;background:#fce4ec}
-.hi-t{font-weight:700;font-size:13px}
+.hi-t{font-weight:700;font-size: 0.8125rem}
 .tgs{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
-.tg{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700}
+.tg{display:inline-block;padding:2px 8px;border-radius:12px;font-size: 0.6875rem;font-weight:700}
 .tg-u{background:var(--u-bg);color:var(--u)}.tg-s{background:var(--s-bg);color:var(--s)}
 .tg-i{background:var(--g1);color:var(--g7)}
 
@@ -297,7 +297,7 @@ textarea{resize:vertical;min-height:76px}
   background:#d1c4e9 !important;       /* 濃いめのラベンダー（不透明） */
   background-clip:padding-box;
   color:#311b92 !important;            /* 濃紫色：文字をはっきり */
-  font-weight:700;font-size:11px;
+  font-weight:700;font-size: 0.6875rem;
   border:1px solid #9575cd !important;
   padding:8px 5px;
   box-shadow:0 3px 6px -1px rgba(81,45,168,.25)
@@ -305,15 +305,15 @@ textarea{resize:vertical;min-height:76px}
 /* 表本体：偶数行はラベンダー薄色、奇数行は白 — ヘッダと明確に区別 */
 #mHist .ht td{border-color:#e0d6f0 !important;background:#fff}
 #mHist .ht tr:nth-child(even) td{background:#faf7ff !important}
-.ht{width:100%;border-collapse:separate;border-spacing:0;font-size:11px}
-.ht th{background:var(--g1);padding:6px 5px;font-size:10px;font-weight:700;white-space:nowrap;border:1px solid var(--g2);color:var(--g7);position:sticky;top:0;z-index:2}
+.ht{width:100%;border-collapse:separate;border-spacing:0;font-size: 0.6875rem}
+.ht th{background:var(--g1);padding:6px 5px;font-size: 0.625rem;font-weight:700;white-space:nowrap;border:1px solid var(--g2);color:var(--g7);position:sticky;top:0;z-index:2}
 .ht td{padding:5px 5px;border:1px solid var(--g2);text-align:center;vertical-align:middle;white-space:nowrap;background:#fff}
 .ht tr:nth-child(even) td{background:var(--g0)}
 .ht .tp-u{color:var(--u);font-weight:700}.ht .tp-s{color:var(--s);font-weight:700}.ht .tp-b{color:#e91e63;font-weight:700}.ht .tp-l{color:#7b1fa2;font-weight:700}.ht .tp-n{color:#455a64;font-weight:700}
 .tl-nm-link{cursor:pointer;color:var(--pri);text-decoration:underline}
 
 /* API sync status */
-.api-bd{display:flex;align-items:center;gap:4px;font-size:10px;padding:3px 8px;border-radius:10px;
+.api-bd{display:flex;align-items:center;gap:4px;font-size: 0.625rem;padding:3px 8px;border-radius:10px;
   font-weight:700;transition:all .3s;white-space:nowrap}
 .api-ok{background:rgba(46,125,50,.25);color:#a5d6a7}
 .api-er{background:rgba(198,40,40,.25);color:#ef9a9a}
@@ -328,33 +328,33 @@ textarea{resize:vertical;min-height:76px}
 .ld-ov.on{display:flex}
 .ld-ring{width:44px;height:44px;border:4px solid rgba(255,255,255,.3);
   border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite}
-.ld-msg{color:#fff;font-size:14px;font-weight:700}
-.ld-hint{color:rgba(255,255,255,.6);font-size:11px;margin-top:8px}
+.ld-msg{color:#fff;font-size: 0.875rem;font-weight:700}
+.ld-hint{color:rgba(255,255,255,.6);font-size: 0.6875rem;margin-top:8px}
 
 /* toast */
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(16px);
-  background:rgba(0,0,0,.82);color:#fff;padding:9px 20px;border-radius:20px;font-size:13px;
+  background:rgba(0,0,0,.82);color:#fff;padding:9px 20px;border-radius:20px;font-size: 0.8125rem;
   opacity:0;transition:all .28s;z-index:400;pointer-events:none;white-space:nowrap}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* select for resident */
-#resSel{font-size:16px;padding:12px 14px;border-radius:10px}
+#resSel{font-size: 1rem;padding:12px 14px;border-radius:10px}
 
 /* 職員（記録者）管理リスト（設定画面） */
 .staff-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}
 .staff-grid .sg-item{display:flex;align-items:center;gap:4px;padding:6px 8px;background:#fff;
-  border:1px solid var(--g2);border-radius:6px;font-size:13px;font-weight:600;color:var(--g8)}
+  border:1px solid var(--g2);border-radius:6px;font-size: 0.8125rem;font-weight:600;color:var(--g8)}
 .staff-grid .sg-item .sg-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .staff-grid .sg-item .sg-del{background:none;border:none;color:var(--g5);cursor:pointer;
-  font-size:14px;padding:2px 6px;border-radius:4px;line-height:1}
+  font-size: 0.875rem;padding:2px 6px;border-radius:4px;line-height:1}
 .staff-grid .sg-item .sg-del:hover{background:#ffebee;color:var(--ng)}
-.staff-grid .sg-empty{padding:18px;text-align:center;font-size:12px;color:var(--g6);
+.staff-grid .sg-empty{padding:18px;text-align:center;font-size: 0.75rem;color:var(--g6);
   background:var(--g0);border:1px dashed var(--g3);border-radius:6px;grid-column:1/-1}
 
 /* 職員選択モーダル：4列x6行のグリッド */
 .staff-pick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:60vh;overflow-y:auto}
 .staff-pick-grid .spg-b{padding:14px 6px;background:#fff;border:1px solid var(--g3);border-radius:8px;
-  font-size:14px;font-weight:700;color:var(--g9);cursor:pointer;transition:all .12s;
+  font-size: 0.875rem;font-weight:700;color:var(--g9);cursor:pointer;transition:all .12s;
   min-height:46px;display:flex;align-items:center;justify-content:center;text-align:center;
   word-break:break-all;line-height:1.3}
 .staff-pick-grid .spg-b:hover{border-color:var(--pri);background:#e3f2fd;color:var(--pri-d)}
@@ -368,21 +368,21 @@ textarea{resize:vertical;min-height:76px}
 /* btn-go disabled 状態 */
 .btn-go:disabled, .btn-go.is-disabled{background:#bdbdbd;color:#fff;cursor:not-allowed;opacity:.7}
 .btn-go:disabled:hover, .btn-go.is-disabled:hover{background:#bdbdbd}
-#btnSubmitHint{display:none;font-size:11px;color:var(--ng);text-align:center;margin-top:6px;font-weight:700}
+#btnSubmitHint{display:none;font-size: 0.6875rem;color:var(--ng);text-align:center;margin-top:6px;font-weight:700}
 #btnSubmitHint.on{display:block}
 
 /* 記録者入力ラッパー（入力欄＋クリアボタン） */
 .staff-input-wrap{display:flex;gap:6px;align-items:stretch}
 .staff-input-wrap input{flex:1;min-width:0}
 .staff-clear-btn{padding:0 12px;border:1px solid var(--g3);background:#fff;color:var(--g6);
-  border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;line-height:1}
+  border-radius:6px;font-size: 0.8125rem;font-weight:700;cursor:pointer;line-height:1}
 .staff-clear-btn:hover{background:#ffebee;color:var(--ng);border-color:var(--ng)}
 
 /* 職員管理（編集/退職ボタン） */
 .staff-grid .sg-item{flex-wrap:wrap}
 .staff-grid .sg-item .sg-actions{display:flex;gap:2px}
 .staff-grid .sg-edit, .staff-grid .sg-retire, .staff-grid .sg-restore{background:none;border:none;cursor:pointer;
-  font-size:13px;padding:2px 6px;border-radius:4px;line-height:1;color:var(--g6)}
+  font-size: 0.8125rem;padding:2px 6px;border-radius:4px;line-height:1;color:var(--g6)}
 .staff-grid .sg-edit:hover{background:#e3f2fd;color:var(--pri-d)}
 .staff-grid .sg-retire:hover{background:#fff3e0;color:#e65100}
 .staff-grid .sg-restore:hover{background:#e8f5e9;color:#1b5e20}
@@ -393,7 +393,7 @@ textarea{resize:vertical;min-height:76px}
 .staff-grid .sg-item.is-draggable:active{cursor:grabbing}
 .staff-grid .sg-item.sg-dragging{opacity:.35;transform:scale(.95)}
 .staff-grid .sg-item.sg-drag-over{box-shadow:inset 0 -3px 0 0 var(--pri);background:#e3f2fd}
-.staff-grid .sg-item .sg-handle{flex-shrink:0;color:#1565c0;font-size:18px;font-weight:700;cursor:grab;user-select:none;padding:0 6px;line-height:1;background:#e3f2fd;border-radius:4px;border:1px solid #90caf9}
+.staff-grid .sg-item .sg-handle{flex-shrink:0;color:#1565c0;font-size: 1.125rem;font-weight:700;cursor:grab;user-select:none;padding:0 6px;line-height:1;background:#e3f2fd;border-radius:4px;border:1px solid #90caf9}
 .staff-grid .sg-item .sg-handle:hover{background:#bbdefb}
 .staff-grid .sg-item .sg-handle:active{cursor:grabbing}
 
@@ -403,30 +403,40 @@ textarea{resize:vertical;min-height:76px}
   background:linear-gradient(to bottom,#e3f2fd 0%,#bbdefb 100%);border-radius:10px;border:1px solid #90caf9}
 .water-display .water-ic{display:inline-flex;align-items:center;line-height:1}
 .water-display .water-ic svg{width:38px;height:38px;display:block}
-.water-display .water-value{font-size:28px;font-weight:700;color:#0d47a1;min-width:60px;text-align:right;
+.water-display .water-value{font-size: 1.75rem;font-weight:700;color:#0d47a1;min-width:60px;text-align:end;
   font-variant-numeric:tabular-nums;line-height:1}
-.water-display .water-unit{font-size:14px;font-weight:700;color:#0d47a1}
+.water-display .water-unit{font-size: 0.875rem;font-weight:700;color:#0d47a1}
 .water-ctrl{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
 .water-ctrl input[type=range]{flex:1;min-width:120px;cursor:pointer}
 .water-step{min-width:46px;padding:8px 6px;border:1px solid var(--g3);background:#fff;border-radius:6px;
-  font-size:12px;font-weight:700;color:var(--g8);cursor:pointer}
+  font-size: 0.75rem;font-weight:700;color:var(--g8);cursor:pointer}
 .water-step:hover{background:#e3f2fd;border-color:var(--pri);color:var(--pri-d)}
 .water-step:active{transform:scale(.96)}
 .water-preset{display:flex;gap:6px;flex-wrap:wrap}
 .water-pre{flex:1;min-width:54px;padding:8px;border:1px solid var(--g3);background:#fff;border-radius:6px;
-  font-size:12px;font-weight:700;color:var(--g8);cursor:pointer}
+  font-size: 0.75rem;font-weight:700;color:var(--g8);cursor:pointer}
 .water-pre:hover{background:#e3f2fd;border-color:var(--pri);color:var(--pri-d)}
 .water-pre.on{background:var(--pri);color:#fff;border-color:var(--pri)}
 
 /* 排泄記録に並ぶ 水分摂取マーク（一覧・履歴・詳細で再利用） */
 .water-mark{display:inline-flex;align-items:center;gap:4px;background:#e3f2fd;color:#0d47a1;
-  padding:2px 8px 2px 6px;border-radius:10px;font-size:12px;font-weight:700;vertical-align:middle;
+  padding:2px 8px 2px 6px;border-radius:10px;font-size: 0.75rem;font-weight:700;vertical-align:middle;
   margin-left:4px;white-space:nowrap;line-height:1.4}
 .water-mark svg{width:1.2em;height:1.2em}
 /* タイムライン内のセル：通常より少し大きめに表示してアイコンを読み取り可能に */
 .tl-info .water-mini{display:inline-flex;align-items:center;gap:2px;color:#0d47a1;font-weight:700;
-  vertical-align:middle;font-size:11px;background:#e3f2fd;padding:1px 4px;border-radius:8px}
+  vertical-align:middle;font-size: 0.6875rem;background:#e3f2fd;padding:1px 4px;border-radius:8px}
 .tl-info .water-mini svg{width:1.1em;height:1.1em}
+
+/* 動きを減らす設定への対応（2026-08-10 追加・通常表示に影響なし） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -441,7 +451,7 @@ textarea{resize:vertical;min-height:76px}
          APIバッジ・時刻の位置が動かない。 -->
     <button class="hdr-btn" id="btnMaster" aria-label="入居者マスタを新しいタブで開く" title="入居者マスタを開く（入居者情報の源泉）">👤 入居者マスタ</button>
     <div class="api-bd api-of" id="apiBd">●</div>
-    <div style="font-size:12px;opacity:.85" id="hTime"></div>
+    <div style="font-size: 0.75rem;opacity:.85" id="hTime"></div>
   </div>
 </header>
 
@@ -469,7 +479,7 @@ textarea{resize:vertical;min-height:76px}
       <button class="type-btn" data-t="urine">💧 排尿</button>
       <button class="type-btn" data-t="stool">🟤 排便</button>
       <button class="type-btn" data-t="both">両　方</button>
-      <button class="type-btn" data-t="none">✖️ 誘導<br><span style="font-size:10px;font-weight:400">排泄なし</span></button>
+      <button class="type-btn" data-t="none">✖️ 誘導<br><span style="font-size: 0.625rem;font-weight:400">排泄なし</span></button>
     </div>
   </div>
 
@@ -485,13 +495,13 @@ textarea{resize:vertical;min-height:76px}
     </div>
     <div class="fg">
       <label class="fl">排尿量</label>
-      <div style="font-size:11px;color:var(--g6);font-weight:700;margin-bottom:6px">▸ 定性的</div>
+      <div style="font-size: 0.6875rem;color:var(--g6);font-weight:700;margin-bottom:6px">▸ 定性的</div>
       <div class="qg" style="margin-bottom:10px">
         <button class="qb ua" data-v="少量">少量</button>
         <button class="qb ua" data-v="中等量">中等量</button>
         <button class="qb ua" data-v="多量">多量</button>
       </div>
-      <div style="font-size:11px;color:var(--g6);font-weight:700;margin-bottom:6px">▸ 定量的（ml）</div>
+      <div style="font-size: 0.6875rem;color:var(--g6);font-weight:700;margin-bottom:6px">▸ 定量的（ml）</div>
       <div class="qg">
         <button class="qb ua" data-v="50">50ml</button>
         <button class="qb ua" data-v="100">100ml</button>
@@ -504,7 +514,7 @@ textarea{resize:vertical;min-height:76px}
       </div>
       <div class="cus-r" id="cusU" style="display:none">
         <input type="number" id="cusUV" placeholder="量を入力" min="0" max="3000">
-        <span style="font-size:14px">ml</span>
+        <span style="font-size: 0.875rem">ml</span>
       </div>
     </div>
     <div class="fg" style="margin-bottom:0">
@@ -569,7 +579,7 @@ textarea{resize:vertical;min-height:76px}
     <div class="fg" style="margin-bottom:0"><label class="fl">記録者 <span style="color:var(--ng);font-weight:700">*</span> <small style="font-weight:400;color:var(--g6)">（日中：10分無操作で自動クリア／夜間 21:00〜翌7:00：保持、7:00でリセット）</small></label>
       <div class="staff-input-wrap">
         <input type="text" id="recStaff" placeholder="タップして職員を選択 or 直接入力">
-        <button type="button" class="staff-clear-btn" id="recStaffClear" title="記録者をクリア">✕</button>
+        <button type="button" class="staff-clear-btn" id="recStaffClear" title="記録者をクリア" aria-label="記録者をクリア">✕</button>
       </div>
     </div>
   </div>
@@ -609,12 +619,12 @@ textarea{resize:vertical;min-height:76px}
 <!-- ── 予定セル個別編集モーダル ── -->
 <div class="mo" id="mSchCell"><div class="md" style="max-width:420px">
   <div class="md-t" id="mSchCellTitle">⏰ 予定時刻の設定</div>
-  <div id="mSchCellInfo" style="font-size:13px;color:var(--g6);margin-bottom:10px"></div>
+  <div id="mSchCellInfo" style="font-size: 0.8125rem;color:var(--g6);margin-bottom:10px"></div>
   <div class="fg" style="margin-bottom:8px">
     <label class="fl" id="mSchCellTimeLbl">時刻（5分単位）</label>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="bn bs" id="mSchCellM5" style="min-width:48px;padding:8px;font-weight:700">−5</button>
-      <input type="time" id="mSchCellTime" step="300" style="flex:1;padding:10px;border:1px solid var(--g3);border-radius:6px;font-size:18px;font-weight:700;text-align:center">
+      <input type="time" id="mSchCellTime" step="300" style="flex:1;padding:10px;border:1px solid var(--g3);border-radius:6px;font-size: 1.125rem;font-weight:700;text-align:center">
       <button class="bn bs" id="mSchCellP5" style="min-width:48px;padding:8px;font-weight:700">+5</button>
     </div>
   </div>
@@ -628,7 +638,7 @@ textarea{resize:vertical;min-height:76px}
   </div>
   <!-- 排泄記録セクション（過去の時刻 / 既に記録があるセル用）-->
   <div id="mRecSection" style="display:none">
-    <div style="font-size:12px;color:var(--g6);margin-bottom:6px;font-weight:700">📝 上記の時刻で記録を入力</div>
+    <div style="font-size: 0.75rem;color:var(--g6);margin-bottom:6px;font-weight:700">📝 上記の時刻で記録を入力</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
       <button class="bn bsm sch-rec" data-t="urine" style="background:#4fc3f7;color:#fff">💧 排尿</button>
       <button class="bn bsm sch-rec" data-t="stool" style="background:#a1887f;color:#fff">🟤 排便</button>
@@ -651,10 +661,10 @@ textarea{resize:vertical;min-height:76px}
   <div class="fg"><label class="fl">入居者</label>
     <select id="mSchRes"><option value="">― 入居者を選んでください ―</option></select></div>
   <div class="fg" style="margin-bottom:8px"><label class="fl">時刻を追加</label>
-    <div style="font-size:11px;color:var(--g6);margin-bottom:6px">時刻を入力して「追加」を押してください。5分単位で指定できます。</div>
+    <div style="font-size: 0.6875rem;color:var(--g6);margin-bottom:6px">時刻を入力して「追加」を押してください。5分単位で指定できます。</div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <button class="bn bs bsm" id="mSchTimeM5" style="min-width:44px;padding:6px;font-weight:700">−5</button>
-      <input type="time" id="mSchTime" step="300" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--g3);border-radius:6px;font-size:14px">
+      <input type="time" id="mSchTime" step="300" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--g3);border-radius:6px;font-size: 0.875rem">
       <button class="bn bs bsm" id="mSchTimeP5" style="min-width:44px;padding:6px;font-weight:700">+5</button>
       <button class="bn bp bsm" id="mSchAdd">＋ 追加</button>
     </div>
@@ -676,11 +686,11 @@ textarea{resize:vertical;min-height:76px}
     </div>
     <button class="bn bs bsm rf-sp" id="bdRefresh">🔄 更新</button>
     <button class="bn blax bsm" id="bdLax" style="margin-left:auto">💊 下剤</button>
-    <span style="font-size:11px;color:var(--g5);margin-left:12px">
+    <span style="font-size: 0.6875rem;color:var(--g5);margin-left:12px">
       <span style="display:inline-block;width:10px;height:10px;background:#c62828;border-radius:50%;margin-right:3px"></span>要注意
       <span style="display:inline-block;width:10px;height:10px;background:#f9a825;border-radius:50%;margin-right:3px;margin-left:8px"></span>注意
     </span>
-    <label style="font-size:11px;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
+    <label style="font-size: 0.6875rem;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
   </div>
   <div class="tl-stop" id="bdScrollTop"><div class="tl-stop-inner"></div></div>
   <div class="bd-w" id="bdBox">
@@ -714,7 +724,7 @@ textarea{resize:vertical;min-height:76px}
       <button class="bn bs bsm" data-off="0">今日</button>
     </div>
     <button class="bn bs bsm rf-sp" id="tlRefresh">🔄 更新</button>
-    <label style="font-size:11px;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
+    <label style="font-size: 0.6875rem;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
     <button class="bn blax bsm" id="tlLax" style="margin-left:auto">💊 下剤</button>
   </div>
   <div class="cd">
@@ -724,8 +734,8 @@ textarea{resize:vertical;min-height:76px}
       <div class="tl-leg-i"><span class="ev-m st">△</span>トイレ便</div>
       <div class="tl-leg-i"><span class="ev-m sp">▲</span>パッド便</div>
       <div class="tl-leg-i"><span class="ev-d l"></span>下剤</div>
-      <div class="tl-leg-i"><span style="font-size:12px;color:#455a64">✖️</span>誘導</div>
-      <div style="font-size:11px;color:var(--g5);margin-left:auto">セルタップで詳細</div>
+      <div class="tl-leg-i"><span style="font-size: 0.75rem;color:#455a64">✖️</span>誘導</div>
+      <div style="font-size: 0.6875rem;color:var(--g5);margin-left:auto">セルタップで詳細</div>
     </div>
     <div class="tl-stop" id="tlScrollTop"><div class="tl-stop-inner"></div></div>
     <div class="tl-w" id="tlBox"></div>
@@ -741,22 +751,22 @@ textarea{resize:vertical;min-height:76px}
   </div>
   <div class="cd">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-      <h3 style="font-size:15px;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
+      <h3 style="font-size: 0.9375rem;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
       <button class="bn bp" id="btnAddStaff2" style="padding:8px 16px">＋ 職員を追加</button>
     </div>
     <!-- 同期状態パネル（最重要・常時表示） -->
     <div style="margin-bottom:12px;padding:12px;background:#e3f2fd;border:2px solid #1565c0;border-radius:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-        <span style="font-size:13px;font-weight:700;color:#0d47a1">📡 サーバー同期状態：　<span id="staffSyncStat2">確認中...</span></span>
-        <button class="bn bp" id="btnStaffReceive2" style="padding:10px 18px;background:#1565c0;color:#fff;font-weight:700;font-size:13px">📥 全員を受信</button>
+        <span style="font-size: 0.8125rem;font-weight:700;color:#0d47a1">📡 サーバー同期状態：　<span id="staffSyncStat2">確認中...</span></span>
+        <button class="bn bp" id="btnStaffReceive2" style="padding:10px 18px;background:#1565c0;color:#fff;font-weight:700;font-size: 0.8125rem">📥 全員を受信</button>
       </div>
-      <div id="staffSyncDetail2" style="font-size:11px;color:var(--g7);line-height:1.5"></div>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #90caf9;font-size:11px;color:var(--g6)">
+      <div id="staffSyncDetail2" style="font-size: 0.6875rem;color:var(--g7);line-height:1.5"></div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed #90caf9;font-size: 0.6875rem;color:var(--g6)">
         💡 別端末で登録した職員を取り込むには「📥 全員を受信」を押してください。<br>
         💡 受信するには、設定で GAS Web App URL を保存しておく必要があります。
       </div>
     </div>
-    <div style="font-size:12px;color:var(--g6);line-height:1.55;margin-bottom:10px">
+    <div style="font-size: 0.75rem;color:var(--g6);line-height:1.55;margin-bottom:10px">
       入力画面の「記録者」欄をタップすると、ここで登録した職員名から選んで入力できます。<br>
       苗字のみで十分です（例：山田）。人数制限はありません。
     </div>
@@ -771,10 +781,10 @@ textarea{resize:vertical;min-height:76px}
   </div>
   <div class="cd">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <h3 style="font-size:13px;font-weight:700;color:var(--g7)">👥 入居者管理</h3>
+      <h3 style="font-size: 0.8125rem;font-weight:700;color:var(--g7)">👥 入居者管理</h3>
       <button class="bn bp bsm" id="btnAddRes">＋ 追加</button>
     </div>
-    <div style="margin-bottom:8px;font-size:12px;color:var(--g7)">
+    <div style="margin-bottom:8px;font-size: 0.75rem;color:var(--g7)">
       <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="cfgShowInactive"> 退去済の入居者を表示
       </label>
@@ -788,27 +798,27 @@ textarea{resize:vertical;min-height:76px}
        ★このカードは紐づけのある入居者が1人も居ない端末では出さない（現場の画面を増やさない）。 -->
   <div class="cd" id="cdLinkAudit" style="display:none">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <h3 style="font-size:13px;font-weight:700;color:var(--g7)">🔗 マスタ連携の点検</h3>
+      <h3 style="font-size: 0.8125rem;font-weight:700;color:var(--g7)">🔗 マスタ連携の点検</h3>
       <button class="bn bs bsm" id="btnLinkRecheck">🔄 点検</button>
     </div>
-    <div id="linkAuditSum" style="font-size:12.5px;color:var(--g7);line-height:1.7"></div>
+    <div id="linkAuditSum" style="font-size: 0.78125rem;color:var(--g7);line-height:1.7"></div>
     <div id="linkAuditList" style="margin-top:8px"></div>
     <div id="linkAuditActs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
   </div>
   <div class="cd">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <h3 style="font-size:13px;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
+      <h3 style="font-size: 0.8125rem;font-weight:700;color:var(--g7)">👤 職員（記録者）管理</h3>
       <button class="bn bp bsm" id="btnAddStaff">＋ 追加</button>
     </div>
     <!-- 同期状態パネル（常時表示・操作の起点） -->
     <div style="margin-bottom:10px;padding:10px 12px;background:#fff8e1;border:2px solid #fbc02d;border-radius:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
-        <span style="font-size:12px;font-weight:700;color:#5d4037">📡 サーバー同期状態：　<span id="staffSyncStat">確認中...</span></span>
+        <span style="font-size: 0.75rem;font-weight:700;color:#5d4037">📡 サーバー同期状態：　<span id="staffSyncStat">確認中...</span></span>
         <button class="bn bp bsm" id="btnStaffResync" style="padding:8px 14px;background:#1565c0;color:#fff;font-weight:700">🔄 強制再送信</button>
       </div>
-      <div id="staffSyncDetail" style="font-size:11px;color:var(--g7);line-height:1.5"></div>
+      <div id="staffSyncDetail" style="font-size: 0.6875rem;color:var(--g7);line-height:1.5"></div>
     </div>
-    <div style="font-size:11px;color:var(--g6);line-height:1.55;margin-bottom:8px">
+    <div style="font-size: 0.6875rem;color:var(--g6);line-height:1.55;margin-bottom:8px">
       入力画面の「記録者」欄をタップすると、ここで登録した職員名から選んで入力できます。<br>
       苗字のみで十分です（例：山田）。人数制限はありません。
     </div>
@@ -830,7 +840,7 @@ textarea{resize:vertical;min-height:76px}
         <option value="365">直近 1年</option>
         <option value="730">直近 2年</option>
       </select>
-      <div style="font-size:11px;color:var(--g6);margin-top:4px;line-height:1.5">
+      <div style="font-size: 0.6875rem;color:var(--g6);margin-top:4px;line-height:1.5">
         期間より古い記録は<b>この端末からのみ</b>自動整理されます。スプレッドシートには全期間の記録がそのまま残ります。
       </div>
     </div>
@@ -844,7 +854,7 @@ textarea{resize:vertical;min-height:76px}
       <button class="bn bs" id="btnImport">📤 データ復元</button>
     </div>
     <input type="file" id="impFile" accept=".json" style="display:none">
-    <div style="margin-top:10px;font-size:12px;color:var(--g5)">※データはブラウザのlocalStorageに保存されています。<br>定期的にバックアップを取ることを推奨します。</div>
+    <div style="margin-top:10px;font-size: 0.75rem;color:var(--g5)">※データはブラウザのlocalStorageに保存されています。<br>定期的にバックアップを取ることを推奨します。</div>
   </div>
   <!-- Google Sheets 連携 -->
   <div class="cd">
@@ -856,14 +866,14 @@ textarea{resize:vertical;min-height:76px}
     <div class="fg">
       <label class="fl">🔑 同期トークン（合言葉）</label>
       <input type="password" id="cfgApiToken" placeholder="GASのスクリプトプロパティ HAIBEN_TOKEN と同じ値" autocomplete="off">
-      <div style="margin-top:4px;font-size:11px;color:var(--g5)">※管理者から知らされた合言葉を入力してください。記録データの不正アクセスを防ぐ認証キーです。</div>
+      <div style="margin-top:4px;font-size: 0.6875rem;color:var(--g5)">※管理者から知らされた合言葉を入力してください。記録データの不正アクセスを防ぐ認証キーです。</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
       <button class="bn bp bsm" id="btnApiSave">💾 URLを保存・接続</button>
       <button class="bn bs bsm" id="btnApiSync">🔄 手動同期</button>
       <button class="bn br bsm" id="btnApiClear">🔌 連携解除</button>
     </div>
-    <div id="apiStatus" style="margin-top:10px;font-size:12px;color:var(--g5)">
+    <div id="apiStatus" style="margin-top:10px;font-size: 0.75rem;color:var(--g5)">
       GASデプロイ後に取得したURLを入力して「URLを保存・接続」を押してください。
     </div>
   </div>
@@ -901,8 +911,8 @@ textarea{resize:vertical;min-height:76px}
   <div class="fg"><label class="fl">居室番号</label><input type="text" id="mRR" placeholder="101"></div>
   <div id="mResMasterNote" style="display:none;margin:-6px 0 12px">
     <div style="display:flex;gap:7px;align-items:flex-start;background:#eef4fb;border:1px solid #b9d3ee;border-radius:6px;padding:8px 10px">
-      <span aria-hidden="true" style="font-size:14px;line-height:1.5">🔒</span>
-      <span style="font-size:12px;color:#1a3d63;line-height:1.6">居室番号・ステータス（在籍/退去）は<strong>入居者マスタで管理</strong>されています。変更は入居者マスタから行ってください。フリガナはこの画面で入力・訂正できます（空欄の間だけマスタの値を自動補完します）。</span>
+      <span aria-hidden="true" style="font-size: 0.875rem;line-height:1.5">🔒</span>
+      <span style="font-size: 0.75rem;color:#1a3d63;line-height:1.6">居室番号・ステータス（在籍/退去）は<strong>入居者マスタで管理</strong>されています。変更は入居者マスタから行ってください。フリガナはこの画面で入力・訂正できます（空欄の間だけマスタの値を自動補完します）。</span>
     </div>
   </div>
   <div class="fg"><label class="fl">性別</label>
@@ -910,14 +920,14 @@ textarea{resize:vertical;min-height:76px}
   <div class="fg"><label class="fl">ステータス</label>
     <select id="mRS"><option value="active">在籍中</option><option value="inactive">退去済</option></select></div>
   <div class="fg"><label class="fl">下剤の使用法（メモ）</label>
-    <textarea id="mRLax" rows="2" placeholder="例: 毎週月・木にプルゼニド1錠（夕食後）" style="width:100%;padding:8px;border:1px solid var(--g3);border-radius:6px;font-family:inherit;font-size:14px;resize:vertical"></textarea></div>
-  <details style="margin-bottom:12px;background:#f5f5f5;padding:8px 10px;border-radius:6px"><summary style="cursor:pointer;font-weight:600;font-size:13px">⚙️ この入居者のみアラートしきい値を変更（任意）</summary>
-    <div style="font-size:11px;color:var(--g5);margin:6px 0">空欄にすると全体設定（設定画面）の値が適用されます。</div>
+    <textarea id="mRLax" rows="2" placeholder="例: 毎週月・木にプルゼニド1錠（夕食後）" style="width:100%;padding:8px;border:1px solid var(--g3);border-radius:6px;font-family:inherit;font-size: 0.875rem;resize:vertical"></textarea></div>
+  <details style="margin-bottom:12px;background:#f5f5f5;padding:8px 10px;border-radius:6px"><summary style="cursor:pointer;font-weight:600;font-size: 0.8125rem">⚙️ この入居者のみアラートしきい値を変更（任意）</summary>
+    <div style="font-size: 0.6875rem;color:var(--g5);margin:6px 0">空欄にすると全体設定（設定画面）の値が適用されます。</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div><label class="fl" style="font-size:12px">排尿 警告（時間）</label><input type="number" min="1" id="mRUW" placeholder=""></div>
-      <div><label class="fl" style="font-size:12px">排尿 危険（時間）</label><input type="number" min="1" id="mRUD" placeholder=""></div>
-      <div><label class="fl" style="font-size:12px">排便 警告（日）</label><input type="number" min="1" id="mRSW" placeholder=""></div>
-      <div><label class="fl" style="font-size:12px">排便 危険（日）</label><input type="number" min="1" id="mRSD" placeholder=""></div>
+      <div><label class="fl" style="font-size: 0.75rem">排尿 警告（時間）</label><input type="number" min="1" id="mRUW" placeholder=""></div>
+      <div><label class="fl" style="font-size: 0.75rem">排尿 危険（時間）</label><input type="number" min="1" id="mRUD" placeholder=""></div>
+      <div><label class="fl" style="font-size: 0.75rem">排便 警告（日）</label><input type="number" min="1" id="mRSW" placeholder=""></div>
+      <div><label class="fl" style="font-size: 0.75rem">排便 危険（日）</label><input type="number" min="1" id="mRSD" placeholder=""></div>
     </div>
   </details>
   <div class="md-f"><button class="bn bs" id="mResCancel">キャンセル</button><button class="bn bp" id="mResSave">保　存</button></div>
@@ -926,10 +936,10 @@ textarea{resize:vertical;min-height:76px}
 <!-- ── 入院管理モーダル ── -->
 <div class="mo" id="mHosp"><div class="md" style="max-width:520px">
   <div class="md-t" id="mHospT">🏥 入院管理</div>
-  <div id="mHospResName" style="font-size:13px;color:var(--g7);margin-bottom:12px"></div>
+  <div id="mHospResName" style="font-size: 0.8125rem;color:var(--g7);margin-bottom:12px"></div>
   <div id="mHospList" style="margin-bottom:14px"></div>
   <div style="background:#fff8e1;border:1px solid #fbc02d;border-radius:6px;padding:10px 12px;margin-bottom:12px">
-    <div style="font-size:12px;font-weight:700;color:#5d4037;margin-bottom:6px">➕ 新規入院を登録</div>
+    <div style="font-size: 0.75rem;font-weight:700;color:#5d4037;margin-bottom:6px">➕ 新規入院を登録</div>
     <div class="fg" style="margin-bottom:6px"><label class="fl">入院日時</label>
       <input type="datetime-local" id="mHospAdmit" style="width:100%;padding:8px;border:1px solid var(--g3);border-radius:6px"></div>
     <div class="fg" style="margin-bottom:6px"><label class="fl">退院日時（任意・後で登録可）</label>
@@ -938,12 +948,12 @@ textarea{resize:vertical;min-height:76px}
   </div>
   <!-- 入院状態の正本は入居者マスタである、と画面で明示する（2026-08-03・入口一本化のA案）。
        現場が最初に気づくため登録はここでも行えるが、値の正は常に入居者マスタ側にある。 -->
-  <div style="font-size:11px;color:#0d47a1;line-height:1.6;background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;padding:8px 10px;margin-bottom:8px">
+  <div style="font-size: 0.6875rem;color:#0d47a1;line-height:1.6;background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;padding:8px 10px;margin-bottom:8px">
     🏠 <b>入院・退院の正本は「入居者マスタ」です。</b>ここで登録した内容は入居者マスタへ自動送信され、
     通所利用表・週間計画・体重管理にも共通で反映されます。<br>
     ⚠️ 他アプリと食い違って見える時は<b>入居者マスタの表示が正</b>です（この画面ではなく入居者マスタで直してください）。
   </div>
-  <div style="font-size:11px;color:var(--g6);line-height:1.6;background:#f5f5f5;border-radius:6px;padding:8px 10px">
+  <div style="font-size: 0.6875rem;color:var(--g6);line-height:1.6;background:#f5f5f5;border-radius:6px;padding:8px 10px">
     💡 入院日時を登録すると一覧・時系列に <span style="background:#c62828;color:#fff;padding:1px 6px;border-radius:3px;font-weight:700">入院</span> と表示され、その期間中の記録入力ができなくなります。<br>
     💡 退院日時を登録すると <span style="background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-weight:700">退院</span> マーカーが表示され、入力が再開できます。<br>
     💡 入院前の記録データは保持されます。
@@ -973,7 +983,7 @@ textarea{resize:vertical;min-height:76px}
     <div class="tl-leg-i"><span class="ev-d s"></span>排便</div>
     <div class="tl-leg-i"><span class="ev-d b"></span>両方</div>
     <div class="tl-leg-i"><span class="ev-d l"></span>下剤</div>
-    <div class="tl-leg-i"><span style="font-size:12px;color:#455a64">✖️</span>誘導・排泄なし</div>
+    <div class="tl-leg-i"><span style="font-size: 0.75rem;color:#455a64">✖️</span>誘導・排泄なし</div>
   </div>
   <div id="m5DayC" style="overflow:auto;max-height:70vh"></div>
   <div class="md-f"><button class="bn bp bsm" id="m5DayHist">📋 排泄履歴</button><button class="bn bs" id="m5DayClose">閉じる</button></div>
@@ -1033,15 +1043,15 @@ textarea{resize:vertical;min-height:76px}
     <div class="md-t" style="margin-bottom:0;flex:1">👤 記録者を選択</div>
     <button class="bn bs bsm" id="mStaffPickClose" title="閉じる" style="margin-left:auto">✕ 閉じる</button>
   </div>
-  <div id="mStaffPickEmpty" style="display:none;padding:14px;text-align:center;font-size:12px;color:var(--g6);line-height:1.6;background:var(--g0);border:1px solid var(--g2);border-radius:6px">
+  <div id="mStaffPickEmpty" style="display:none;padding:14px;text-align:center;font-size: 0.75rem;color:var(--g6);line-height:1.6;background:var(--g0);border:1px solid var(--g2);border-radius:6px">
     まだ職員が登録されていません。<br>
     <span style="color:var(--g7)">設定 → 👤 職員（記録者）管理</span> から追加するか、下の欄から直接入力してください。
   </div>
   <div id="mStaffPickGrid" class="staff-pick-grid"></div>
   <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--g2)">
-    <div style="font-size:11px;color:var(--g6);margin-bottom:6px">リストに無い場合は直接入力（職員管理に自動登録されます）</div>
+    <div style="font-size: 0.6875rem;color:var(--g6);margin-bottom:6px">リストに無い場合は直接入力（職員管理に自動登録されます）</div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <input type="text" id="mStaffPickManual" placeholder="苗字を入力" style="flex:1;min-width:140px;padding:8px;border:1px solid var(--g3);border-radius:6px;font-size:13px" maxlength="10">
+      <input type="text" id="mStaffPickManual" placeholder="苗字を入力" style="flex:1;min-width:140px;padding:8px;border:1px solid var(--g3);border-radius:6px;font-size: 0.8125rem" maxlength="10">
       <button class="bn bp bsm" id="mStaffPickManualOk">追加</button>
     </div>
   </div>
@@ -1050,8 +1060,8 @@ textarea{resize:vertical;min-height:76px}
 <!-- ── プロンプト入力モーダル（職員追加・編集） ── -->
 <div class="mo" id="mPrompt"><div class="md" style="max-width:380px">
   <div class="md-t" id="mPromptT">入力</div>
-  <div style="font-size:12px;color:var(--g7);margin-bottom:8px" id="mPromptMsg"></div>
-  <input type="text" id="mPromptInp" placeholder="" style="width:100%;padding:10px;font-size:15px;border:1px solid var(--g3);border-radius:6px;box-sizing:border-box" maxlength="20">
+  <div style="font-size: 0.75rem;color:var(--g7);margin-bottom:8px" id="mPromptMsg"></div>
+  <input type="text" id="mPromptInp" placeholder="" style="width:100%;padding:10px;font-size: 0.9375rem;border:1px solid var(--g3);border-radius:6px;box-sizing:border-box" maxlength="20">
   <div class="md-f" style="margin-top:14px">
     <button class="bn bs" id="mPromptCancel">キャンセル</button>
     <button class="bn bp" id="mPromptOk">OK</button>
@@ -1060,13 +1070,13 @@ textarea{resize:vertical;min-height:76px}
 
 <div class="mo" id="mConf"><div class="md" style="max-width:360px">
   <div class="md-t">⚠️ 確認</div>
-  <div id="mConfMsg" style="font-size:14px;line-height:1.6;margin-bottom:8px;white-space:pre-line"></div>
+  <div id="mConfMsg" style="font-size: 0.875rem;line-height:1.6;margin-bottom:8px;white-space:pre-line"></div>
   <div class="md-f"><button class="bn bs" id="mConfNo">キャンセル</button><button class="bn br" id="mConfYes">実行する</button></div>
 </div></div>
 
 <div class="mo" id="mLock"><div class="md" style="max-width:360px;text-align:center">
   <div class="md-t">🔒 画面をロックしました</div>
-  <div style="font-size:13px;line-height:1.7;color:var(--g6)">無操作が続いたため、この端末に残っていた排泄記録を消去しました。<br>サーバーへの保存を確認済みです。「再開する」で読み直せます。<br><span style="font-size:12px;color:var(--g7)">※入居者名簿は入居者マスタ側の設定に従います</span></div>
+  <div style="font-size: 0.8125rem;line-height:1.7;color:var(--g6)">無操作が続いたため、この端末に残っていた排泄記録を消去しました。<br>サーバーへの保存を確認済みです。「再開する」で読み直せます。<br><span style="font-size: 0.75rem;color:var(--g7)">※入居者名簿は入居者マスタ側の設定に従います</span></div>
   <div class="md-f" style="justify-content:center"><button class="bn bp" id="mLockResume">再開する</button></div>
 </div></div>
 
@@ -1117,7 +1127,7 @@ let D={residents:[],records:[],cfg:{urineWarnH:6,urineDangerH:8,stoolWarnD:2,sto
 let ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0};
 /* 排泄元マーカー（タイムライン／5日表示共通） */
 function tlMarks(r){
-  if(r.type==='none')return'<span style="font-size:13px;color:#455a64;font-weight:700">✖️</span>';
+  if(r.type==='none')return'<span style="font-size: 0.8125rem;color:#455a64;font-weight:700">✖️</span>';
   if(r.type==='laxative')return'<span class="ev-d l"></span>';
   // 水分摂取のみ：コップマーク
   if(r.type==='water')return'<span title="水分摂取のみ" style="display:inline-flex;align-items:center">'+waterSvg('15px')+'</span>';
@@ -2760,9 +2770,9 @@ function toggleSchedule(rid,slot){var r=D.residents.find(function(x){return x.id
 var schedDraft=[]; // モーダル内の編集中リスト
 function renderSchedList(){
   var box=$('mSchList');if(!box)return;
-  if(!schedDraft.length){box.innerHTML='<span style="color:var(--g5);font-size:12px;padding:4px 8px">（未設定）</span>';return}
+  if(!schedDraft.length){box.innerHTML='<span style="color:var(--g5);font-size: 0.75rem;padding:4px 8px">（未設定）</span>';return}
   box.innerHTML=schedDraft.slice().sort().map(function(t){
-    return'<span class="sch-chip" data-t="'+t+'" style="display:inline-flex;align-items:center;gap:4px;background:#fff8e1;border:1px solid #fbc02d;color:#8d6e00;padding:4px 4px 4px 10px;border-radius:14px;font-weight:700;font-size:12px">'+t+'<button class="sch-rm" data-t="'+t+'" style="border:none;background:#fbc02d;color:#fff;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:12px;font-weight:700;line-height:1">×</button></span>'
+    return'<span class="sch-chip" data-t="'+t+'" style="display:inline-flex;align-items:center;gap:4px;background:#fff8e1;border:1px solid #fbc02d;color:#8d6e00;padding:4px 4px 4px 10px;border-radius:14px;font-weight:700;font-size: 0.75rem">'+t+'<button class="sch-rm" data-t="'+t+'" style="border:none;background:#fbc02d;color:#fff;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size: 0.75rem;font-weight:700;line-height:1">×</button></span>'
   }).join('');
   $$('.sch-rm',box).forEach(function(b){b.addEventListener('click',function(){
     var t=this.dataset.t;schedDraft=schedDraft.filter(function(x){return x!==t});renderSchedList()})});
@@ -3181,7 +3191,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       return s + (Number(r.waterCC)>0 ? Number(r.waterCC) : 0);
     }, 0);
     var waterSummary = dayWaterTotal>0
-      ? '<div style="margin-bottom:6px;padding:3px 8px;background:#e3f2fd;color:#0d47a1;border-radius:10px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px">'+waterSvg('1.1em')+' 本日 '+dayWaterTotal+'cc</div>'
+      ? '<div style="margin-bottom:6px;padding:3px 8px;background:#e3f2fd;color:#0d47a1;border-radius:10px;font-size: 0.6875rem;font-weight:700;display:inline-flex;align-items:center;gap:4px">'+waterSvg('1.1em')+' 本日 '+dayWaterTotal+'cc</div>'
       : '';
     var notesHtml=waterSummary + (dayBoth.length?dayBoth.map(function(r){
       // 種別アイコン：水分のみは SVG コップ、それ以外は従来通り
@@ -3209,7 +3219,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     var uDiff=lu?dayDiff(lu.date,date):0;
     var sDiff=ls?dayDiff(ls.date,date):0;
     function offStyle(badge,t){
-      var base='display:inline-block;margin-top:3px;padding:1px 6px;border-radius:10px;font-weight:700;font-size:12px;';
+      var base='display:inline-block;margin-top:3px;padding:1px 6px;border-radius:10px;font-weight:700;font-size: 0.75rem;';
       if(badge==='eb-ng')return base+'background:var(--ng-l);color:var(--ng);border:1px solid var(--ng)';
       if(badge==='eb-w')return base+'background:#fff59d;color:#8d6e00;border:1px solid #fbc02d';
       if(t==='s')return base+'background:var(--s-bg);color:var(--s);border:1px solid #a1887f';
@@ -3230,27 +3240,27 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     var rowStyle='';
     // 入院マーカー（氏名セルに表示）— 退院は表示しない
     var hospMarker='';
-    if(admissionEvent)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院 '+admissionEvent.time+'</div>';
-    if(isFullHosp)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>';
+    if(admissionEvent)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院 '+admissionEvent.time+'</div>';
+    if(isFullHosp)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>';
     /* 入居者マスタ側だけで入院になっている人（当アプリに入院履歴が無い）にも同じバッジを出す。
        過去日の表示は書き換えないよう「今日」を見ているときだけ。行のグレーアウト・間隔表示・
        入力可否は入院履歴（日時）が根拠のまま＝既存挙動を変えない。 */
-    if(!hospMarker&&re.masterHosp===true&&date===today())hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>';
+    if(!hospMarker&&re.masterHosp===true&&date===today())hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>';
     return'<tr class="'+rc+'"'+(rowStyle?' style="'+rowStyle+'"':'')+'>'+
       '<td><strong>'+escapeHtmlText(re.room)+'</strong></td>'+
-      '<td style="text-align:left;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+hospMarker+'</td>'+
+      '<td style="text-align:start;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+hospMarker+'</td>'+
       '<td style="white-space:nowrap">'+(lu?'<b>'+fmtLast(lu,date)+'</b>':'<span class="nr">未記録</span>')+'</td>'+
       '<td><span class="eb '+ub+'">'+fmtEl(uh)+'</span>'+uOffHtml+'</td>'+
-      '<td>'+du.length+'回'+(tU>0?'<div style="font-size:10px;color:var(--u)">'+tU+'ml</div>':'')+(tU===0&&du.some(r=>typeof r.urineAmt==='string'&&r.urineAmt)?'<div style="font-size:10px;color:var(--u)">'+du.filter(r=>typeof r.urineAmt==='string'&&r.urineAmt).map(r=>r.urineAmt).join('・')+'</div>':'')+'</td>'+
+      '<td>'+du.length+'回'+(tU>0?'<div style="font-size: 0.625rem;color:var(--u)">'+tU+'ml</div>':'')+(tU===0&&du.some(r=>typeof r.urineAmt==='string'&&r.urineAmt)?'<div style="font-size: 0.625rem;color:var(--u)">'+du.filter(r=>typeof r.urineAmt==='string'&&r.urineAmt).map(r=>r.urineAmt).join('・')+'</div>':'')+'</td>'+
       '<td style="white-space:nowrap">'+(ls?'<b>'+fmtLast(ls,date)+'</b>':'<span class="nr">未記録</span>')+'</td>'+
       '<td><span class="eb '+sb+'">'+fmtEl(sh)+'</span>'+sOffHtml+'</td>'+
       '<td>'+ds.length+'回</td>'+
-      '<td style="white-space:nowrap">'+(lCons?'<span class="tg tg-s">'+lCons+'</span>':'')+(lSA?' <span style="font-size:11px">'+lSA+'</span>':'')+'</td>'+
-      '<td style="font-size:13px;text-align:left;min-width:300px;max-width:360px;word-break:break-word;white-space:normal;line-height:1.45;padding:8px 10px">'+(notesHtml||'<span style="color:var(--g5)">—</span>')+laxHtml+'</td>'+
-      '<td style="font-size:11px;text-align:left;max-width:180px;word-break:break-all;white-space:normal;color:#4a148c">'+(re.laxNote?re.laxNote.replace(/\n/g,'<br>'):'<span style="color:var(--g5)">—</span>')+'</td>'+
+      '<td style="white-space:nowrap">'+(lCons?'<span class="tg tg-s">'+lCons+'</span>':'')+(lSA?' <span style="font-size: 0.6875rem">'+lSA+'</span>':'')+'</td>'+
+      '<td style="font-size: 0.8125rem;text-align:start;min-width:300px;max-width:360px;word-break:break-word;white-space:normal;line-height:1.45;padding:8px 10px">'+(notesHtml||'<span style="color:var(--g5)">—</span>')+laxHtml+'</td>'+
+      '<td style="font-size: 0.6875rem;text-align:start;max-width:180px;word-break:break-all;white-space:normal;color:#4a148c">'+(re.laxNote?re.laxNote.replace(/\n/g,'<br>'):'<span style="color:var(--g5)">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+(hasRec
-        ?'<button class="bn bs bsm bd-ops" data-rid="'+re.id+'" style="padding:6px 10px;min-height:36px;font-size:11px">✏️ 修正・削除<div style="font-size:10px;color:var(--g5);margin-top:2px">('+dAll.length+'件)</div></button>'
-        :'<span style="font-size:11px;color:var(--g5)">—</span>')+'</td>'+
+        ?'<button class="bn bs bsm bd-ops" data-rid="'+re.id+'" style="padding:6px 10px;min-height:36px;font-size: 0.6875rem">✏️ 修正・削除<div style="font-size: 0.625rem;color:var(--g5);margin-top:2px">('+dAll.length+'件)</div></button>'
+        :'<span style="font-size: 0.6875rem;color:var(--g5)">—</span>')+'</td>'+
       '</tr>'}).join('');
   // 履歴リンク
   $$('[data-hist]',tb).forEach(el=>el.addEventListener('click',function(){showHist(parseInt(this.dataset.hist))}));
@@ -3312,7 +3322,7 @@ function renderTL(){const date=$('tlDate').value||today();
       // 🏥 入院マーカーセル — 入院のみ表示（退院マーカーは表示しない仕様）
       if(hospBySlot[s]&&hospBySlot[s].type==='admission'){
         var ev=hospBySlot[s];
-        cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size:11px;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size:9px;opacity:.9">'+ev.time+'</span></td>';
+        cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size: 0.5625rem;opacity:.9">'+ev.time+'</span></td>';
         continue;
       }
       // 🏥 入院期間中のセル（入院後・退院前）はより濃いグレーアウト
@@ -3346,7 +3356,7 @@ function renderTL(){const date=$('tlDate').value||today();
       if(badge==='eb-w')return'background:#fff59d;color:#8d6e00;font-weight:700;border:1px solid #fbc02d';
       return def;
     }
-    var pillBase='display:inline-block;font-size:10px;padding:1px 5px;border-radius:10px;white-space:nowrap;';
+    var pillBase='display:inline-block;font-size: 0.625rem;padding:1px 5px;border-radius:10px;white-space:nowrap;';
     var uPill=(lu&&uDiff!==null&&uDiff<0)
       ?'<span style="'+pillBase+tlOffStyle(ub_tl,'color:#1565c0;background:#e3f2fd;border:1px solid #90caf9')+'" title="最終排尿: '+fmtMD(lu.date)+' '+lu.time+'">尿'+fmtDayOff(uDiff)+'</span>'
       :'';
@@ -3356,16 +3366,16 @@ function renderTL(){const date=$('tlDate').value||today();
     var offHtml=(uPill||sPill)
       ?'<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+uPill+'<span style="margin-left:auto">'+sPill+'</span></div>'
       :'';
-    var fdBtn='<button class="bn bs fd-btn" data-fd="'+re.id+'" title="5日間の排泄パターン" style="padding:2px 6px;margin-left:4px;font-size:10px;min-height:22px;min-width:0;vertical-align:middle">📊5日</button>';
+    var fdBtn='<button class="bn bs fd-btn" data-fd="'+re.id+'" title="5日間の排泄パターン" style="padding:2px 6px;margin-left:4px;font-size: 0.625rem;min-height:22px;min-width:0;vertical-align:middle">📊5日</button>';
     // 🏥 完全入院日（入院翌日〜退院前日）は氏名セルもグレーアウトし、排泄カウントの代わりに「入院中」表示
     var isFullHospTL=isFullHospDay(re,date);
     var nmCellStyle=isFullHospTL?' style="background:#9e9e9e;color:#424242"':'';
     var nmContent=isFullHospTL
       ?'<span style="color:#424242">'+escapeHtmlText(re.room)+'</span><br><span class="tl-nm-link" data-hist="'+escapeHtmlText(re.id)+'" style="color:#212121;text-decoration-color:#212121">'+escapeHtmlText(re.name)+'</span>'+fdBtn+
-        '<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>'
+        '<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>'
       :'<span style="color:var(--g5)">'+escapeHtmlText(re.room)+'</span><br><span class="tl-nm-link" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+fdBtn+
         // 入居者マスタ側だけで入院中の人にもバッジを出す（今日の表示のみ。灰色化・入力可否は従来どおり履歴が根拠）
-        ((re.masterHosp===true&&date===today())?'<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>':'')+offHtml;
+        ((re.masterHosp===true&&date===today())?'<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>':'')+offHtml;
     return'<tr><td class="tl-nm"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
   $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
   setupTopScroll();
@@ -3459,11 +3469,11 @@ function showFiveDay(rid,endDate){
     var dObj=new Date(date+'T00:00:00');
     var wd=['日','月','火','水','木','金','土'][dObj.getDay()];
     var wdCol=dObj.getDay()===0?'#c62828':(dObj.getDay()===6?'#1565c0':'var(--g5)');
-    var dLabel='<b>'+fmtMD(date)+'</b><br><span style="color:'+wdCol+';font-size:10px">('+wd+')</span>';
-    if(date===tdy)dLabel='<b style="color:var(--pri)">本日</b><br><span style="font-size:10px">'+fmtMD(date)+'('+wd+')</span>';
+    var dLabel='<b>'+fmtMD(date)+'</b><br><span style="color:'+wdCol+';font-size: 0.625rem">('+wd+')</span>';
+    if(date===tdy)dLabel='<b style="color:var(--pri)">本日</b><br><span style="font-size: 0.625rem">'+fmtMD(date)+'('+wd+')</span>';
     var rowBg=(date===tdy)?'background:#e3f2fd':'';
     return'<tr style="'+rowBg+'"><td class="tl-nm" style="'+rowBg+';text-align:center">'+dLabel+'</td>'+cells
-      +'<td class="tl-nm" style="'+rowBg+';text-align:center;position:sticky;right:0;font-size:11px;white-space:nowrap">'+summary+'</td></tr>';
+      +'<td class="tl-nm" style="'+rowBg+';text-align:center;position:sticky;right:0;font-size: 0.6875rem;white-space:nowrap">'+summary+'</td></tr>';
   }).join('');
   $('m5DayC').innerHTML='<table class="tl-t" style="min-width:680px"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
   // セルクリック→詳細（記録あり） / 予定編集モーダル（記録なし）
@@ -3499,7 +3509,7 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
   if($('mDetHist'))$('mDetHist').style.display='';
   const res=D.residents.find(x=>x.id===r.residentId);
   let h='<div style="margin-bottom:10px"><b>'+escapeHtmlText(res?res.name:'不明')+'</b> <span style="color:var(--g5)">'+(res?escapeHtmlText(res.room)+'号室':'')+'</span></div>';
-  h+='<div style="font-size:13px;margin-bottom:10px">📅 '+r.date+'　🕐 '+r.time+'</div>';
+  h+='<div style="font-size: 0.8125rem;margin-bottom:10px">📅 '+r.date+'　🕐 '+r.time+'</div>';
   if(r.type==='laxative'){
     h+='<div class="hi" style="margin-bottom:8px;background:#f3e5f5;border-left:4px solid #7b1fa2;padding:8px 12px;border-radius:6px"><b style="color:#6a1b9a">💊 下剤</b>'
       +(r.medicine?'<div>薬剤: '+escapeHtmlText(r.medicine)+'</div>':'')
@@ -3513,8 +3523,8 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
     if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);h+='<div class="hi s" style="margin-bottom:8px"><b style="color:var(--s)">🟤 排便</b>'+(c?'<div>性状: '+c+'</div>':'')+(r.stoolAmt?'<div>量: '+r.stoolAmt+'</div>':'')+(r.stoolColor?'<div>色: '+r.stoolColor+'</div>':'')+'</div>'}
   }
   if(Number(r.waterCC)>0)h+='<div class="hi" style="margin-bottom:8px;background:#e3f2fd;border-left:4px solid #1976d2;padding:8px 12px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:6px">'+waterSvg('1.3em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
-  if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size:13px;margin-top:6px">📝 '+escapeHtmlText(r.notes)+'</div>';
-  if(r.staff)h+='<div style="margin-top:8px;font-size:12px;color:var(--g5)">記録者: '+escapeHtmlText(r.staff)+'</div>';
+  if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size: 0.8125rem;margin-top:6px">📝 '+escapeHtmlText(r.notes)+'</div>';
+  if(r.staff)h+='<div style="margin-top:8px;font-size: 0.75rem;color:var(--g5)">記録者: '+escapeHtmlText(r.staff)+'</div>';
   $('mDetC').innerHTML=h;$('mDet').classList.add('on')}
 
 /* ═══════════ MULTI DETAIL (同一時間帯の複数記録) ═══════════ */
@@ -3532,7 +3542,7 @@ function showDetMulti(recs){
 
   let h='<div style="margin-bottom:12px"><b>'+escapeHtmlText(res?res.name:'不明')+'</b>'
     +'<span style="color:var(--g5);margin-left:8px">'+(res?escapeHtmlText(res.room)+'号室':'')+'</span>'
-    +'<span style="background:var(--pri);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px">'+recs.length+'件</span>'
+    +'<span style="background:var(--pri);color:#fff;font-size: 0.6875rem;padding:2px 8px;border-radius:10px;margin-left:8px">'+recs.length+'件</span>'
     +'</div>';
 
   recs.forEach(function(r,i){
@@ -3541,10 +3551,10 @@ function showDetMulti(recs){
     h+='<div style="border:1px solid var(--g2);border-radius:8px;padding:10px 12px;margin-bottom:10px;position:relative">';
     // 時刻・種別ヘッダー
     h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">'
-      +'<span style="font-size:13px;font-weight:700">🕐 '+r.time+'</span>'
-      +'<span style="background:'+tc+';color:#fff;font-size:11px;padding:2px 8px;border-radius:10px">'+tl+'</span>'
-      +'<button class="bn bp bsm mdet-edit-each" data-id="'+r.id+'" style="margin-left:auto;padding:4px 10px;font-size:11px;min-height:32px;min-width:auto">✏️ 修正</button>'
-      +'<button class="bn br bsm mdet-del-each" data-id="'+r.id+'" style="padding:4px 10px;font-size:11px;min-height:32px;min-width:auto">🗑️ 削除</button>'
+      +'<span style="font-size: 0.8125rem;font-weight:700">🕐 '+r.time+'</span>'
+      +'<span style="background:'+tc+';color:#fff;font-size: 0.6875rem;padding:2px 8px;border-radius:10px">'+tl+'</span>'
+      +'<button class="bn bp bsm mdet-edit-each" data-id="'+r.id+'" style="margin-left:auto;padding:4px 10px;font-size: 0.6875rem;min-height:32px;min-width:auto">✏️ 修正</button>'
+      +'<button class="bn br bsm mdet-del-each" data-id="'+r.id+'" style="padding:4px 10px;font-size: 0.6875rem;min-height:32px;min-width:auto">🗑️ 削除</button>'
       +'</div>';
     // 排尿情報
     if(r.type==='urine'||r.type==='both'){
@@ -3570,8 +3580,8 @@ function showDetMulti(recs){
     if(Number(r.waterCC)>0){
       h+='<div class="hi" style="margin-bottom:6px;background:#e3f2fd;border-left:4px solid #1976d2;padding:6px 10px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:4px">'+waterSvg('1.2em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
     }
-    if(r.notes)h+='<div style="padding:6px 8px;background:var(--g0);border-radius:6px;font-size:12px">📝 '+escapeHtmlText(r.notes)+'</div>';
-    if(r.staff)h+='<div style="margin-top:6px;font-size:11px;color:var(--g5)">記録者: '+escapeHtmlText(r.staff)+'</div>';
+    if(r.notes)h+='<div style="padding:6px 8px;background:var(--g0);border-radius:6px;font-size: 0.75rem">📝 '+escapeHtmlText(r.notes)+'</div>';
+    if(r.staff)h+='<div style="margin-top:6px;font-size: 0.6875rem;color:var(--g5)">記録者: '+escapeHtmlText(r.staff)+'</div>';
     h+='</div>';
   });
 
@@ -3614,8 +3624,8 @@ function _histRowHtml(r,_wsvgSm){
   if(r&&r._hospEvent){
     var bg=r._hospEvent==='admission'?'#c62828':'#1565c0';
     var label=r._hospEvent==='admission'?'入院':'退院';
-    var tdSt='color:#fff;background:'+bg+';font-weight:700;text-align:center;font-size:16px';
-    var labelTd='<td style="'+tdSt+';font-size:13px;letter-spacing:0.05em">🏥 '+label+'</td>';
+    var tdSt='color:#fff;background:'+bg+';font-weight:700;text-align:center;font-size: 1rem';
+    var labelTd='<td style="'+tdSt+';font-size: 0.8125rem;letter-spacing:0.05em">🏥 '+label+'</td>';
     var iconTd='<td style="'+tdSt+'">🏥</td>';
     return'<tr style="background:'+bg+';color:#fff;font-weight:700">'+
       '<td style="color:#fff;background:'+bg+';font-weight:700">'+r.date+'</td>'+
@@ -3633,10 +3643,10 @@ function _histRowHtml(r,_wsvgSm){
   return'<tr'+(isLax?' style="background:#f3e5f5"':isNone?' style="background:#eceff1"':isWater?' style="background:#e3f2fd"':'')+'><td>'+r.date+'</td><td>'+r.time+'</td><td class="'+tc+'">'+tl+'</td>'+
     '<td>'+(isLax||isNone||isWater?'-':(r.urineAmt?fmtUA(r.urineAmt):'-'))+'</td>'+
     '<td>'+(isLax||isNone||isWater?'-':(r.urineColor||'-'))+'</td>'+
-    '<td'+(isLax?' colspan="3" style="text-align:left"':isNone?' colspan="3" style="text-align:left;color:var(--g5)"':isWater?' colspan="3" style="text-align:left;color:#0d47a1"':'')+'>'+(isLax?laxInfo:isNone?'排泄なし':isWater?'水分のみ':(fmtCons(r)||'-'))+'</td>'+
+    '<td'+(isLax?' colspan="3" style="text-align:start"':isNone?' colspan="3" style="text-align:start;color:var(--g5)"':isWater?' colspan="3" style="text-align:start;color:#0d47a1"':'')+'>'+(isLax?laxInfo:isNone?'排泄なし':isWater?'水分のみ':(fmtCons(r)||'-'))+'</td>'+
     (isLax||isNone||isWater?'':'<td>'+(r.stoolAmt||'-')+'</td><td>'+(r.stoolColor||'-')+'</td>')+
     '<td>'+waterCell+'</td>'+
-    '<td style="text-align:left;white-space:normal;max-width:100px;word-break:break-all">'+escapeHtmlText(r.notes||'')+'</td>'+
+    '<td style="text-align:start;white-space:normal;max-width:100px;word-break:break-all">'+escapeHtmlText(r.notes||'')+'</td>'+
     '<td>'+escapeHtmlText(r.staff||'')+'</td></tr>';
 }
 function _histAppendChunk(chunkSize){
@@ -3683,7 +3693,7 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
     });
   }
   const recs=baseRecs.sort((a,b)=>(b.datetime||'').localeCompare(a.datetime||''));
-  if(!recs.length){$('mHistC').innerHTML='<p style="color:var(--g5);font-size:13px">記録がありません</p>';_histState=null}
+  if(!recs.length){$('mHistC').innerHTML='<p style="color:var(--g5);font-size: 0.8125rem">記録がありません</p>';_histState=null}
   else{
     const _wsvgSm=waterSvg('1.15em');
     // 初回チャンク（50件）のみ描画
@@ -3691,7 +3701,7 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
     var initialRows='';
     for(var i=0;i<first;i++)initialRows+=_histRowHtml(recs[i],_wsvgSm);
     var moreInd=(recs.length>first)
-      ?'<div id="mHistMoreInd" style="text-align:center;padding:10px;font-size:12px;color:var(--g6);background:#faf7ff;border-top:1px dashed #d1c4e9">⬇ あと '+(recs.length-first)+' 件 — スクロールで自動表示</div>'
+      ?'<div id="mHistMoreInd" style="text-align:center;padding:10px;font-size: 0.75rem;color:var(--g6);background:#faf7ff;border-top:1px dashed #d1c4e9">⬇ あと '+(recs.length-first)+' 件 — スクロールで自動表示</div>'
       :'';
     const tbl='<div class="ht-w"><table class="ht"><thead><tr>'+
       '<th>日付</th><th>時刻</th><th>種別</th><th>排尿量</th><th>尿の色</th><th>便の性状</th><th>排便量</th><th>便の色</th><th><span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分</span></th><th>備考</th><th>記録者</th>'+
@@ -3699,7 +3709,7 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
     // 保持期間の注記（古い記録はサーバーに全量保管されている旨を明示）
     var _keepD=Number(D.cfg&&D.cfg.localKeepDays)||180;
     var keepNote=(_keepD>0&&_keepD<3650)
-      ?'<div style="text-align:center;padding:7px;font-size:11px;color:var(--g6)">📦 端末には直近'+_keepD+'日分を保持・表示しています（全期間の記録はスプレッドシートに保管）</div>'
+      ?'<div style="text-align:center;padding:7px;font-size: 0.6875rem;color:var(--g6)">📦 端末には直近'+_keepD+'日分を保持・表示しています（全期間の記録はスプレッドシートに保管）</div>'
       :'';
     $('mHistC').innerHTML=tbl+keepNote;
     _histState={rid:rid,recs:recs,rendered:first,_wsvg:_wsvgSm};
@@ -3828,15 +3838,15 @@ function renderCfg(){
   const actives=all.filter(function(r){return r.active!==false});
   const inactives=all.filter(function(r){return r.active===false});
   const list=showInactive?all:actives;
-  $('resList').innerHTML=!list.length?'<p style="color:var(--g5);font-size:13px">まだ登録されていません</p>':
+  $('resList').innerHTML=!list.length?'<p style="color:var(--g5);font-size: 0.8125rem">まだ登録されていません</p>':
     list.map(function(r){
       var isInactive=(r.active===false);
       var isHidden=(r.hidden===true);
       var badges='';
-      if(isInactive)badges+='<span style="background:#9e9e9e;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-right:4px">退去済</span>';
-      if(isHidden&&!isInactive)badges+='<span style="background:#fb8c00;color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;margin-right:4px">非表示</span>';
+      if(isInactive)badges+='<span style="background:#9e9e9e;color:#fff;font-size: 0.6875rem;padding:2px 6px;border-radius:4px;margin-right:4px">退去済</span>';
+      if(isHidden&&!isInactive)badges+='<span style="background:#fb8c00;color:#fff;font-size: 0.6875rem;padding:2px 6px;border-radius:4px;margin-right:4px">非表示</span>';
       // 🏥 現在入院中ならバッジ表示（入居者マスタの入院フラグも統合＝isHospNow）
-      if(!isInactive&&isHospNow(r))badges+='<span style="background:#c62828;color:#fff;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">🏥 入院中</span>';
+      if(!isInactive&&isHospNow(r))badges+='<span style="background:#c62828;color:#fff;font-size: 0.6875rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">🏥 入院中</span>';
       var histBtn=isInactive?'<button class="bn bs bsm res-hist" data-id="'+r.id+'">履歴</button>':'';
       var toggleLabel=isInactive?'在籍へ戻す':'退去';
       var toggleCls=isInactive?'res-restore':'res-leave';
@@ -3852,8 +3862,8 @@ function renderCfg(){
       // 退去済には非表示・入院ボタン不要
       var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+r.id+'">'+hideLabel+'</button>';
       var hospBtn=isInactive?'':'<button class="bn bs bsm res-hosp" data-id="'+r.id+'" style="background:#ffebee;border-color:#c62828;color:#c62828">🏥 入院</button>';
-      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+escapeHtmlText(r.name)+'</b> <span style="font-size:12px;color:var(--g5)">'+escapeHtmlText(r.room)+'号室 / '+escapeHtmlText(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
-    '<div style="margin-top:8px;font-size:12px;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
+      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+escapeHtmlText(r.name)+'</b> <span style="font-size: 0.75rem;color:var(--g5)">'+escapeHtmlText(r.room)+'号室 / '+escapeHtmlText(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
+    '<div style="margin-top:8px;font-size: 0.75rem;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
   // ボタンイベント
   $$('.res-edit').forEach(b=>b.addEventListener('click',function(){editRes(parseInt(this.dataset.id))}));
   $$('.res-del').forEach(b=>b.addEventListener('click',function(){delRes(parseInt(this.dataset.id))}));
@@ -3918,9 +3928,9 @@ function renderLinkAudit(){
   card.style.display='';
   var fresh=(a.idx&&a.idx.freshAt)?new Date(a.idx.freshAt).toLocaleString('ja-JP'):'—';
   var sum='在籍 '+a.total+'名 ／ 正常 '+a.ok+' ／ <b style="color:'+(a.items.length?'#c62828':'var(--g7)')+'">要修復 '+a.items.length+'</b> ／ 未連携 '+a.none+'<br>'
-        +'<span style="font-size:11.5px">名簿の取得: '+escapeHtmlText(fresh)+(a.idx?('（'+a.idx.size+'名）'):'（取得できていません）')+'</span>';
-  if(_linkFreezeN)sum+='<br><span style="font-size:11.5px;color:#c62828">紐づけのずれを検出したため、'+_linkFreezeN+'名の居室・フリガナの自動更新を止めています</span>';
-  if(_linkDropN)sum+='<br><span style="font-size:11.5px;color:var(--g7)">同期時に氏名が合わず引き継がなかった紐づけ: '+_linkDropN+'件</span>';
+        +'<span style="font-size: 0.71875rem">名簿の取得: '+escapeHtmlText(fresh)+(a.idx?('（'+a.idx.size+'名）'):'（取得できていません）')+'</span>';
+  if(_linkFreezeN)sum+='<br><span style="font-size: 0.71875rem;color:#c62828">紐づけのずれを検出したため、'+_linkFreezeN+'名の居室・フリガナの自動更新を止めています</span>';
+  if(_linkDropN)sum+='<br><span style="font-size: 0.71875rem;color:var(--g7)">同期時に氏名が合わず引き継がなかった紐づけ: '+_linkDropN+'件</span>';
   $('linkAuditSum').innerHTML=sum;
 
   $('linkAuditList').innerHTML=!a.items.length?'':a.items.map(function(x,i){
@@ -3932,9 +3942,9 @@ function renderLinkAudit(){
                 :'<span style="color:#c62828">→ 名簿に同じ氏名の在籍者が居ない（または複数）ため自動では直せません</span>';
     return '<div style="border:1px solid var(--g3);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
       +'<div><b>'+escapeHtmlText(r.name)+'</b></div>'
-      +'<div style="font-size:12px;color:var(--g7)">'+now+'</div>'
-      +'<div style="font-size:12px;color:var(--g7)">'+lkTxt+'</div>'
-      +'<div style="font-size:12px;margin-top:2px">'+cdTxt+'</div>'
+      +'<div style="font-size: 0.75rem;color:var(--g7)">'+now+'</div>'
+      +'<div style="font-size: 0.75rem;color:var(--g7)">'+lkTxt+'</div>'
+      +'<div style="font-size: 0.75rem;margin-top:2px">'+cdTxt+'</div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
       +'<button class="bn bs bsm link-ack" data-id="'+r.id+'" style="min-height:32px">この紐づけは正しい（表記ゆれ）</button>'
       +'<button class="bn bs bsm link-unlink" data-id="'+r.id+'" style="min-height:32px">連携を外して手入力する</button>'
@@ -4555,16 +4565,16 @@ function renderStaffListInto(boxId){
     if(includeReorder){
       var upDis=(i===0?' disabled style="opacity:.3"':'');
       var dnDis=(i===list.length-1?' disabled style="opacity:.3"':'');
-      actionBtns+='<button class="sg-up" data-i="'+i+'" title="上へ"'+upDis+'>▲</button>';
-      actionBtns+='<button class="sg-down" data-i="'+i+'" title="下へ"'+dnDis+'>▼</button>';
+      actionBtns+='<button class="sg-up" data-i="'+i+'" title="上へ"'+upDis+' aria-label="上へ">▲</button>';
+      actionBtns+='<button class="sg-down" data-i="'+i+'" title="下へ"'+dnDis+' aria-label="下へ">▼</button>';
     }
     if(retired){
-      actionBtns+='<button class="sg-restore" data-i="'+i+'" title="復帰">↩</button>';
+      actionBtns+='<button class="sg-restore" data-i="'+i+'" title="復帰" aria-label="復帰">↩</button>';
     } else {
-      actionBtns+='<button class="sg-edit" data-i="'+i+'" title="編集">✎</button>'+
-                  '<button class="sg-retire" data-i="'+i+'" title="退職にする">🏃</button>';
+      actionBtns+='<button class="sg-edit" data-i="'+i+'" title="編集" aria-label="編集">✎</button>'+
+                  '<button class="sg-retire" data-i="'+i+'" title="退職にする" aria-label="退職にする">🏃</button>';
     }
-    actionBtns+='<button class="sg-del" data-i="'+i+'" title="完全削除">×</button>';
+    actionBtns+='<button class="sg-del" data-i="'+i+'" title="完全削除" aria-label="完全削除">×</button>';
     return '<div class="'+cls+'"'+dragAttr+'>'+handle+'<span class="sg-nm" title="'+safe+'">'+safe+'</span>'+
            '<div class="sg-actions">'+actionBtns+'</div></div>';
   }).join('');
@@ -5043,23 +5053,23 @@ function openHospModal(rid){
 function renderHospList(r){
   var list=$('mHospList');if(!list)return;
   if(!Array.isArray(r.hospitalizations)||r.hospitalizations.length===0){
-    list.innerHTML='<div style="font-size:12px;color:var(--g5);padding:8px;background:var(--g0);border-radius:6px;text-align:center">入院履歴はありません</div>';
+    list.innerHTML='<div style="font-size: 0.75rem;color:var(--g5);padding:8px;background:var(--g0);border-radius:6px;text-align:center">入院履歴はありません</div>';
     return;
   }
   // 新しい順
   var sorted=r.hospitalizations.slice().sort(function(a,b){return(b.admissionAt||'').localeCompare(a.admissionAt||'')});
-  list.innerHTML='<div style="font-size:12px;font-weight:700;margin-bottom:6px;color:var(--g7)">📋 入院履歴</div>'+
+  list.innerHTML='<div style="font-size: 0.75rem;font-weight:700;margin-bottom:6px;color:var(--g7)">📋 入院履歴</div>'+
     sorted.map(function(h){
       var isOngoing=!h.dischargeAt;
       var bg=isOngoing?'#ffebee':'#f5f5f5';
-      var badge=isOngoing?'<span style="background:#c62828;color:#fff;font-weight:700;padding:1px 6px;border-radius:3px;font-size:11px">入院中</span>':'<span style="background:#1565c0;color:#fff;font-weight:700;padding:1px 6px;border-radius:3px;font-size:11px">退院済</span>';
-      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:4px;background:'+bg+';border-radius:6px;font-size:12px;flex-wrap:wrap">'+
+      var badge=isOngoing?'<span style="background:#c62828;color:#fff;font-weight:700;padding:1px 6px;border-radius:3px;font-size: 0.6875rem">入院中</span>':'<span style="background:#1565c0;color:#fff;font-weight:700;padding:1px 6px;border-radius:3px;font-size: 0.6875rem">退院済</span>';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:4px;background:'+bg+';border-radius:6px;font-size: 0.75rem;flex-wrap:wrap">'+
         '<div style="flex:1;min-width:180px">'+badge+'<br>'+
         '<div style="margin-top:4px"><b>入院</b>: '+(h.admissionAt||'-').replace('T',' ')+'</div>'+
         (h.dischargeAt?'<div><b>退院</b>: '+h.dischargeAt.replace('T',' ')+'</div>':'<div style="color:#c62828"><b>退院未登録</b></div>')+
         '</div>'+
         (isOngoing?'<button class="bn bp bsm hosp-discharge" data-hid="'+h.id+'" style="background:#1565c0">📝 退院日時を登録</button>':'')+
-        '<button class="bn br bsm hosp-del" data-hid="'+h.id+'" title="この入院履歴を削除">🗑️</button>'+
+        '<button class="bn br bsm hosp-del" data-hid="'+h.id+'" title="この入院履歴を削除" aria-label="この入院履歴を削除">🗑️</button>'+
       '</div>';
     }).join('');
   // 退院登録ボタン
