@@ -3178,7 +3178,6 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     const tU=du.reduce((s,r)=>s+(typeof r.urineAmt==='number'?r.urineAmt:0),0);
     const lCons=ls?fmtCons(ls):'';const lSA=ls?ls.stoolAmt:null;
     // 備考: 当日の排尿・排便記録のうち notes が入っているものを時刻順で列挙
-    var _esc=function(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')};
     // 当日の備考 (notes) と 水分摂取 (waterCC>0) を統合して時刻順に表示
     var dayBoth=recsByResDate(re.id,date).filter(function(r){
       if(r.type==='laxative') return false;
@@ -3197,7 +3196,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       // 種別アイコン：水分のみは SVG コップ、それ以外は従来通り
       var ic=r.type==='urine'?'💧':r.type==='stool'?'🟤':r.type==='both'?'💧🟤':r.type==='none'?'✖️':r.type==='water'?waterSvg('1.1em'):'📝';
       var wtag=(Number(r.waterCC)>0)?'<span class="water-mark">'+waterSvg('1.1em')+' '+Number(r.waterCC)+'cc</span>':'';
-      var noteText=(r.notes && String(r.notes).trim())?_esc(r.notes).replace(/\n/g,'<br>'):'';
+      var noteText=(r.notes && String(r.notes).trim())?escapeHtmlText(r.notes).replace(/\n/g,'<br>'):'';
       return'<div style="margin-bottom:4px;display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap">'+
         '<span style="color:var(--g6);font-variant-numeric:tabular-nums;flex-shrink:0;font-weight:600">'+(r.time||'')+'</span>'+
         '<span style="flex-shrink:0;display:inline-flex;align-items:center">'+ic+'</span>'+
@@ -3257,7 +3256,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       '<td>'+ds.length+'回</td>'+
       '<td style="white-space:nowrap">'+(lCons?'<span class="tg tg-s">'+lCons+'</span>':'')+(lSA?' <span style="font-size: 0.6875rem">'+lSA+'</span>':'')+'</td>'+
       '<td style="font-size: 0.8125rem;text-align:start;min-width:300px;max-width:360px;word-break:break-word;white-space:normal;line-height:1.45;padding:8px 10px">'+(notesHtml||'<span style="color:var(--g5)">—</span>')+laxHtml+'</td>'+
-      '<td style="font-size: 0.6875rem;text-align:start;max-width:180px;word-break:break-all;white-space:normal;color:#4a148c">'+(re.laxNote?re.laxNote.replace(/\n/g,'<br>'):'<span style="color:var(--g5)">—</span>')+'</td>'+
+      '<td style="font-size: 0.6875rem;text-align:start;max-width:180px;word-break:break-all;white-space:normal;color:#4a148c">'+(re.laxNote?escapeHtmlText(re.laxNote).replace(/\n/g,'<br>'):'<span style="color:var(--g5)">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+(hasRec
         ?'<button class="bn bs bsm bd-ops" data-rid="'+re.id+'" style="padding:6px 10px;min-height:36px;font-size: 0.6875rem">✏️ 修正・削除<div style="font-size: 0.625rem;color:var(--g5);margin-top:2px">('+dAll.length+'件)</div></button>'
         :'<span style="font-size: 0.6875rem;color:var(--g5)">—</span>')+'</td>'+
@@ -3318,11 +3317,11 @@ function renderTL(){const date=$('tlDate').value||today();
     let cells='';
     for(let s=0;s<48;s++){const recs=bk[s]||[];
       var schCls=schSet[s]?' sched':'';
-      var schLbl=schSet[s]?'<span class="sch-lbl">'+schSet[s]+'</span>':'';
+      var schLbl=schSet[s]?'<span class="sch-lbl">'+escapeHtmlText(schSet[s])+'</span>':'';
       // 🏥 入院マーカーセル — 入院のみ表示（退院マーカーは表示しない仕様）
       if(hospBySlot[s]&&hospBySlot[s].type==='admission'){
         var ev=hospBySlot[s];
-        cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size: 0.5625rem;opacity:.9">'+ev.time+'</span></td>';
+        cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size: 0.5625rem;opacity:.9">'+escapeHtmlText(ev.time)+'</span></td>';
         continue;
       }
       // 🏥 入院期間中のセル（入院後・退院前）はより濃いグレーアウト
@@ -3340,7 +3339,7 @@ function renderTL(){const date=$('tlDate').value||today();
           else if(r.stoolAmt==='中等量')info+=(info?' ':'')+'<span style="color:#000;font-weight:700">中</span>';
           else if(r.stoolAmt==='多量')info+=(info?' ':'')+'<span style="color:#c62828;font-weight:700">多</span>';
         }
-        if(r.type==='laxative'){info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'')}
+        if(r.type==='laxative'){info+='💊'+(r.medicine?escapeHtmlText(r.medicine.slice(0,2)):'')+(r.tablets?escapeHtmlText(r.tablets):'')}
         if(r.type==='none'){info+='誘導'}
         if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'cc</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
@@ -3358,10 +3357,10 @@ function renderTL(){const date=$('tlDate').value||today();
     }
     var pillBase='display:inline-block;font-size: 0.625rem;padding:1px 5px;border-radius:10px;white-space:nowrap;';
     var uPill=(lu&&uDiff!==null&&uDiff<0)
-      ?'<span style="'+pillBase+tlOffStyle(ub_tl,'color:#1565c0;background:#e3f2fd;border:1px solid #90caf9')+'" title="最終排尿: '+fmtMD(lu.date)+' '+lu.time+'">尿'+fmtDayOff(uDiff)+'</span>'
+      ?'<span style="'+pillBase+tlOffStyle(ub_tl,'color:#1565c0;background:#e3f2fd;border:1px solid #90caf9')+'" title="最終排尿: '+escapeHtmlText(fmtMD(lu.date))+' '+escapeHtmlText(lu.time)+'">尿'+fmtDayOff(uDiff)+'</span>'
       :'';
     var sPill=(ls&&sDiff!==null&&sDiff<0)
-      ?'<span style="'+pillBase+tlOffStyle(sb_tl,'color:#4e342e;background:#efebe9;border:1px solid #bcaaa4')+'" title="最終排便: '+fmtMD(ls.date)+' '+ls.time+'">便'+fmtDayOff(sDiff)+'</span>'
+      ?'<span style="'+pillBase+tlOffStyle(sb_tl,'color:#4e342e;background:#efebe9;border:1px solid #bcaaa4')+'" title="最終排便: '+escapeHtmlText(fmtMD(ls.date))+' '+escapeHtmlText(ls.time)+'">便'+fmtDayOff(sDiff)+'</span>'
       :'';
     var offHtml=(uPill||sPill)
       ?'<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+uPill+'<span style="margin-left:auto">'+sPill+'</span></div>'
@@ -3440,7 +3439,7 @@ function showFiveDay(rid,endDate){
     for(var s=0;s<48;s++){
       var recs=bk[s]||[];
       var schCls=schSet5[s]?' sched':'';
-      var schLbl5=schSet5[s]?'<span class="sch-lbl">'+schSet5[s]+'</span>':'';
+      var schLbl5=schSet5[s]?'<span class="sch-lbl">'+escapeHtmlText(schSet5[s])+'</span>':'';
       if(!recs.length){cells+='<td class="tl-c'+schCls+'" data-fdslot="'+date+'-'+s+'">'+schLbl5+'</td>';continue}
       var inner=recs.map(function(r){
         var dot=tlMarks(r);
@@ -3451,7 +3450,7 @@ function showFiveDay(rid,endDate){
           else if(r.stoolAmt==='中等量')info+=(info?' ':'')+'<span style="color:#000;font-weight:700">中</span>';
           else if(r.stoolAmt==='多量')info+=(info?' ':'')+'<span style="color:#c62828;font-weight:700">多</span>';
         }
-        if(r.type==='laxative')info+='💊'+(r.medicine?r.medicine.slice(0,2):'')+(r.tablets?r.tablets:'');
+        if(r.type==='laxative')info+='💊'+(r.medicine?escapeHtmlText(r.medicine.slice(0,2)):'')+(r.tablets?escapeHtmlText(r.tablets):'');
         if(r.type==='none')info+='誘導';
         if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'cc</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'');
@@ -3513,7 +3512,7 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
   if(r.type==='laxative'){
     h+='<div class="hi" style="margin-bottom:8px;background:#f3e5f5;border-left:4px solid #7b1fa2;padding:8px 12px;border-radius:6px"><b style="color:#6a1b9a">💊 下剤</b>'
       +(r.medicine?'<div>薬剤: '+escapeHtmlText(r.medicine)+'</div>':'')
-      +(r.tablets?'<div>錠数: '+r.tablets+'錠</div>':'')
+      +(r.tablets?'<div>錠数: '+escapeHtmlText(r.tablets)+'錠</div>':'')
       +'</div>';
   }else if(r.type==='water'){
     // 水分摂取のみの記録：排泄詳細は表示しない
@@ -3574,7 +3573,7 @@ function showDetMulti(recs){
     if(r.type==='laxative'){
       h+='<div class="hi" style="margin-bottom:6px;background:#f3e5f5;border-left:4px solid #7b1fa2;padding:6px 10px;border-radius:6px"><b style="color:#6a1b9a">💊 下剤</b>'
         +(r.medicine?'<div>薬剤: '+escapeHtmlText(r.medicine)+'</div>':'')
-        +(r.tablets?'<div>錠数: '+r.tablets+'錠</div>':'')
+        +(r.tablets?'<div>錠数: '+escapeHtmlText(r.tablets)+'錠</div>':'')
         +'</div>'}
     // 水分摂取
     if(Number(r.waterCC)>0){
