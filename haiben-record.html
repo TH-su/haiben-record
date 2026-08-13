@@ -437,6 +437,73 @@ textarea{resize:vertical;min-height:76px}
     scroll-behavior: auto !important;
   }
 }
+
+/* ═══════════ 帳票・印刷（2026-08-13 追加） ═══════════
+   運営指導は電磁的記録をディスプレイで確認する運用が原則（運営指導マニュアル 令和6年7月改訂）。
+   そのため主役は画面プレビューで、印刷はそこから出せる従属機能として置く。 */
+.rp-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.rp-tab{flex:1 1 140px;min-height:44px;padding:8px 10px;border:2px solid var(--g2);background:#fff;
+  border-radius:8px;font-size: 0.8125rem;font-weight:700;color:var(--g7);cursor:pointer;font-family:inherit}
+.rp-tab.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.rp-tab:focus-visible{outline:3px solid #f5a623;outline-offset:2px}
+.rp-cond{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}
+/* input[type="month"] は既存の共通セレクタ（text/date/datetime-local/number）に入っておらず、
+   素のままだと高さ26pxでタップ領域44pxを割る。共通側を広げると他画面の入力欄に波及するため、
+   この画面に閉じて同じ見た目を与える。 */
+#sc-report input[type="month"]{
+  width:100%;padding:9px 11px;border:2px solid var(--g2);border-radius:8px;
+  font-size: 0.875rem;font-family:inherit;color:var(--g9);background:#fff;-webkit-appearance:none}
+#sc-report input[type="month"]:focus{outline:none;border-color:var(--pri)}
+#sc-report .rp-cond input,#sc-report .rp-cond select{min-height:44px}
+.rp-acts{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.rp-note{margin-top:10px;font-size: 0.6875rem;color:var(--g6);line-height:1.6}
+.rp-sheet{background:#fff;border-radius:var(--r);padding:14px;box-shadow:var(--sh);overflow-x:auto}
+.rp-empty{padding:28px 14px;text-align:center;color:var(--g5);font-size: 0.8125rem;line-height:1.8}
+
+/* 帳票の紙面 */
+.rp-pg{margin-bottom:22px}
+.rp-hd{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;
+  border-bottom:2px solid #333;padding-bottom:6px;margin-bottom:8px}
+.rp-ttl{font-size: 1.0625rem;font-weight:700;color:#000}
+.rp-sub{font-size: 0.75rem;color:var(--g7);margin-top:3px}
+/* 画面では折り返す。文字サイズを大きくした端末で nowrap のままだと見出しから溢れて欠ける。
+   紙面は幅が決まっているので印刷時だけ nowrap に戻す（下の @media print）。 */
+.rp-meta{font-size: 0.6875rem;color:var(--g7);text-align:end;line-height:1.7;
+  white-space:normal;overflow-wrap:anywhere}
+.rp-t{width:100%;border-collapse:collapse;font-size: 0.75rem;
+  font-variant-numeric:tabular-nums}
+.rp-t th,.rp-t td{border:1px solid #777;padding:3px 4px;text-align:center;vertical-align:middle}
+.rp-t th{background:#eceff1;font-weight:700;color:#000}
+.rp-t td.l{text-align:start;white-space:normal;word-break:break-word}
+.rp-t tr.sun td{background:#fdeaea}
+.rp-t tr.sat td{background:#eaf1fd}
+.rp-sec{font-size: 0.875rem;font-weight:700;margin:14px 0 6px;padding-left:6px;border-left:4px solid var(--pri)}
+.rp-ft{margin-top:8px;padding-top:6px;border-top:1px solid #999;font-size: 0.625rem;color:var(--g7);
+  display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+/* 状態は色だけで伝えない（記号＋文字を必ず併記する） */
+.rp-ng{background:#ffebee;color:#b71c1c;font-weight:700}
+.rp-wn{background:#fff8e1;color:#8d6e00;font-weight:700}
+
+@media print{
+  /* ★既存の Cmd+P の挙動を変えないため、すべて body.rp-printing の下に置く。
+     このクラスは帳票画面から印刷するときだけ付く（beforeprint でも補う）。 */
+  body.rp-printing *{-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+  body.rp-printing{background:#fff}
+  body.rp-printing .hdr,body.rp-printing .bnav,body.rp-printing .frombar,
+  body.rp-printing #toast,body.rp-printing .rp-ctl,body.rp-printing .mo{display:none !important}
+  body.rp-printing .scr{display:none !important}
+  body.rp-printing #sc-report{display:block !important;padding:0 !important;max-width:none !important}
+  body.rp-printing .rp-sheet{box-shadow:none;border-radius:0;padding:0;overflow:visible}
+  body.rp-printing .rp-pg{margin-bottom:0;page-break-after:always;break-after:page}
+  body.rp-printing .rp-pg:last-child{page-break-after:auto;break-after:auto}
+  body.rp-printing .rp-t{font-size:8.5pt}
+  body.rp-printing .rp-t th,body.rp-printing .rp-t td{border:1px solid #000}
+  body.rp-printing .rp-t thead{display:table-header-group}  /* 複数ページに跨ったら見出しを繰り返す */
+  body.rp-printing .rp-t tr{page-break-inside:avoid;break-inside:avoid}
+  /* 月次の「作成・修正情報」は本表と別ページから始める（本表の途中に混ざると読みにくい） */
+  body.rp-printing .rp-brk{page-break-before:always;break-before:page}
+  body.rp-printing .rp-meta{white-space:nowrap}   /* 紙は幅が決まっているので折り返さない */
+}
 </style>
 </head>
 <body>
@@ -878,9 +945,81 @@ textarea{resize:vertical;min-height:76px}
     </div>
   </div>
 
+  <div class="cd">
+    <div class="cd-t">🖨 帳票・印刷</div>
+    <button class="bn bp" style="width:100%" id="btnOpenReport">🖨 帳票を作る（月次・フロア別・未排便）</button>
+    <div style="margin-top:10px;font-size: 0.75rem;color:var(--g6);line-height:1.6">
+      期間と対象を絞って画面に出します。そのまま画面で見せることも、印刷・PDF保存もできます。
+    </div>
+  </div>
+
   <div class="cd" style="margin-bottom:30px">
     <div class="cd-t">🗑️ 危険操作</div>
     <button class="bn br bsm" id="btnClear">全データを削除</button>
+  </div>
+</div>
+
+<!-- ══════════ 帳票（印刷・画面提示） ══════════ -->
+<div id="sc-report" class="scr">
+  <div class="cd rp-ctl">
+    <div class="cd-t">🖨 帳票・印刷</div>
+    <div class="rp-tabs" role="tablist" aria-label="帳票の様式">
+      <button class="rp-tab on" data-rp="monthly" role="tab" aria-selected="true">入居者別 月次</button>
+      <button class="rp-tab"    data-rp="floor"   role="tab" aria-selected="false">フロア別 日次</button>
+      <button class="rp-tab"    data-rp="bowel"   role="tab" aria-selected="false">未排便・下剤</button>
+    </div>
+
+    <div class="rp-cond">
+      <div id="rpMonthWrap">
+        <label class="fl" for="rpMonth">対象の月</label>
+        <input type="month" id="rpMonth">
+      </div>
+      <div id="rpDateWrap" style="display:none">
+        <label class="fl" for="rpDate">対象の日</label>
+        <input type="date" id="rpDate">
+      </div>
+      <div id="rpResWrap">
+        <label class="fl" for="rpRes">対象の入居者</label>
+        <select id="rpRes"></select>
+      </div>
+      <div id="rpFloorWrap" style="display:none">
+        <label class="fl" for="rpFloor">対象のフロア</label>
+        <select id="rpFloor">
+          <option value="all">すべて</option>
+          <option value="1">1階</option>
+          <option value="2">2階</option>
+          <option value="0">階未設定（居室が未登録・1/2以外）</option>
+        </select>
+      </div>
+      <div>
+        <label class="fl" for="rpBy">出力者（帳票に残ります）</label>
+        <input type="text" id="rpBy" placeholder="例：山田" maxlength="20">
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label style="display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer;font-size: 0.8125rem">
+        <input type="checkbox" id="rpDetail" checked style="width:20px;height:20px;flex:0 0 auto">
+        記録の作成者・作成日時・修正の有無を明細で付ける
+      </label>
+    </div>
+
+    <div class="rp-acts">
+      <button class="bn bp bsm" id="rpBuild">📄 画面に出す</button>
+      <button class="bn bg bsm" id="rpPrint">🖨 印刷・PDF保存</button>
+      <button class="bn bs bsm" id="rpCsv">📥 この条件でCSV</button>
+      <button class="bn bs bsm" id="rpBack">← 設定へ戻る</button>
+    </div>
+
+    <div class="rp-note">
+      運営指導では、電磁的記録は<b>画面で見せる方法で確認する</b>のが原則です（運営指導マニュアル 令和6年7月改訂）。
+      印刷は必須ではありません。紙も併せて保管する場合は、画面と紙を突合しないと確認したことにならない点にご注意ください。<br>
+      確認の対象範囲は<b>前年度から直近（おおむね1か月前まで）</b>、記録を見る利用者は<b>原則3名以内</b>とされています。
+    </div>
+  </div>
+
+  <div id="rpSheet" class="rp-sheet">
+    <div class="rp-empty">上の条件を選んで「📄 画面に出す」を押してください。</div>
   </div>
 </div>
 
@@ -2902,7 +3041,7 @@ function saveSchedFromModal(){
 /* ═══════════ SCREEN NAV ═══════════ */
 /* 再読み込みで現在地を失わない（dev-principles 原則11）。保存するのは画面idのみ＝個人情報を含まない */
 var VIEW_KEY='hbcr_view';
-var VIEW_NAMES=['input','board','tl','staff','cfg'];
+var VIEW_NAMES=['input','board','tl','staff','cfg','report'];
 function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav button').forEach(b=>b.classList.remove('on'));
   $('sc-'+name).classList.add('on');const nb=document.querySelector('.bnav button[data-sc="'+name+'"]');if(nb)nb.classList.add('on');
   if(name==='input')setNow();
@@ -2917,6 +3056,15 @@ function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav 
     }
     if(typeof renderStaffList==='function')renderStaffList();
     if(typeof renderStaffSyncStat==='function')renderStaffSyncStat();
+  }
+  if(name==='report'){
+    /* 再読み込みでこの画面へ戻ってきた場合もここを通る。既定値と選択肢を毎回整える。
+       帳票そのものは自動生成しない（重い集計を起動時に走らせない／氏名を無操作で出さない）。 */
+    var _t=today();
+    if($('rpDate')&&!$('rpDate').value)$('rpDate').value=_t;
+    if($('rpMonth')&&!$('rpMonth').value)$('rpMonth').value=_t.slice(0,7);
+    if(typeof rpFillRes==='function')rpFillRes();
+    if(typeof rpSyncCond==='function')rpSyncCond();
   }
   /* 描画が通った画面だけを記憶する（描画で落ちる画面を復元し続けないよう最後に置く） */
   try{if(VIEW_NAMES.indexOf(name)>=0)localStorage.setItem(VIEW_KEY,name)}catch(e){}
@@ -5176,6 +5324,382 @@ function impJSON(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader()
   rd.readAsText(f);e.target.value=''}
 function dl(c,n,t){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:t}));a.download=n;a.click()}
 
+/* ══════════════════════════════════════════════════════════════════
+   帳票（画面提示・印刷）  2026-08-13 追加
+   ──────────────────────────────────────────────────────────────────
+   なぜ画面が主で印刷が従か: 運営指導マニュアル（令和6年7月改訂・厚労省）は
+   「電磁的記録により管理されている場合はディスプレイ上で内容を確認することとし、
+   別途、印刷した書類等の準備や提出は求めないようにしましょう」と定める。
+   紙を併せて持つと画面と紙の突合が必要になるため、既定は画面提示にする。
+
+   集計は既存の正本ロジック（lastR/elH/badgeCls/resCfg/recsByResDate）をそのまま呼ぶ。
+   帳票側で判定を作り直すと、画面の未排便アラートと紙面が食い違うため。
+   ══════════════════════════════════════════════════════════════════ */
+
+/* 居室 → 階。入居者マスタ resident-master.html / daycare-roster.html の roomToFloor と同一仕様。
+   判定を3箇所でずらさないため、式を変えずに移植する。
+   全角数字は半角へ寄せる（居室は自由テキスト欄のため "２０１" の混入がありうる）。
+   0 = 階を判定できない（居室未登録・1/2以外で始まる） */
+function roomToFloor(room){
+  var s=String(room==null?'':room).trim()
+    .replace(/[０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-0xFEE0)});
+  var m=s.match(/^([12])/);
+  return m?parseInt(m[1],10):0;
+}
+function floorLabel(f){return f===1?'1階':f===2?'2階':'階未設定'}
+
+var RP_VIEW='monthly';                       /* monthly | floor | bowel */
+/* 用紙は「折り返さずに全列が入るか」を実測して決めた（2026-08-13）。
+   未排便・下剤は10列あり A4縦(718px)では自然幅916pxで約198px分が折り返す。
+   A4横(1047px)なら折り返しゼロで収まるため横にする。 */
+var RP_PAPER={monthly:'A4 portrait',floor:'A4 landscape',bowel:'A4 landscape'};
+
+/* 帳票の対象にする入居者（画面の一覧と同じ絞り込み＝紙と画面で母集団を揃える） */
+function rpResidents(){
+  return D.residents.filter(function(r){
+    return isUserRes(r)&&isValidRes(r)&&r.active!==false&&r.hidden!==true&&r.name;
+  }).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+}
+function rpPad(n){return(n<10?'0':'')+n}
+function rpYMD(d){return d.getFullYear()+'-'+rpPad(d.getMonth()+1)+'-'+rpPad(d.getDate())}
+/* 'YYYY-MM' → その月の日付配列（ローカル日付で構築＝UTC変換による前後日ズレを避ける） */
+function rpMonthDates(ym){
+  var p=String(ym||'').split('-'),y=parseInt(p[0],10),m=parseInt(p[1],10);
+  if(!y||!m)return[];
+  var out=[],d=new Date(y,m-1,1);
+  while(d.getMonth()===m-1){out.push(rpYMD(d));d.setDate(d.getDate()+1)}
+  return out;
+}
+var RP_WD=['日','月','火','水','木','金','土'];
+function rpWdCls(ymd){var g=new Date(ymd+'T00:00:00').getDay();return g===0?'sun':g===6?'sat':''}
+
+/* 帳票の共通ヘッダ・フッタ。事業所名は帳票の識別に要るので固定文言として持つ */
+var RP_ORG='排泄ケア記録';
+function rpHead(title,sub,extraMeta){
+  var now=new Date();
+  return '<div class="rp-hd"><div><div class="rp-ttl">'+escapeHtmlText(title)+'</div>'+
+    (sub?'<div class="rp-sub">'+escapeHtmlText(sub)+'</div>':'')+'</div>'+
+    '<div class="rp-meta">出力日時: '+escapeHtmlText(now.toLocaleString('ja-JP'))+'<br>'+
+    '出力者: '+escapeHtmlText(($('rpBy')&&$('rpBy').value.trim())||'（未記入）')+
+    (extraMeta?'<br>'+escapeHtmlText(extraMeta):'')+'</div></div>';
+}
+function rpFoot(note){
+  return '<div class="rp-ft"><span>'+escapeHtmlText(RP_ORG)+'</span>'+
+    '<span>'+escapeHtmlText(note||'')+'</span></div>';
+}
+/* 記録1件の「作成・修正」表示。修正履歴は保持していないため、出せるのは
+   作成日時と最終修正日時まで。無い記録（機能追加より前の記録）は「—」を出して
+   欠落を黙って隠さない。 */
+function rpStamp(r){
+  var c=r.createdAt?new Date(r.createdAt):null;
+  var u=r.updatedAt?new Date(r.updatedAt):null;
+  return {
+    created: (c&&!isNaN(c))?c.toLocaleString('ja-JP'):'—',
+    updated: (u&&!isNaN(u))?u.toLocaleString('ja-JP'):'—',
+    edited:  !!(u&&!isNaN(u))
+  };
+}
+function rpTypeLabel(t){
+  return {urine:'排尿',stool:'排便',both:'排尿+排便',laxative:'下剤',none:'誘導',water:'水分'}[t]||String(t||'');
+}
+
+/* ── 様式(1) 入居者別・日別（A4縦・月次） ───────────────────────── */
+function rpMonthly(){
+  var ym=$('rpMonth')?$('rpMonth').value:'';
+  var dates=rpMonthDates(ym);
+  if(!dates.length)return '<div class="rp-empty">対象の月を選んでください。</div>';
+  var sel=$('rpRes')?$('rpRes').value:'all';
+  var list=rpResidents().filter(function(r){return sel==='all'||String(r.id)===String(sel)});
+  if(!list.length)return '<div class="rp-empty">対象の入居者がいません。<br>設定画面で在籍・表示の状態をご確認ください。</div>';
+  var withDetail=$('rpDetail')&&$('rpDetail').checked;
+
+  return list.map(function(re){
+    var rows='',anyEdited=false,detail=[];
+    dates.forEach(function(d){
+      var recs=recsByResDate(re.id,d).filter(isUserRec);
+      var u=recs.filter(function(r){return r.type==='urine'||r.type==='both'});
+      var s=recs.filter(function(r){return r.type==='stool'||r.type==='both'});
+      var lax=recs.filter(function(r){return r.type==='laxative'});
+      var water=recs.reduce(function(a,r){return a+(Number(r.waterCC)>0?Number(r.waterCC):0)},0);
+      var uMl=u.reduce(function(a,r){return a+(typeof r.urineAmt==='number'?r.urineAmt:0)},0);
+      var cons=s.map(function(r){return fmtCons(r)}).filter(Boolean).join('・');
+      var amt=s.map(function(r){return r.stoolAmt||''}).filter(Boolean).join('・');
+      var laxTxt=lax.map(function(r){return (r.medicine||'')+(r.tablets?' '+r.tablets+'錠':'')}).filter(Boolean).join('・');
+      var notes=recs.map(function(r){return (r.notes||'').trim()}).filter(Boolean).join(' / ');
+      var staffs=[];recs.forEach(function(r){var n=(r.staff||'').trim();if(n&&staffs.indexOf(n)<0)staffs.push(n)});
+      var edited=recs.some(function(r){return rpStamp(r).edited});
+      if(edited)anyEdited=true;
+      if(withDetail)recs.forEach(function(r){detail.push({d:d,r:r})});
+      var dd=new Date(d+'T00:00:00');
+      rows+='<tr class="'+rpWdCls(d)+'">'+
+        '<td>'+dd.getDate()+'</td>'+
+        '<td>'+RP_WD[dd.getDay()]+'</td>'+
+        '<td>'+(u.length||'')+'</td>'+
+        '<td>'+(uMl>0?uMl:'')+'</td>'+
+        '<td>'+(s.length||'')+'</td>'+
+        '<td class="l">'+escapeHtmlText(cons)+'</td>'+
+        '<td class="l">'+escapeHtmlText(amt)+'</td>'+
+        '<td>'+(water>0?water:'')+'</td>'+
+        '<td class="l">'+escapeHtmlText(laxTxt)+'</td>'+
+        '<td class="l">'+escapeHtmlText(notes)+'</td>'+
+        '<td class="l">'+escapeHtmlText(staffs.join('・'))+'</td>'+
+        '<td>'+(edited?'✎ 有':'')+'</td>'+
+        '</tr>';
+    });
+    var h='<div class="rp-pg">'+
+      rpHead('排泄ケア記録（月次）',
+             re.room+'号室　'+re.name+'　（'+floorLabel(roomToFloor(re.room))+'）',
+             '対象期間: '+ym)+
+      '<table class="rp-t"><thead><tr>'+
+        '<th>日</th><th>曜</th><th>排尿<br>(回)</th><th>排尿量<br>(ml)</th><th>排便<br>(回)</th>'+
+        '<th>便の性状</th><th>排便量</th><th>水分<br>(cc)</th><th>下剤</th><th>備考</th>'+
+        '<th>記録者</th><th>修正</th>'+
+      '</tr></thead><tbody>'+rows+'</tbody></table>';
+    if(withDetail){
+      /* 明細がある時だけ改ページする。無い時に改ページすると白紙が1枚増える。 */
+      h+='<div class="rp-sec'+(detail.length?' rp-brk':'')+'">記録の作成・修正情報（'+detail.length+'件）</div>';
+      if(!detail.length){
+        h+='<div class="rp-empty" style="padding:12px">この期間に記録はありません。</div>';
+      }else{
+        h+='<table class="rp-t"><thead><tr><th>日付</th><th>時刻</th><th>種別</th><th>記録者</th>'+
+           '<th>作成日時</th><th>最終修正日時</th></tr></thead><tbody>'+
+          detail.map(function(x){var st=rpStamp(x.r);
+            return '<tr><td>'+escapeHtmlText(x.d)+'</td><td>'+escapeHtmlText(x.r.time||'')+'</td>'+
+              '<td>'+escapeHtmlText(rpTypeLabel(x.r.type))+'</td>'+
+              '<td class="l">'+escapeHtmlText(x.r.staff||'')+'</td>'+
+              '<td>'+escapeHtmlText(st.created)+'</td>'+
+              '<td>'+escapeHtmlText(st.updated)+'</td></tr>';
+          }).join('')+'</tbody></table>';
+      }
+      h+='<div class="rp-note" style="margin-top:6px">※ 本システムは変更前の値と修正者を保持していません。'+
+         '「最終修正日時」は直近1回の修正時刻、「修正」欄の ✎ は修正が入ったことのみを示します。'+
+         '作成日時が「—」の記録は、作成日時を保存する以前に登録されたものです。</div>';
+    }
+    h+=rpFoot(anyEdited?'この期間に修正された記録があります（✎ 印）':'')+'</div>';
+    return h;
+  }).join('');
+}
+
+/* ── 様式(2) フロア別・日次（A4横） ───────────────────────────── */
+function rpFloorDaily(){
+  var d=$('rpDate')?$('rpDate').value:'';
+  if(!d)return '<div class="rp-empty">対象の日を選んでください。</div>';
+  var want=$('rpFloor')?$('rpFloor').value:'all';
+  var list=rpResidents().filter(function(r){
+    return want==='all'||String(roomToFloor(r.room))===String(want);
+  });
+  if(!list.length)return '<div class="rp-empty">対象の入居者がいません。<br>フロアの指定をご確認ください（階は居室番号の先頭が1／2で判定します）。</div>';
+
+  /* 2時間刻み12枠。1日を1行に収めるための粒度（A4横で在籍20名前後を想定） */
+  var slots=[];for(var i=0;i<12;i++)slots.push(i*2);
+  var groups={};
+  list.forEach(function(r){var f=roomToFloor(r.room);(groups[f]=groups[f]||[]).push(r)});
+
+  var out='<div class="rp-pg">'+rpHead('排泄ケア記録（フロア別・日次）','対象日: '+d,
+          want==='all'?'対象: 全フロア':'対象: '+floorLabel(parseInt(want,10)));
+  [1,2,0].forEach(function(f){
+    var g=groups[f];if(!g||!g.length)return;
+    out+='<div class="rp-sec">'+escapeHtmlText(floorLabel(f))+'（'+g.length+'名）</div>';
+    out+='<table class="rp-t"><thead><tr><th>居室</th><th>氏名</th>'+
+      slots.map(function(h){return '<th>'+h+'–'+(h+2)+'</th>'}).join('')+
+      '<th>排尿<br>(回)</th><th>排便<br>(回)</th><th>水分<br>(cc)</th><th>最終排便<br>からの日数</th><th>記録者</th></tr></thead><tbody>';
+    g.forEach(function(re){
+      var recs=recsByResDate(re.id,d).filter(isUserRec);
+      var bySlot={};
+      recs.forEach(function(r){
+        var hh=parseInt(String(r.time||'').split(':')[0],10);
+        if(isNaN(hh))return;
+        var k=Math.floor(hh/2)*2;(bySlot[k]=bySlot[k]||[]).push(r);
+      });
+      var cells=slots.map(function(h){
+        var rs=bySlot[h]||[];
+        if(!rs.length)return '<td></td>';
+        /* 記号で伝える（色だけに頼らない）: 尿=○ 便=● 下剤=薬 誘導=× 水分=水 */
+        var mk=rs.map(function(r){
+          return r.type==='urine'?'○':r.type==='stool'?'●':r.type==='both'?'◐':
+                 r.type==='laxative'?'薬':r.type==='none'?'×':r.type==='water'?'水':'・';
+        }).join('');
+        return '<td>'+escapeHtmlText(mk)+'</td>';
+      }).join('');
+      var nU=recs.filter(function(r){return r.type==='urine'||r.type==='both'}).length;
+      var nS=recs.filter(function(r){return r.type==='stool'||r.type==='both'}).length;
+      var water=recs.reduce(function(a,r){return a+(Number(r.waterCC)>0?Number(r.waterCC):0)},0);
+      var ls=lastR(re.id,'s');
+      var offD=ls?Math.abs(dayDiff(ls.date,d)):null;
+      var bcls=badgeCls(elH(ls||null,re.id),'s',re.id);
+      var offTxt=(offD===null)?'▲ 記録なし':(offD+'日');
+      var offCls=(bcls==='eb-ng')?' class="rp-ng"':(bcls==='eb-w')?' class="rp-wn"':'';
+      var offMark=(bcls==='eb-ng')?'✕ ':(bcls==='eb-w')?'▲ ':'';
+      var staffs=[];recs.forEach(function(r){var n=(r.staff||'').trim();if(n&&staffs.indexOf(n)<0)staffs.push(n)});
+      out+='<tr><td>'+escapeHtmlText(re.room||'')+'</td><td class="l">'+escapeHtmlText(re.name)+'</td>'+
+        cells+'<td>'+(nU||'')+'</td><td>'+(nS||'')+'</td><td>'+(water>0?water:'')+'</td>'+
+        '<td'+offCls+'>'+escapeHtmlText(offMark+offTxt)+'</td>'+
+        '<td class="l">'+escapeHtmlText(staffs.join('・'))+'</td></tr>';
+    });
+    out+='</tbody></table>';
+  });
+  out+='<div class="rp-note" style="margin-top:6px">記号: ○ 排尿／● 排便／◐ 排尿+排便／薬 下剤／× 誘導（排泄なし）／水 水分のみ。'+
+       '「最終排便からの日数」の ✕ は危険、▲ は注意（判定は設定画面のしきい値と同じです）。</div>';
+  out+=rpFoot('階は居室番号の先頭（1／2）で判定')+'</div>';
+  return out;
+}
+
+/* ── 様式(3) 未排便日数と下剤使用状況（A4縦） ─────────────────── */
+function rpBowel(){
+  var d=$('rpDate')?$('rpDate').value:today();
+  var ym=$('rpMonth')?$('rpMonth').value:'';
+  var monthDates=rpMonthDates(ym);
+  var list=rpResidents();
+  if(!list.length)return '<div class="rp-empty">対象の入居者がいません。</div>';
+
+  var rows=list.map(function(re){
+    var ls=lastR(re.id,'s');
+    var h=elH(ls||null,re.id);
+    var bcls=badgeCls(h,'s',re.id);
+    var offD=ls?Math.abs(dayDiff(ls.date,d)):null;
+    /* 下剤: 対象月の使用実績（月未選択なら全期間の直近） */
+    var laxAll=recsByRes(re.id).filter(isUserRec).filter(function(r){return r.type==='laxative'});
+    var laxInRange=monthDates.length
+      ? laxAll.filter(function(r){return monthDates.indexOf(r.date)>=0})
+      : laxAll;
+    var lastLax=laxAll.slice().sort(function(a,b){return(b.datetime||'').localeCompare(a.datetime||'')})[0];
+    var cfg=resCfg(re.id);
+    var cls=(bcls==='eb-ng')?' class="rp-ng"':(bcls==='eb-w')?' class="rp-wn"':'';
+    var mark=(bcls==='eb-ng')?'✕ 危険':(bcls==='eb-w')?'▲ 注意':'✓ 平常';
+    return '<tr>'+
+      '<td>'+escapeHtmlText(re.room||'')+'</td>'+
+      '<td class="l">'+escapeHtmlText(re.name)+'</td>'+
+      '<td>'+escapeHtmlText(floorLabel(roomToFloor(re.room)))+'</td>'+
+      '<td>'+escapeHtmlText(ls?(ls.date+' '+(ls.time||'')):'記録なし')+'</td>'+
+      '<td>'+(offD===null?'—':offD+'日')+'</td>'+
+      '<td'+cls+'>'+escapeHtmlText(mark)+'</td>'+
+      '<td>'+escapeHtmlText(cfg.stoolWarnD+'／'+cfg.stoolDangerD+'日')+'</td>'+
+      '<td>'+laxInRange.length+'</td>'+
+      '<td class="l">'+escapeHtmlText(lastLax?(lastLax.date+' '+(lastLax.medicine||'')+(lastLax.tablets?' '+lastLax.tablets+'錠':'')):'—')+'</td>'+
+      '<td class="l">'+escapeHtmlText((re.laxNote||'').replace(/\n/g,' '))+'</td>'+
+      '</tr>';
+  }).join('');
+
+  return '<div class="rp-pg">'+
+    rpHead('未排便日数と下剤使用状況','基準日: '+d,monthDates.length?('下剤の集計期間: '+ym):'下剤の集計期間: 全期間')+
+    '<table class="rp-t"><thead><tr>'+
+      '<th>居室</th><th>氏名</th><th>階</th><th>最終排便</th><th>経過<br>日数</th><th>区分</th>'+
+      '<th>しきい値<br>注意／危険</th><th>下剤<br>使用回数</th><th>直近の下剤</th><th>下剤メモ</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div class="rp-note" style="margin-top:6px">区分は画面の未排便アラートと同じ判定です（入居者ごとの個別しきい値がある場合はそれを使用）。'+
+    '✓ 平常／▲ 注意／✕ 危険。</div>'+
+    rpFoot('')+'</div>';
+}
+
+/* ── 描画・印刷・CSV ─────────────────────────────────────────── */
+function rpBuildSheet(){
+  var box=$('rpSheet');if(!box)return;
+  var html='';
+  try{
+    html=(RP_VIEW==='monthly')?rpMonthly():(RP_VIEW==='floor')?rpFloorDaily():rpBowel();
+  }catch(e){
+    console.error('[hbcr] 帳票の作成に失敗:',e);
+    box.innerHTML='<div class="rp-empty">帳票を作れませんでした。<br>'+
+      '条件を選び直してもう一度お試しください。改善しない場合は、設定画面から手動同期を行ってください。</div>';
+    showToast('⚠️ 帳票を作れませんでした','err');
+    return;
+  }
+  box.innerHTML=html;
+  box.scrollIntoView({block:'start',behavior:'smooth'});
+}
+function rpSyncCond(){
+  /* 様式ごとに要る条件だけを見せる（迷わせない） */
+  var isMonthly=(RP_VIEW==='monthly'),isFloor=(RP_VIEW==='floor');
+  if($('rpMonthWrap'))$('rpMonthWrap').style.display=(isMonthly||RP_VIEW==='bowel')?'':'none';
+  if($('rpDateWrap')) $('rpDateWrap').style.display =(isFloor||RP_VIEW==='bowel')?'':'none';
+  if($('rpResWrap'))  $('rpResWrap').style.display  = isMonthly?'':'none';
+  if($('rpFloorWrap'))$('rpFloorWrap').style.display= isFloor?'':'none';
+}
+function rpFillRes(){
+  var sel=$('rpRes');if(!sel)return;
+  var cur=sel.value;
+  sel.innerHTML='<option value="all">すべての入居者</option>'+
+    rpResidents().map(function(r){
+      return '<option value="'+escapeHtmlText(r.id)+'">'+escapeHtmlText(r.room)+'　'+escapeHtmlText(r.name)+'</option>';
+    }).join('');
+  if(cur)sel.value=cur;
+  if(!sel.value)sel.value='all';
+}
+function rpOpen(){
+  var t=today();
+  if($('rpDate')&&!$('rpDate').value)$('rpDate').value=t;
+  if($('rpMonth')&&!$('rpMonth').value)$('rpMonth').value=t.slice(0,7);
+  if($('rpBy')&&!$('rpBy').value){try{$('rpBy').value=localStorage.getItem('hbcr_ls')||''}catch(e){}}
+  rpFillRes();rpSyncCond();
+  showSc('report');
+}
+
+/* 印刷。既存アプリ（daycare-roster 等）と同じ「動的 @page 注入 → print → 後始末」方式。
+   afterprint が発火しない環境（モバイルSafari/一部WebView）に備えてタイマーでも必ず戻す。 */
+var _rpPrintStyle=null,_rpPrintTimer=null;
+function rpPrintCleanup(){
+  if(_rpPrintTimer){clearTimeout(_rpPrintTimer);_rpPrintTimer=null}
+  document.body.classList.remove('rp-printing');
+  if(_rpPrintStyle&&_rpPrintStyle.parentNode){_rpPrintStyle.parentNode.removeChild(_rpPrintStyle)}
+  _rpPrintStyle=null;
+}
+function rpPrintSetup(){
+  rpPrintCleanup();                                  /* 前ジョブの残りを必ず消してから積む */
+  document.body.classList.add('rp-printing');
+  var st=document.createElement('style');
+  st.setAttribute('data-rp-page','1');
+  st.textContent='@media print{@page{size:'+(RP_PAPER[RP_VIEW]||'A4 portrait')+';margin:10mm}}';
+  document.head.appendChild(st);                     /* 静的CSSより後に足す＝後勝ち */
+  _rpPrintStyle=st;
+}
+function rpPrint(){
+  var box=$('rpSheet');
+  if(!box||!box.querySelector('.rp-pg')){
+    showToast('⚠️ 先に「📄 画面に出す」を押してください','err');return;
+  }
+  rpPrintSetup();
+  _rpPrintTimer=setTimeout(rpPrintCleanup,3000);
+  window.print();
+}
+
+/* 帳票の条件でCSVを出す。既存の expCSV（全期間・全員）は残したまま、こちらは
+   期間・対象を絞り、作成日時・最終修正日時の列を足す。 */
+function rpCsv(){
+  const BOM='\uFEFF';   /* Excel が UTF-8 と判別できるよう先頭に付ける（既存 expCSV と同じ） */
+  var dates=null,label='';
+  if(RP_VIEW==='floor'){var d=$('rpDate').value;dates=d?[d]:null;label=d||''}
+  else{var ym=$('rpMonth').value;dates=rpMonthDates(ym);label=ym||''}
+  if(!dates||!dates.length){showToast('⚠️ 対象の期間を選んでください','err');return}
+  var selId=(RP_VIEW==='monthly'&&$('rpRes'))?$('rpRes').value:'all';
+  var wantFloor=(RP_VIEW==='floor'&&$('rpFloor'))?$('rpFloor').value:'all';
+  var targets=rpResidents().filter(function(r){
+    if(RP_VIEW==='monthly'&&selId!=='all')return String(r.id)===String(selId);
+    if(RP_VIEW==='floor'&&wantFloor!=='all')return String(roomToFloor(r.room))===String(wantFloor);
+    return true;
+  });
+  var hdr=['日付','時刻','階','居室','氏名','種別','排尿量','尿の色','便の性状','排便量','便の色',
+           '水分(cc)','薬剤','錠数','備考','記録者','作成日時','最終修正日時','修正の有無'];
+  var rows=[];
+  targets.forEach(function(re){
+    dates.forEach(function(d){
+      recsByResDate(re.id,d).filter(isUserRec)
+        .sort(function(a,b){return(a.time||'').localeCompare(b.time||'')})
+        .forEach(function(r){
+          var st=rpStamp(r);
+          rows.push([d,r.time||'',floorLabel(roomToFloor(re.room)),re.room||'',re.name||'',
+            rpTypeLabel(r.type),r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',
+            Number(r.waterCC)>0?Number(r.waterCC):'',r.medicine||'',r.tablets||'',r.notes||'',r.staff||'',
+            st.created,st.updated,st.edited?'修正あり':'']
+            .map(function(v){return '"'+String(v).replace(/"/g,'""')+'"'}).join(','));
+        });
+    });
+  });
+  if(!rows.length){showToast('⚠️ 対象の記録がありません','err');return}
+  dl(BOM+[hdr.join(','),...rows].join('\n'),'haiben_report_'+(label||today())+'.csv','text/csv;charset=utf-8;');
+  var _kd=Number(D.cfg&&D.cfg.localKeepDays)||180;
+  showToast('📥 '+rows.length+'件を出力しました'+((_kd>0&&_kd<3650)?'（端末保持分：直近'+_kd+'日）':''));
+}
+
 /* ═══════════ 入居者マスタからの本人単位リンク（?masterId=） ═══════════
    ★URLの masterId は入居者マスタ側のID。このアプリの主キー（r.id・数値）とは別物なので、
      必ず residents を走査して r.id に変換してから使う。
@@ -5729,6 +6253,30 @@ function init(){
     showToast(_pruned>0?('✅ 設定を保存しました（古い記録 '+_pruned+'件を端末から整理）'):'✅ 設定を保存しました')});
   $('btnCSV').addEventListener('click',expCSV);
   $('btnJSON').addEventListener('click',expJSON);
+
+  /* ── 帳票（2026-08-13 追加） ── */
+  if($('btnOpenReport'))$('btnOpenReport').addEventListener('click',rpOpen);
+  if($('rpBack'))$('rpBack').addEventListener('click',function(){showSc('cfg')});
+  if($('rpBuild'))$('rpBuild').addEventListener('click',rpBuildSheet);
+  if($('rpPrint'))$('rpPrint').addEventListener('click',rpPrint);
+  if($('rpCsv'))$('rpCsv').addEventListener('click',rpCsv);
+  $$('.rp-tab').forEach(function(b){
+    b.addEventListener('click',function(){
+      RP_VIEW=this.dataset.rp;
+      $$('.rp-tab').forEach(function(x){x.classList.remove('on');x.setAttribute('aria-selected','false')});
+      this.classList.add('on');this.setAttribute('aria-selected','true');
+      rpSyncCond();
+      /* 様式を切り替えたら前の紙面は捨てる（別様式の内容を印刷させない） */
+      if($('rpSheet'))$('rpSheet').innerHTML='<div class="rp-empty">「📄 画面に出す」を押すと、この様式で作成します。</div>';
+    });
+  });
+  /* Cmd+P など、ボタンを使わない印刷でも帳票画面なら同じ紙面になるようにする。
+     他画面からの印刷は従来どおり（rp-printing を付けない＝既存の挙動を変えない）。 */
+  window.addEventListener('beforeprint',function(){
+    var sc=$('sc-report');
+    if(sc&&sc.classList.contains('on')&&!document.body.classList.contains('rp-printing'))rpPrintSetup();
+  });
+  window.addEventListener('afterprint',rpPrintCleanup);
   $('btnImport').addEventListener('click',function(){$('impFile').click()});
   $('impFile').addEventListener('change',impJSON);
   $('btnClear').addEventListener('click',function(){
