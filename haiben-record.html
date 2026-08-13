@@ -2772,7 +2772,10 @@ function renderSchedList(){
   var box=$('mSchList');if(!box)return;
   if(!schedDraft.length){box.innerHTML='<span style="color:var(--g5);font-size: 0.75rem;padding:4px 8px">（未設定）</span>';return}
   box.innerHTML=schedDraft.slice().sort().map(function(t){
-    return'<span class="sch-chip" data-t="'+t+'" style="display:inline-flex;align-items:center;gap:4px;background:#fff8e1;border:1px solid #fbc02d;color:#8d6e00;padding:4px 4px 4px 10px;border-radius:14px;font-weight:700;font-size: 0.75rem">'+t+'<button class="sch-rm" data-t="'+t+'" style="border:none;background:#fbc02d;color:#fff;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size: 0.75rem;font-weight:700;line-height:1">×</button></span>'
+    /* 予定時刻はサーバー(スプレッドシート)由来の文字列。属性・本文とも必ずエスケープする。
+       属性値はブラウザが読み出し時に実体参照を戻すため dataset.t の比較は従来どおり成立する。 */
+    var et=escapeHtmlText(t);
+    return'<span class="sch-chip" data-t="'+et+'" style="display:inline-flex;align-items:center;gap:4px;background:#fff8e1;border:1px solid #fbc02d;color:#8d6e00;padding:4px 4px 4px 10px;border-radius:14px;font-weight:700;font-size: 0.75rem">'+et+'<button class="sch-rm" data-t="'+et+'" style="border:none;background:#fbc02d;color:#fff;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size: 0.75rem;font-weight:700;line-height:1">×</button></span>'
   }).join('');
   $$('.sch-rm',box).forEach(function(b){b.addEventListener('click',function(){
     var t=this.dataset.t;schedDraft=schedDraft.filter(function(x){return x!==t});renderSchedList()})});
@@ -3198,7 +3201,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       var wtag=(Number(r.waterCC)>0)?'<span class="water-mark">'+waterSvg('1.1em')+' '+Number(r.waterCC)+'cc</span>':'';
       var noteText=(r.notes && String(r.notes).trim())?escapeHtmlText(r.notes).replace(/\n/g,'<br>'):'';
       return'<div style="margin-bottom:4px;display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap">'+
-        '<span style="color:var(--g6);font-variant-numeric:tabular-nums;flex-shrink:0;font-weight:600">'+(r.time||'')+'</span>'+
+        '<span style="color:var(--g6);font-variant-numeric:tabular-nums;flex-shrink:0;font-weight:600">'+escapeHtmlText(r.time||'')+'</span>'+
         '<span style="flex-shrink:0;display:inline-flex;align-items:center">'+ic+'</span>'+
         '<span style="flex:1;min-width:0">'+noteText+wtag+'</span>'+
       '</div>';
@@ -3239,7 +3242,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     var rowStyle='';
     // 入院マーカー（氏名セルに表示）— 退院は表示しない
     var hospMarker='';
-    if(admissionEvent)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院 '+admissionEvent.time+'</div>';
+    if(admissionEvent)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院 '+escapeHtmlText(admissionEvent.time)+'</div>';
     if(isFullHosp)hospMarker+='<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>';
     /* 入居者マスタ側だけで入院になっている人（当アプリに入院履歴が無い）にも同じバッジを出す。
        過去日の表示は書き換えないよう「今日」を見ているときだけ。行のグレーアウト・間隔表示・
@@ -3248,17 +3251,17 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     return'<tr class="'+rc+'"'+(rowStyle?' style="'+rowStyle+'"':'')+'>'+
       '<td><strong>'+escapeHtmlText(re.room)+'</strong></td>'+
       '<td style="text-align:start;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+hospMarker+'</td>'+
-      '<td style="white-space:nowrap">'+(lu?'<b>'+fmtLast(lu,date)+'</b>':'<span class="nr">未記録</span>')+'</td>'+
+      '<td style="white-space:nowrap">'+(lu?'<b>'+escapeHtmlText(fmtLast(lu,date))+'</b>':'<span class="nr">未記録</span>')+'</td>'+
       '<td><span class="eb '+ub+'">'+fmtEl(uh)+'</span>'+uOffHtml+'</td>'+
-      '<td>'+du.length+'回'+(tU>0?'<div style="font-size: 0.625rem;color:var(--u)">'+tU+'ml</div>':'')+(tU===0&&du.some(r=>typeof r.urineAmt==='string'&&r.urineAmt)?'<div style="font-size: 0.625rem;color:var(--u)">'+du.filter(r=>typeof r.urineAmt==='string'&&r.urineAmt).map(r=>r.urineAmt).join('・')+'</div>':'')+'</td>'+
-      '<td style="white-space:nowrap">'+(ls?'<b>'+fmtLast(ls,date)+'</b>':'<span class="nr">未記録</span>')+'</td>'+
+      '<td>'+du.length+'回'+(tU>0?'<div style="font-size: 0.625rem;color:var(--u)">'+tU+'ml</div>':'')+(tU===0&&du.some(r=>typeof r.urineAmt==='string'&&r.urineAmt)?'<div style="font-size: 0.625rem;color:var(--u)">'+escapeHtmlText(du.filter(r=>typeof r.urineAmt==='string'&&r.urineAmt).map(r=>r.urineAmt).join('・'))+'</div>':'')+'</td>'+
+      '<td style="white-space:nowrap">'+(ls?'<b>'+escapeHtmlText(fmtLast(ls,date))+'</b>':'<span class="nr">未記録</span>')+'</td>'+
       '<td><span class="eb '+sb+'">'+fmtEl(sh)+'</span>'+sOffHtml+'</td>'+
       '<td>'+ds.length+'回</td>'+
-      '<td style="white-space:nowrap">'+(lCons?'<span class="tg tg-s">'+lCons+'</span>':'')+(lSA?' <span style="font-size: 0.6875rem">'+lSA+'</span>':'')+'</td>'+
+      '<td style="white-space:nowrap">'+(lCons?'<span class="tg tg-s">'+escapeHtmlText(lCons)+'</span>':'')+(lSA?' <span style="font-size: 0.6875rem">'+escapeHtmlText(lSA)+'</span>':'')+'</td>'+
       '<td style="font-size: 0.8125rem;text-align:start;min-width:300px;max-width:360px;word-break:break-word;white-space:normal;line-height:1.45;padding:8px 10px">'+(notesHtml||'<span style="color:var(--g5)">—</span>')+laxHtml+'</td>'+
       '<td style="font-size: 0.6875rem;text-align:start;max-width:180px;word-break:break-all;white-space:normal;color:#4a148c">'+(re.laxNote?escapeHtmlText(re.laxNote).replace(/\n/g,'<br>'):'<span style="color:var(--g5)">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+(hasRec
-        ?'<button class="bn bs bsm bd-ops" data-rid="'+re.id+'" style="padding:6px 10px;min-height:36px;font-size: 0.6875rem">✏️ 修正・削除<div style="font-size: 0.625rem;color:var(--g5);margin-top:2px">('+dAll.length+'件)</div></button>'
+        ?'<button class="bn bs bsm bd-ops" data-rid="'+escapeHtmlText(re.id)+'" style="padding:6px 10px;min-height:36px;font-size: 0.6875rem">✏️ 修正・削除<div style="font-size: 0.625rem;color:var(--g5);margin-top:2px">('+dAll.length+'件)</div></button>'
         :'<span style="font-size: 0.6875rem;color:var(--g5)">—</span>')+'</td>'+
       '</tr>'}).join('');
   // 履歴リンク
@@ -3314,6 +3317,9 @@ function renderTL(){const date=$('tlDate').value||today();
       var slot=hh*2+(mm>=30?1:0);
       hospBySlot[slot]=ev;
     });
+    /* 入居者idは data-slot / data-fd 属性へ入る。読み出し側は parseInt するが、
+       属性境界を破られないよう出力時にエスケープする（1行あたり1回だけ算出）。 */
+    var reIdA=escapeHtmlText(re.id);
     let cells='';
     for(let s=0;s<48;s++){const recs=bk[s]||[];
       var schCls=schSet[s]?' sched':'';
@@ -3321,20 +3327,20 @@ function renderTL(){const date=$('tlDate').value||today();
       // 🏥 入院マーカーセル — 入院のみ表示（退院マーカーは表示しない仕様）
       if(hospBySlot[s]&&hospBySlot[s].type==='admission'){
         var ev=hospBySlot[s];
-        cells+='<td class="tl-c has" data-slot="'+re.id+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size: 0.5625rem;opacity:.9">'+escapeHtmlText(ev.time)+'</span></td>';
+        cells+='<td class="tl-c has" data-slot="'+reIdA+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size: 0.5625rem;opacity:.9">'+escapeHtmlText(ev.time)+'</span></td>';
         continue;
       }
       // 🏥 入院期間中のセル（入院後・退院前）はより濃いグレーアウト
       if(isSlotInHospPeriod(re,date,s)){
-        cells+='<td class="tl-c'+schCls+'" data-slot="'+re.id+'-'+s+'" style="background:#757575;color:#bdbdbd;pointer-events:none">'+schLbl+'</td>';
+        cells+='<td class="tl-c'+schCls+'" data-slot="'+reIdA+'-'+s+'" style="background:#757575;color:#bdbdbd;pointer-events:none">'+schLbl+'</td>';
         continue;
       }
-      if(!recs.length){cells+='<td class="tl-c'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+'</td>';continue}
+      if(!recs.length){cells+='<td class="tl-c'+schCls+'" data-slot="'+reIdA+'-'+s+'">'+schLbl+'</td>';continue}
       let inner=recs.map(r=>{
         const dot=tlMarks(r);
         let info='';
-        if(r.type==='urine'||r.type==='both'){info+=fmtUA(r.urineAmt)}
-        if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c);
+        if(r.type==='urine'||r.type==='both'){info+=escapeHtmlText(fmtUA(r.urineAmt))}
+        if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);if(c)info+=(info?' ':'')+escapeHtmlText(c.length>2?c.slice(0,2):c);
           if(r.stoolAmt==='少量')info+=(info?' ':'')+'<span style="color:#000;font-weight:400">少</span>';
           else if(r.stoolAmt==='中等量')info+=(info?' ':'')+'<span style="color:#000;font-weight:700">中</span>';
           else if(r.stoolAmt==='多量')info+=(info?' ':'')+'<span style="color:#c62828;font-weight:700">多</span>';
@@ -3343,7 +3349,7 @@ function renderTL(){const date=$('tlDate').value||today();
         if(r.type==='none'){info+='誘導'}
         if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'cc</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
-      cells+='<td class="tl-c has'+schCls+'" data-slot="'+re.id+'-'+s+'">'+schLbl+inner+'</td>'}
+      cells+='<td class="tl-c has'+schCls+'" data-slot="'+reIdA+'-'+s+'">'+schLbl+inner+'</td>'}
     // 最終排尿・排便の日付差 (表示中日付との差) ― マイナスのみ表示
     var lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
     var uDiff=lu?dayDiff(lu.date,date):null;
@@ -3365,7 +3371,7 @@ function renderTL(){const date=$('tlDate').value||today();
     var offHtml=(uPill||sPill)
       ?'<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+uPill+'<span style="margin-left:auto">'+sPill+'</span></div>'
       :'';
-    var fdBtn='<button class="bn bs fd-btn" data-fd="'+re.id+'" title="5日間の排泄パターン" style="padding:2px 6px;margin-left:4px;font-size: 0.625rem;min-height:22px;min-width:0;vertical-align:middle">📊5日</button>';
+    var fdBtn='<button class="bn bs fd-btn" data-fd="'+reIdA+'" title="5日間の排泄パターン" style="padding:2px 6px;margin-left:4px;font-size: 0.625rem;min-height:22px;min-width:0;vertical-align:middle">📊5日</button>';
     // 🏥 完全入院日（入院翌日〜退院前日）は氏名セルもグレーアウトし、排泄カウントの代わりに「入院中」表示
     var isFullHospTL=isFullHospDay(re,date);
     var nmCellStyle=isFullHospTL?' style="background:#9e9e9e;color:#424242"':'';
@@ -3444,8 +3450,8 @@ function showFiveDay(rid,endDate){
       var inner=recs.map(function(r){
         var dot=tlMarks(r);
         var info='';
-        if(r.type==='urine'||r.type==='both')info+=fmtUA(r.urineAmt);
-        if(r.type==='stool'||r.type==='both'){var c=fmtCons(r);if(c)info+=(info?' ':'')+(c.length>2?c.slice(0,2):c);
+        if(r.type==='urine'||r.type==='both')info+=escapeHtmlText(fmtUA(r.urineAmt));
+        if(r.type==='stool'||r.type==='both'){var c=fmtCons(r);if(c)info+=(info?' ':'')+escapeHtmlText(c.length>2?c.slice(0,2):c);
           if(r.stoolAmt==='少量')info+=(info?' ':'')+'<span style="color:#000;font-weight:400">少</span>';
           else if(r.stoolAmt==='中等量')info+=(info?' ':'')+'<span style="color:#000;font-weight:700">中</span>';
           else if(r.stoolAmt==='多量')info+=(info?' ':'')+'<span style="color:#c62828;font-weight:700">多</span>';
@@ -3508,7 +3514,7 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
   if($('mDetHist'))$('mDetHist').style.display='';
   const res=D.residents.find(x=>x.id===r.residentId);
   let h='<div style="margin-bottom:10px"><b>'+escapeHtmlText(res?res.name:'不明')+'</b> <span style="color:var(--g5)">'+(res?escapeHtmlText(res.room)+'号室':'')+'</span></div>';
-  h+='<div style="font-size: 0.8125rem;margin-bottom:10px">📅 '+r.date+'　🕐 '+r.time+'</div>';
+  h+='<div style="font-size: 0.8125rem;margin-bottom:10px">📅 '+escapeHtmlText(r.date)+'　🕐 '+escapeHtmlText(r.time)+'</div>';
   if(r.type==='laxative'){
     h+='<div class="hi" style="margin-bottom:8px;background:#f3e5f5;border-left:4px solid #7b1fa2;padding:8px 12px;border-radius:6px"><b style="color:#6a1b9a">💊 下剤</b>'
       +(r.medicine?'<div>薬剤: '+escapeHtmlText(r.medicine)+'</div>':'')
@@ -3518,8 +3524,8 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
     // 水分摂取のみの記録：排泄詳細は表示しない
     h+='<div class="hi" style="margin-bottom:8px;background:#e3f2fd;border-left:4px solid #1976d2;padding:8px 12px;border-radius:6px;color:#0d47a1"><b style="display:inline-flex;align-items:center;gap:6px">'+waterSvg('1.3em')+' 水分摂取のみ</b></div>';
   }else{
-    if(r.type==='urine'||r.type==='both'){h+='<div class="hi u" style="margin-bottom:8px"><b style="color:var(--u)">💧 排尿</b>'+(r.urineAmt?'<div>量: '+fmtUA(r.urineAmt)+'</div>':'')+(r.urineColor?'<div>色: '+r.urineColor+'</div>':'')+'</div>'}
-    if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);h+='<div class="hi s" style="margin-bottom:8px"><b style="color:var(--s)">🟤 排便</b>'+(c?'<div>性状: '+c+'</div>':'')+(r.stoolAmt?'<div>量: '+r.stoolAmt+'</div>':'')+(r.stoolColor?'<div>色: '+r.stoolColor+'</div>':'')+'</div>'}
+    if(r.type==='urine'||r.type==='both'){h+='<div class="hi u" style="margin-bottom:8px"><b style="color:var(--u)">💧 排尿</b>'+(r.urineAmt?'<div>量: '+escapeHtmlText(fmtUA(r.urineAmt))+'</div>':'')+(r.urineColor?'<div>色: '+escapeHtmlText(r.urineColor)+'</div>':'')+'</div>'}
+    if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);h+='<div class="hi s" style="margin-bottom:8px"><b style="color:var(--s)">🟤 排便</b>'+(c?'<div>性状: '+escapeHtmlText(c)+'</div>':'')+(r.stoolAmt?'<div>量: '+escapeHtmlText(r.stoolAmt)+'</div>':'')+(r.stoolColor?'<div>色: '+escapeHtmlText(r.stoolColor)+'</div>':'')+'</div>'}
   }
   if(Number(r.waterCC)>0)h+='<div class="hi" style="margin-bottom:8px;background:#e3f2fd;border-left:4px solid #1976d2;padding:8px 12px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:6px">'+waterSvg('1.3em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
   if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size: 0.8125rem;margin-top:6px">📝 '+escapeHtmlText(r.notes)+'</div>';
@@ -3546,28 +3552,28 @@ function showDetMulti(recs){
 
   recs.forEach(function(r,i){
     const tc=typeColor[r.type]||'var(--g5)';
-    const tl=typeLbl[r.type]||r.type;
+    const tl=typeLbl[r.type]||escapeHtmlText(r.type);
     h+='<div style="border:1px solid var(--g2);border-radius:8px;padding:10px 12px;margin-bottom:10px;position:relative">';
     // 時刻・種別ヘッダー
     h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">'
-      +'<span style="font-size: 0.8125rem;font-weight:700">🕐 '+r.time+'</span>'
+      +'<span style="font-size: 0.8125rem;font-weight:700">🕐 '+escapeHtmlText(r.time)+'</span>'
       +'<span style="background:'+tc+';color:#fff;font-size: 0.6875rem;padding:2px 8px;border-radius:10px">'+tl+'</span>'
-      +'<button class="bn bp bsm mdet-edit-each" data-id="'+r.id+'" style="margin-left:auto;padding:4px 10px;font-size: 0.6875rem;min-height:32px;min-width:auto">✏️ 修正</button>'
-      +'<button class="bn br bsm mdet-del-each" data-id="'+r.id+'" style="padding:4px 10px;font-size: 0.6875rem;min-height:32px;min-width:auto">🗑️ 削除</button>'
+      +'<button class="bn bp bsm mdet-edit-each" data-id="'+escapeHtmlText(r.id)+'" style="margin-left:auto;padding:4px 10px;font-size: 0.6875rem;min-height:32px;min-width:auto">✏️ 修正</button>'
+      +'<button class="bn br bsm mdet-del-each" data-id="'+escapeHtmlText(r.id)+'" style="padding:4px 10px;font-size: 0.6875rem;min-height:32px;min-width:auto">🗑️ 削除</button>'
       +'</div>';
     // 排尿情報
     if(r.type==='urine'||r.type==='both'){
       h+='<div class="hi u" style="margin-bottom:6px"><b style="color:var(--u)">💧 排尿</b>'
-        +(r.urineAmt?'<div>量: '+fmtUA(r.urineAmt)+'</div>':'')
-        +(r.urineColor?'<div>色: '+r.urineColor+'</div>':'')
+        +(r.urineAmt?'<div>量: '+escapeHtmlText(fmtUA(r.urineAmt))+'</div>':'')
+        +(r.urineColor?'<div>色: '+escapeHtmlText(r.urineColor)+'</div>':'')
         +'</div>'}
     // 排便情報
     if(r.type==='stool'||r.type==='both'){
       const c=fmtCons(r);
       h+='<div class="hi s" style="margin-bottom:6px"><b style="color:var(--s)">🟤 排便</b>'
-        +(c?'<div>性状: '+c+'</div>':'')
-        +(r.stoolAmt?'<div>量: '+r.stoolAmt+'</div>':'')
-        +(r.stoolColor?'<div>色: '+r.stoolColor+'</div>':'')
+        +(c?'<div>性状: '+escapeHtmlText(c)+'</div>':'')
+        +(r.stoolAmt?'<div>量: '+escapeHtmlText(r.stoolAmt)+'</div>':'')
+        +(r.stoolColor?'<div>色: '+escapeHtmlText(r.stoolColor)+'</div>':'')
         +'</div>'}
     // 下剤情報
     if(r.type==='laxative'){
@@ -3627,23 +3633,23 @@ function _histRowHtml(r,_wsvgSm){
     var labelTd='<td style="'+tdSt+';font-size: 0.8125rem;letter-spacing:0.05em">🏥 '+label+'</td>';
     var iconTd='<td style="'+tdSt+'">🏥</td>';
     return'<tr style="background:'+bg+';color:#fff;font-weight:700">'+
-      '<td style="color:#fff;background:'+bg+';font-weight:700">'+r.date+'</td>'+
-      '<td style="color:#fff;background:'+bg+';font-weight:700">'+r.time+'</td>'+
+      '<td style="color:#fff;background:'+bg+';font-weight:700">'+escapeHtmlText(r.date)+'</td>'+
+      '<td style="color:#fff;background:'+bg+';font-weight:700">'+escapeHtmlText(r.time)+'</td>'+
       labelTd+
       iconTd+iconTd+iconTd+iconTd+iconTd+iconTd+iconTd+iconTd+
       '</tr>';
   }
   var tc=r.type==='urine'?'tp-u':r.type==='stool'?'tp-s':r.type==='laxative'?'tp-l':r.type==='none'?'tp-n':r.type==='water'?'tp-w':'tp-b';
   var tl={urine:'排尿',stool:'排便',both:'両方',laxative:'💊 下剤',none:'✖️ 誘導'}[r.type]
-          || (r.type==='water' ? ('<span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分のみ</span>') : r.type);
+          || (r.type==='water' ? ('<span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分のみ</span>') : escapeHtmlText(r.type));
   var isLax=(r.type==='laxative'),isNone=(r.type==='none'),isWater=(r.type==='water');
   var laxInfo=isLax?(escapeHtmlText(r.medicine||'-')+' '+(r.tablets?escapeHtmlText(r.tablets)+'錠':'')):'';
   var waterCell=(Number(r.waterCC)>0)?'<span class="water-mark">'+_wsvgSm+Number(r.waterCC)+'cc</span>':'-';
-  return'<tr'+(isLax?' style="background:#f3e5f5"':isNone?' style="background:#eceff1"':isWater?' style="background:#e3f2fd"':'')+'><td>'+r.date+'</td><td>'+r.time+'</td><td class="'+tc+'">'+tl+'</td>'+
-    '<td>'+(isLax||isNone||isWater?'-':(r.urineAmt?fmtUA(r.urineAmt):'-'))+'</td>'+
-    '<td>'+(isLax||isNone||isWater?'-':(r.urineColor||'-'))+'</td>'+
-    '<td'+(isLax?' colspan="3" style="text-align:start"':isNone?' colspan="3" style="text-align:start;color:var(--g5)"':isWater?' colspan="3" style="text-align:start;color:#0d47a1"':'')+'>'+(isLax?laxInfo:isNone?'排泄なし':isWater?'水分のみ':(fmtCons(r)||'-'))+'</td>'+
-    (isLax||isNone||isWater?'':'<td>'+(r.stoolAmt||'-')+'</td><td>'+(r.stoolColor||'-')+'</td>')+
+  return'<tr'+(isLax?' style="background:#f3e5f5"':isNone?' style="background:#eceff1"':isWater?' style="background:#e3f2fd"':'')+'><td>'+escapeHtmlText(r.date)+'</td><td>'+escapeHtmlText(r.time)+'</td><td class="'+tc+'">'+tl+'</td>'+
+    '<td>'+(isLax||isNone||isWater?'-':(r.urineAmt?escapeHtmlText(fmtUA(r.urineAmt)):'-'))+'</td>'+
+    '<td>'+(isLax||isNone||isWater?'-':escapeHtmlText(r.urineColor||'-'))+'</td>'+
+    '<td'+(isLax?' colspan="3" style="text-align:start"':isNone?' colspan="3" style="text-align:start;color:var(--g5)"':isWater?' colspan="3" style="text-align:start;color:#0d47a1"':'')+'>'+(isLax?laxInfo:isNone?'排泄なし':isWater?'水分のみ':escapeHtmlText(fmtCons(r)||'-'))+'</td>'+
+    (isLax||isNone||isWater?'':'<td>'+escapeHtmlText(r.stoolAmt||'-')+'</td><td>'+escapeHtmlText(r.stoolColor||'-')+'</td>')+
     '<td>'+waterCell+'</td>'+
     '<td style="text-align:start;white-space:normal;max-width:100px;word-break:break-all">'+escapeHtmlText(r.notes||'')+'</td>'+
     '<td>'+escapeHtmlText(r.staff||'')+'</td></tr>';
@@ -3846,7 +3852,7 @@ function renderCfg(){
       if(isHidden&&!isInactive)badges+='<span style="background:#fb8c00;color:#fff;font-size: 0.6875rem;padding:2px 6px;border-radius:4px;margin-right:4px">非表示</span>';
       // 🏥 現在入院中ならバッジ表示（入居者マスタの入院フラグも統合＝isHospNow）
       if(!isInactive&&isHospNow(r))badges+='<span style="background:#c62828;color:#fff;font-size: 0.6875rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">🏥 入院中</span>';
-      var histBtn=isInactive?'<button class="bn bs bsm res-hist" data-id="'+r.id+'">履歴</button>':'';
+      var histBtn=isInactive?'<button class="bn bs bsm res-hist" data-id="'+escapeHtmlText(r.id)+'">履歴</button>':'';
       var toggleLabel=isInactive?'在籍へ戻す':'退去';
       var toggleCls=isInactive?'res-restore':'res-leave';
       /* 入居者マスタに紐づく人（masterId あり）の在籍/退去はマスタが正本。
@@ -3859,9 +3865,9 @@ function renderCfg(){
       var hideLabel=isHidden?'表示':'非表示';
       var hideCls=isHidden?'res-unhide':'res-hide';
       // 退去済には非表示・入院ボタン不要
-      var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+r.id+'">'+hideLabel+'</button>';
-      var hospBtn=isInactive?'':'<button class="bn bs bsm res-hosp" data-id="'+r.id+'" style="background:#ffebee;border-color:#c62828;color:#c62828">🏥 入院</button>';
-      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+escapeHtmlText(r.name)+'</b> <span style="font-size: 0.75rem;color:var(--g5)">'+escapeHtmlText(r.room)+'号室 / '+escapeHtmlText(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+r.id+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+r.id+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+r.id+'">削除</button></div></div>'}).join('')+
+      var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+escapeHtmlText(r.id)+'">'+hideLabel+'</button>';
+      var hospBtn=isInactive?'':'<button class="bn bs bsm res-hosp" data-id="'+escapeHtmlText(r.id)+'" style="background:#ffebee;border-color:#c62828;color:#c62828">🏥 入院</button>';
+      return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+escapeHtmlText(r.name)+'</b> <span style="font-size: 0.75rem;color:var(--g5)">'+escapeHtmlText(r.room)+'号室 / '+escapeHtmlText(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+escapeHtmlText(r.id)+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+escapeHtmlText(r.id)+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+escapeHtmlText(r.id)+'">削除</button></div></div>'}).join('')+
     '<div style="margin-top:8px;font-size: 0.75rem;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
   // ボタンイベント
   $$('.res-edit').forEach(b=>b.addEventListener('click',function(){editRes(parseInt(this.dataset.id))}));
@@ -3945,8 +3951,8 @@ function renderLinkAudit(){
       +'<div style="font-size: 0.75rem;color:var(--g7)">'+lkTxt+'</div>'
       +'<div style="font-size: 0.75rem;margin-top:2px">'+cdTxt+'</div>'
       +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
-      +'<button class="bn bs bsm link-ack" data-id="'+r.id+'" style="min-height:32px">この紐づけは正しい（表記ゆれ）</button>'
-      +'<button class="bn bs bsm link-unlink" data-id="'+r.id+'" style="min-height:32px">連携を外して手入力する</button>'
+      +'<button class="bn bs bsm link-ack" data-id="'+escapeHtmlText(r.id)+'" style="min-height:32px">この紐づけは正しい（表記ゆれ）</button>'
+      +'<button class="bn bs bsm link-unlink" data-id="'+escapeHtmlText(r.id)+'" style="min-height:32px">連携を外して手入力する</button>'
       +'</div></div>';
   }).join('');
 
@@ -5064,11 +5070,11 @@ function renderHospList(r){
       var badge=isOngoing?'<span style="background:#c62828;color:#fff;font-weight:700;padding:1px 6px;border-radius:3px;font-size: 0.6875rem">入院中</span>':'<span style="background:#1565c0;color:#fff;font-weight:700;padding:1px 6px;border-radius:3px;font-size: 0.6875rem">退院済</span>';
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:4px;background:'+bg+';border-radius:6px;font-size: 0.75rem;flex-wrap:wrap">'+
         '<div style="flex:1;min-width:180px">'+badge+'<br>'+
-        '<div style="margin-top:4px"><b>入院</b>: '+(h.admissionAt||'-').replace('T',' ')+'</div>'+
-        (h.dischargeAt?'<div><b>退院</b>: '+h.dischargeAt.replace('T',' ')+'</div>':'<div style="color:#c62828"><b>退院未登録</b></div>')+
+        '<div style="margin-top:4px"><b>入院</b>: '+escapeHtmlText((h.admissionAt||'-').replace('T',' '))+'</div>'+
+        (h.dischargeAt?'<div><b>退院</b>: '+escapeHtmlText(h.dischargeAt.replace('T',' '))+'</div>':'<div style="color:#c62828"><b>退院未登録</b></div>')+
         '</div>'+
-        (isOngoing?'<button class="bn bp bsm hosp-discharge" data-hid="'+h.id+'" style="background:#1565c0">📝 退院日時を登録</button>':'')+
-        '<button class="bn br bsm hosp-del" data-hid="'+h.id+'" title="この入院履歴を削除" aria-label="この入院履歴を削除">🗑️</button>'+
+        (isOngoing?'<button class="bn bp bsm hosp-discharge" data-hid="'+escapeHtmlText(h.id)+'" style="background:#1565c0">📝 退院日時を登録</button>':'')+
+        '<button class="bn br bsm hosp-del" data-hid="'+escapeHtmlText(h.id)+'" title="この入院履歴を削除" aria-label="この入院履歴を削除">🗑️</button>'+
       '</div>';
     }).join('');
   // 退院登録ボタン
