@@ -10,7 +10,7 @@
 <title>排泄ケア記録システム</title>
 <style>
 :root{
-  --pri:#1a73e8;--pri-l:#e8f0fe;--pri-d:#1557b0;
+  --pri:#0b57d0;--pri-l:#ecf3fe;--pri-d:#0842a0;
   --ok:#2e7d32;--ok-l:#e8f5e9;
   --warn-bg:#fff8e1;--warn-tx:#e65100;
   --ng:#c62828;--ng-l:#ffebee;
@@ -25,7 +25,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
   background:var(--g0);color:var(--g9);min-height:100vh;padding-bottom:72px}
 
 /* header */
-.hdr{background:linear-gradient(135deg,#1565c0,#1a73e8);color:#fff;padding:14px 18px;
+.hdr{background:linear-gradient(135deg,#0842a0,#0b57d0);color:#fff;padding:14px 18px;
   position:sticky;top:0;z-index:100;box-shadow:0 3px 12px rgba(0,0,0,.15);
   display:flex;align-items:center;justify-content:space-between}
 .hdr h1{font-size: 1.0625rem;font-weight:700}.hdr-sub{font-size: 0.75rem;opacity:.85;margin-top:2px}
@@ -4091,7 +4091,7 @@ function renderLinkAudit(){
     var now='現在: '+escapeHtmlText(r.room||'')+'号室 / '+escapeHtmlText(r.yomi||'（ヨミなし）');
     var lkTxt=lk?('紐づけ先: '+escapeHtmlText(lk.name||'')+'（'+escapeHtmlText(lk.room||'')+'号室）')
                 :'紐づけ先: 名簿に見つかりません';
-    var cdTxt=cd?('<span style="color:#1557b0">→ 修復後: '+escapeHtmlText(cd.room||'')+'号室 / '+escapeHtmlText(cd.kana||'（ヨミなし）')+'</span>')
+    var cdTxt=cd?('<span style="color:#0842a0">→ 修復後: '+escapeHtmlText(cd.room||'')+'号室 / '+escapeHtmlText(cd.kana||'（ヨミなし）')+'</span>')
                 :'<span style="color:#c62828">→ 名簿に同じ氏名の在籍者が居ない（または複数）ため自動では直せません</span>';
     return '<div style="border:1px solid var(--g3);border-radius:8px;padding:8px 10px;margin-bottom:6px">'
       +'<div><b>'+escapeHtmlText(r.name)+'</b></div>'
