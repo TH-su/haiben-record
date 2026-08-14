@@ -2914,7 +2914,7 @@ function renderSchedList(){
     /* 予定時刻はサーバー(スプレッドシート)由来の文字列。属性・本文とも必ずエスケープする。
        属性値はブラウザが読み出し時に実体参照を戻すため dataset.t の比較は従来どおり成立する。 */
     var et=escapeHtmlText(t);
-    return'<span class="sch-chip" data-t="'+et+'" style="display:inline-flex;align-items:center;gap:4px;background:#fff8e1;border:1px solid #fbc02d;color:#8d6e00;padding:4px 4px 4px 10px;border-radius:14px;font-weight:700;font-size: 0.75rem">'+et+'<button class="sch-rm" data-t="'+et+'" style="border:none;background:#fbc02d;color:#fff;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size: 0.75rem;font-weight:700;line-height:1">×</button></span>'
+    return'<span class="sch-chip" data-t="'+et+'" style="display:inline-flex;align-items:center;gap:4px;background:#fff8e1;border:1px solid #fbc02d;color:#8d6e00;padding:4px 4px 4px 10px;border-radius:14px;font-weight:700;font-size: 0.75rem">'+et+'<button class="sch-rm" data-t="'+et+'" aria-label="'+et+' の予定を解除" title="'+et+' の予定を解除" style="border:none;background:#fbc02d;color:#fff;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size: 0.75rem;font-weight:700;line-height:1">×</button></span>'
   }).join('');
   $$('.sch-rm',box).forEach(function(b){b.addEventListener('click',function(){
     var t=this.dataset.t;schedDraft=schedDraft.filter(function(x){return x!==t});renderSchedList()})});
