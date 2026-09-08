@@ -1744,6 +1744,30 @@ async function syncFromAPI(showLoader,opts){
     var localRecById={};
     if(_fullFetch){localRec.forEach(function(r){if(r&&r.id!=null&&!_isSnapshotRec(r))localRecById[r.id]=r});}
     function _recTs(rec){var v=rec&&(rec.updatedAt||rec.createdAt);if(!v)return 0;var t=new Date(v).getTime();return isNaN(t)?0:t;}
+    /* ★まだサーバーへ届いていない編集・削除を守る（2026-09-08 追加）。
+       直近数日ぶんはサーバーが必ず返すようにしたため、その期間の記録は毎回サーバー版で
+       上書きされる。送信キューに残っている編集がそれに負けると、画面上で値が巻き戻る
+       （キューは自前の写しを送るのでサーバーは最後には正しくなるが、その間は古い値が見える）。
+       updatedAt の大小で判定すると端末時計のズレに引きずられるため、
+       「送信待ちに載っているか」という時計に依存しない事実だけで判定する。 */
+    var _unsentEdit={}, _unsentDel={}, _localAll={};
+    localRec.forEach(function(r){if(r&&r.id!=null&&!_isSnapshotRec(r))_localAll[String(r.id)]=r});
+    (function(){
+      function scan(list){
+        (list||[]).forEach(function(it){
+          if(!it||!it.action||!it.data)return;
+          if(it.action==='addRecord'||it.action==='saveRecord'){
+            var rid=it.data.record&&it.data.record.id;
+            if(rid!=null&&rid!=='')_unsentEdit[String(rid)]=1;
+          }else if(it.action==='delRecord'){
+            if(it.data.id!=null&&it.data.id!=='')_unsentDel[String(it.data.id)]=1;
+          }
+        });
+      }
+      try{scan(_writeQ)}catch(e){}
+      try{if(_wqCurrent)scan([_wqCurrent])}catch(e){}
+      try{scan(loadPendingQueue())}catch(e){}
+    })();
     apiRec.forEach(function(r){if(r&&r.id){if(!seenRecId[r.id]){
       // snapshot の場合、server 版が壊れていれば local の notes/medicine を保護。
       // さらに、local snapshot.ts が server より新しい場合は local を優先（未同期の入院変更を保護）
@@ -1760,6 +1784,15 @@ async function syncFromAPI(showLoader,opts){
       if(_fullFetch&&!_isSnapshotRec(r)){
         var _lr=localRecById[r.id];
         if(_lr){var _lt=_recTs(_lr),_st=_recTs(r);if(_lt>0&&_st>0&&_lt>_st)r=_lr;}
+      }
+      if(!_isSnapshotRec(r)){
+        // 送信待ちの削除がある記録は、サーバー版を戻さない（消したものが一時的に生き返らない）
+        if(_unsentDel[String(r.id)]){seenRecId[r.id]=true;return;}
+        // 送信待ちの編集がある記録は、必ずローカル版を採る（時計に依存しない判定）
+        if(_unsentEdit[String(r.id)]){
+          var _lu=_localAll[String(r.id)];
+          if(_lu)r=_lu;
+        }
       }
       mergedRec.push(r);seenRecId[r.id]=true
     }}});
