@@ -319,6 +319,13 @@ textarea{resize:vertical;min-height:76px}
 .api-er{background:rgba(198,40,40,.25);color:#ef9a9a}
 .api-sy{background:rgba(255,255,255,.2);color:#fff}
 .api-of{display:none!important}
+/* 未送信が残っているときは未接続表示でも隠さない（消えたように見せない・2026-09-08） */
+.api-of.has-unsent{display:flex!important;background:var(--warn-bg);color:var(--warn-tx)}
+/* 未送信バッジ（2026-09-08 追加）。ヘッダのAPI状態の右に件数を出す。
+   色はファイル内トークン（--warn-tx/--warn-bg）を使い、独自の16進を増やさない。 */
+.api-unsent{background:var(--warn-bg);color:var(--warn-tx);border-radius:8px;
+  padding:1px 6px;margin-left:4px;font-weight:700}
+.api-bd.has-unsent{outline:2px solid var(--warn-tx);outline-offset:1px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spin{display:inline-block;animation:spin .8s linear infinite;line-height:1}
 
@@ -1487,6 +1494,15 @@ function apiSetStatus(st,msg){
   else if(st==='er'){b.classList.add('api-er');b.innerHTML='⚠️ 接続エラー'}
   else if(st==='sy'){b.classList.add('api-sy');b.innerHTML='<span class="spin">🔄</span> 同期中'}
   else{b.classList.add('api-of')}
+  /* 未送信件数を必ず添える（2026-09-08 追加・E）。
+     「保存したのに他の端末に出ない」の多くは、この端末からサーバーへまだ届いていない状態。
+     数が見えれば、端末を置く前・配信前の停止確認（未送信ゼロ）を現場が自分で確かめられる。
+     ここは頻繁に呼ばれるため localStorage は読まない（件数は保存時に更新した値を使う）。 */
+  try{
+    var un=(typeof _unsentCount==='function')?_unsentCount():0;
+    if(un>0)b.innerHTML+=' <span class="api-unsent">📤未送信'+un+'件</span>';
+    b.classList.toggle('has-unsent',un>0);
+  }catch(e){}
   var si=$('apiStatus');if(si&&msg)si.textContent=msg}
 
 function ldShow(msg){$('ldMsg').textContent=msg||'同期中...';$('ldOv').classList.add('on');
@@ -1524,7 +1540,47 @@ async function apiGet(opts){
   return r.json()}
 var LAST_SYNC_KEY='hbcr_last_sync_ts';
 function _getLastSyncTs(){try{var v=localStorage.getItem(LAST_SYNC_KEY);return v?Number(v):0}catch(e){return 0}}
-function _setLastSyncTs(ts){try{localStorage.setItem(LAST_SYNC_KEY,String(ts))}catch(e){}}
+function _setLastSyncTs(ts){try{if(ts>0)localStorage.setItem(LAST_SYNC_KEY,String(ts));else localStorage.removeItem(LAST_SYNC_KEY)}catch(e){}}
+
+/* ════════ 差分同期の基準時刻（2026-09-08 修正・記録欠落の直接原因） ════════
+   ★ここは「端末の時計」を絶対に使わない。
+     比較相手はサーバーが刻んだ updatedAt（Google の時計）で、端末の時計とは同期していない。
+     端末が Date.now() を基準にすると、時計のズレぶんだけ「同期直前の窓」が毎回盲窓になり、
+     そこに書かれた記録は次の同期でも基準が進むだけなので二度と届かない
+     （2026-09-07 に 11:30 と 13:00 の記録が他端末に出なかった事象の原因）。
+   ★基準は「サーバーがシートを読み始めた時刻」(syncCursor) を使う。
+     応答の到達時刻（旧GASの serverTime も応答生成時刻）を基準にすると、
+     読み取り〜到達の数秒〜十数秒に他端末が書いた分が落ちる。
+   ★さらに のりしろ を引く。書き込みロックの待ち・再送・行の反映遅れを吸収するための保険で、
+     重複して受け取っても同じ id を上書きするだけ＝無害。取りこぼしは静かに永久化するので、
+     必ず「多めに受け取る」側へ倒す。
+   ★サーバーが時刻を1つも返さない場合は基準を作れないため 0 を返し、次回は全件取得にする
+     （壊れた基準で差分を続けるより、遅くても取りこぼさない側を選ぶ）。 */
+var SYNC_OVERLAP_MS=10*60*1000;   // のりしろ 10 分
+function _cursorFromResponse(json){
+  if(!json)return 0;
+  var c=0;
+  if(typeof json.syncCursor==='number'&&json.syncCursor>0)c=json.syncCursor;          // 新GAS: 読み取り開始時刻
+  else if(typeof json.serverTime==='number'&&json.serverTime>0)c=json.serverTime;     // 旧GAS: 応答生成時刻
+  if(!c)return 0;
+  var v=c-SYNC_OVERLAP_MS;
+  return v>0?v:0;
+}
+
+/* 全件取得の頻度（2026-09-08 追加）。差分同期が信頼できるようになったので毎回の全件は不要だが、
+   万一の取りこぼしを溜め込まないため 1 日 1 回だけ全件で照合する。
+   ※起動のたびに全件を取ると記録件数に比例して待たされる（現状 26〜30 秒相当）。 */
+var LAST_FULL_KEY='hbcr_last_full_ts';
+var FULL_SYNC_INTERVAL_MS=24*60*60*1000;
+function _needFullSync(){
+  try{
+    if(!_getLastSyncTs())return true;                       // 基準が無い＝初回・端末消去直後
+    var v=Number(localStorage.getItem(LAST_FULL_KEY)||0);
+    if(!(v>0))return true;                                  // 全件の実績が無い
+    return (Date.now()-v)>=FULL_SYNC_INTERVAL_MS;
+  }catch(e){return true}
+}
+function _markFullSync(){try{localStorage.setItem(LAST_FULL_KEY,String(Date.now()))}catch(e){}}
 /* 日付TZ修正（2026-06-15・サーバー側で date を JST yyyy-MM-dd に正規化）に伴う一度きりの回復。
    旧サーバーは date を1日前で返していたため、端末ローカルに誤日付で取り込まれた記録が残る。
    差分同期では updatedAt 未変更の既存記録を取り直さないので、次回同期を一度だけ全件にして上書き是正する。 */
@@ -1730,6 +1786,40 @@ async function syncFromAPI(showLoader,opts){
     // 失敗しても false を返すだけで、ここまでの同期結果には影響しない）
     if(typeof syncMasterRoster==='function')syncMasterRoster();
     cleanData();save();
+    /* ════════ サーバーに届いていないローカル記録の送り直し（2026-09-08 追加・D） ════════
+       送信キューがメモリだけだった時代（〜2026-09-08）に、送信待ちのままタブが破棄されて
+       サーバーへ行かなかった記録が、端末の localStorage にだけ残っている可能性がある。
+       全件取得のときはサーバーの全 id が手元にあるので、「サーバーに一度も存在しない記録」を
+       特定して送り直せる。
+       ★新規追加のみ。サーバーにある記録は一切上書きしない（版の巻き戻しを起こさない）。
+       ★他端末で意図的に削除された記録を復活させないため、削除済みidの控えを除外する。
+       ★古い端末が眠りから覚めて大量に送り直すのを防ぐため、直近14日ぶん・1回200件までに限る。
+       ★送信は addRecord＝id 単位の upsert なので、万一既に届いていても二重にはならない。 */
+    if(_fullFetch){
+      try{
+        var _srvIds={};
+        apiRec.forEach(function(r){if(r&&r.id!=null)_srvIds[String(r.id)]=1});
+        var _seedRes={};
+        (D.residents||[]).forEach(function(r){if(r&&r._seed&&r.id!=null)_seedRes[toNum(r.id)]=1});
+        var _cut=Date.now()-14*24*60*60*1000, _resend=[];
+        (D.records||[]).forEach(function(r){
+          if(!r||r.id==null||r.id==='')return;
+          if(_srvIds[String(r.id)])return;                 // サーバーに在る＝送り直し不要
+          if(_isSnapshotRec(r))return;                     // 職員スナップショットは専用経路が持つ
+          if(_seedRes[toNum(r.residentId)])return;         // サンプル入居者の記録は送らない
+          if(_delRecHas(r.id))return;                      // 削除済み＝復活させない
+          var t=_recTs(r)||(r.tsUTC||0);
+          if(!(t>=_cut))return;                            // 古すぎる分は触らない
+          _resend.push(r);
+        });
+        if(_resend.length>200)_resend=_resend.slice(-200);
+        if(_resend.length){
+          _resend.forEach(function(r){apiPush('addRecord',{record:r})});
+          console.log('[hbcr] サーバー未着のローカル記録',_resend.length,'件を送り直します');
+          try{showToast('📤 未送信だった記録 '+_resend.length+' 件をサーバーへ送ります')}catch(e){}
+        }
+      }catch(e){console.error('[hbcr] 未着記録の送り直しに失敗（ローカルは保持）:',e)}
+    }
     /* 排泄予定(schedule)の一度きりの移行（2026-07-25）。
        予定は長らく端末ごとの localStorage にしか無く、端末間で内容が食い違っている。
        単純に「サーバーが持っていなければ送る」だけにすると、入居者ごとに最初に同期した端末の
@@ -1780,8 +1870,13 @@ async function syncFromAPI(showLoader,opts){
     }
     // 同期成功時に URL の保存を refresh（cookie 1年延長・バックアップ層も再書込）
     if(apiUrl)saveApiUrl(apiUrl);
-    // Phase 2 B-2: 同期完了時刻を記録（次回は差分のみ取得）
-    _setLastSyncTs(Date.now());
+    /* Phase 2 B-2: 次回の差分同期の基準を記録。
+       ★端末時計(Date.now())ではなくサーバーが返した読み取り開始時刻を使う（2026-09-08 修正）。
+         詳細は _cursorFromResponse のコメント。0 が返る＝基準を作れないサーバーなので、
+         次回は全件取得に落として取りこぼしを作らない。 */
+    _setLastSyncTs(_cursorFromResponse(json));
+    // 全件取得が成功したときだけ「最後に全件で照合した時刻」を更新する
+    if(_fullFetch)_markFullSync();
     // 日付TZ修正の回復が全件取得で完了したらフラグを立て、以後は通常の差分同期に戻す
     if(_healing){_dateHealNeeded=false;try{localStorage.setItem(DATEFIX_HEAL_KEY,'1')}catch(e){}}
     // ヘッダには時刻のみ表示（「(差分)」ラベルは現場画面で不要のため非表示。差分同期動作は維持）
@@ -1801,6 +1896,70 @@ async function syncFromAPI(showLoader,opts){
 
 // 未送信キュー（API書き込み失敗時、後で再送する）
 var PQ_KEY='hbcr_pq';
+
+/* ════════ 送信中キューの永続化（2026-09-08 追加・C） ════════
+   記録は apiPush() → メモリ上の _writeQ → サーバー、という順で流れ、
+   「送信に失敗して初めて」hbcr_pq（永続の再送行列）へ入る設計だった。
+   そのため、失敗する前に _writeQ ごと消えると記録はサーバーへ行かず再送もされない：
+     ・iOS でアプリを切り替え Safari がページを破棄した
+     ・再読み込み・タブを閉じた・電源が落ちた
+   このとき記録はその端末の localStorage にだけ残り、他端末には永久に出ない。
+   fetch は unload でキャンセルされるため、離脱時に「送り切る」ことは原理的にできない。
+   そこで送信待ち・送信中の内容を常に localStorage へ写しておき、次回起動で再送に回す。
+   ★送信はすべて id 単位の上書き（addRecord/saveRecord は upsertRow_・delRecord も冪等）なので、
+     既に届いていた分をもう一度送っても二重にはならない。 */
+var WQ_KEY='hbcr_wq';
+var _wqCurrent=null;                 // 送信中の1件（_writeQ から取り出し済み）
+function _wqPersist(){
+  try{
+    var live=(_wqCurrent?[_wqCurrent]:[]).concat(_writeQ||[]);
+    if(!live.length){localStorage.removeItem(WQ_KEY);return}
+    _storageSet(WQ_KEY,JSON.stringify(live));
+  }catch(e){/* 容量不足等。ここで失敗しても従来どおり失敗時に hbcr_pq へ入る */}
+}
+/* 起動時の回収。前回の離脱で送り切れなかった分を再送行列へ移す。
+   ★hbcr_pq へ移してから hbcr_wq を消す順序を守る（逆にすると回収漏れで消える）。 */
+function recoverWriteQueue(){
+  var live=[];
+  try{var raw=_storageGet(WQ_KEY);if(raw)live=JSON.parse(raw)||[]}catch(e){live=[]}
+  if(!Array.isArray(live)||!live.length){try{localStorage.removeItem(WQ_KEY)}catch(e){}return 0}
+  var n=0;
+  live.forEach(function(it){
+    if(it&&it.action){enqueuePending(it.action,it.data||{});n++}
+  });
+  try{localStorage.removeItem(WQ_KEY)}catch(e){}
+  if(n)console.log('[hbcr] 前回未送信の書き込み',n,'件を再送行列へ回収しました');
+  return n;
+}
+
+/* ════════ 削除済み記録の控え（2026-09-08 追加・D の安全装置） ════════
+   下の「サーバーに無いローカル記録の送り直し」が、他端末で意図的に削除された記録を
+   復活させないための除外リスト。id だけを持ち、氏名・記録内容は保存しない。 */
+var DELREC_KEY='hbcr_delrec';
+function _delRecLoad(){try{var v=localStorage.getItem(DELREC_KEY);return v?(JSON.parse(v)||[]):[]}catch(e){return[]}}
+function _delRecAdd(id){
+  if(id==null||id==='')return;
+  try{
+    var a=_delRecLoad();
+    if(a.indexOf(String(id))>=0)return;
+    a.push(String(id));
+    if(a.length>3000)a=a.slice(-3000);
+    localStorage.setItem(DELREC_KEY,JSON.stringify(a));
+  }catch(e){}
+}
+function _delRecHas(id){try{return _delRecLoad().indexOf(String(id))>=0}catch(e){return false}}
+
+/* ════════ 未送信件数（2026-09-08 追加・E） ════════
+   「送ったつもりで届いていない」を現場が気づけるようにバッジへ出す。
+   hbcr_pq の件数は保存のたびに数え直す（apiSetStatus は頻繁に呼ばれるため毎回読まない）。 */
+var _pqCount=0;
+function _unsentCount(){
+  var n=_pqCount;
+  try{if(typeof _writeQ!=='undefined'&&_writeQ)n+=_writeQ.length}catch(e){}
+  try{if(_wqCurrent)n+=1}catch(e){}
+  try{if(typeof _staffSendQueue!=='undefined'&&_staffSendQueue)n+=_staffSendQueue.length}catch(e){}
+  return n;
+}
 
 /* 職員同期専用の順次送信キュー
    GAS Apps Script の同時実行制限・レート制限を避けるため、saveRes/delRes を
@@ -1852,6 +2011,7 @@ function loadPendingQueue(){try{var s=_storageGet(PQ_KEY);return s?JSON.parse(s)
 function savePendingQueue(q){
   // 本体(hbcr_v2)と同様に圧縮保存し、容量圧迫時の失敗を減らす。
   // 失敗（QuotaExceeded 等）を無音で握り潰さず、間引き再試行＋通知で「未送信の消失」を防ぐ。
+  try{_pqCount=Array.isArray(q)?q.length:0}catch(e){}   // 未送信バッジ用の件数（2026-09-08）
   try{
     _storageSet(PQ_KEY,JSON.stringify(q));
   }catch(e){
@@ -1935,8 +2095,9 @@ var _writeQ=[], _writeSending=false;
 function _writeDrain(){
   if(_writeSending)return;
   var item=_writeQ.shift();
-  if(!item){ flushPendingQueue(); return; } // キューが空いたら未送信分を再送
+  if(!item){ _wqCurrent=null; _wqPersist(); flushPendingQueue(); return; } // キューが空いたら未送信分を再送
   _writeSending=true;
+  _wqCurrent=item; _wqPersist();   // 送信中の1件も永続側に残す（途中でタブが消えても回収できる）
   apiSetStatus('sy');
   apiPost(item.action,item.data)
     .then(function(r){
@@ -1961,6 +2122,9 @@ function _writeDrain(){
     })
     .finally(function(){
       _writeSending=false;
+      /* 成否にかかわらず、この1件は「送信中」から外す。
+         失敗していれば上の分岐で hbcr_pq へ退避済み＝どちらの経路でも取りこぼさない。 */
+      _wqCurrent=null; _wqPersist();
       _writeDrain(); // 次の書き込み（無ければ未送信キューの再送）へ
     });
 }
@@ -1968,6 +2132,8 @@ function apiPush(action,data){
   if(!apiUrl)return;
   data=data||{};
   _writeQ.push({action:action,data:data});
+  _wqPersist();          // ★送る前に永続化（送信前にタブが消えても記録を失わない・2026-09-08）
+  if(action==='delRecord'&&data&&data.id!=null)_delRecAdd(data.id);   // 削除の控え（Dの除外用）
   _writeDrain();
 }
 
@@ -6161,7 +6327,10 @@ function init(){
   function _forceReceiveStaffs(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
     showToast('📡 サーバーから受信中...');
-    syncFromAPI(true).then(function(ok){
+    /* ★{full:true} が必要（2026-09-08 修正）。syncFromAPI の第1引数は showLoader であって
+       full ではない。true だけを渡していたため「全員を受信」が差分同期になっており、
+       サーバーにしか無い職員を取り直せていなかった。 */
+    syncFromAPI(true,{full:true}).then(function(ok){
       if(!ok){showToast('⚠️ 受信に失敗しました','err');return}
       var prevCnt=(D.staffs||[]).length;
       // union:true でローカル限定エントリを保護
@@ -6178,7 +6347,10 @@ function init(){
   function _refreshFromServer(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
     showToast('🔄 サーバーから更新中...');
-    syncFromAPI(true).then(function(ok){
+    /* ★{full:true} が必要（2026-09-08 修正）。ここは「全データをサーバーから受信」を意図した
+       復旧経路だが、第1引数 showLoader に true を渡していただけで実体は差分同期だった。
+       そのため差分同期で取りこぼした記録を現場が取り戻す手段が存在しなかった。 */
+    syncFromAPI(true,{full:true}).then(function(ok){
       if(!ok){showToast('⚠️ 更新に失敗しました','err');return}
       // union:true でローカル限定エントリを保護（未送信データの消失を防止）
       if(typeof extractStaffsFromCfg==='function')extractStaffsFromCfg({union:true});
@@ -6347,6 +6519,13 @@ function init(){
   if($('cfgApi'))$('cfgApi').value=apiUrl;
   if($('cfgApiToken'))$('cfgApiToken').value=apiToken;
 
+  /* ★前回の離脱で送り切れなかった書き込みを回収する（2026-09-08・C）。
+     同期より先に行い、未送信件数を最初の描画から正しく出す。
+     回収した分は下の同期の末尾（flushPendingQueue）で自動的に再送される。 */
+  try{_pqCount=loadPendingQueue().length}catch(e){}
+  try{recoverWriteQueue();_pqCount=loadPendingQueue().length}catch(e){console.warn('[hbcr] 未送信の回収に失敗:',e)}
+  try{apiSetStatus(apiUrl?'ok':'of')}catch(e){}
+
   /* 前回見ていた画面へ戻す（apiUrl 読込後＝設定画面を復元しても接続先が正しく出る）。
      ここで例外が出ても以降のAPI保存・同期・解除の配線を飛ばさないよう二重に包む */
   try{restoreSc()}catch(e){console.warn('[hbcr] 画面復元をスキップ:',e)}
@@ -6356,7 +6535,10 @@ function init(){
 
   if(apiUrl){
     apiSetStatus('sy');
-    syncFromAPI(true).then(ok=>{
+    /* 起動時の同期。★毎回の全件取得はしない（2026-09-08）。
+       差分同期の基準がサーバー時計になり取りこぼさなくなったため、全件は 1 日 1 回の
+       照合で足りる。毎回全件にすると記録件数に比例して起動が待たされる。 */
+    syncFromAPI(true,{full:_needFullSync()}).then(ok=>{
       if(ok){
         buildResSel();renderCfg();
         var sc=document.querySelector('.scr.on');
@@ -6383,7 +6565,8 @@ function init(){
     // API接続初回: サンプル入居者（_seed）を削除してサーバーデータをクリーンに取り込む
     if(Array.isArray(D.residents)){D.residents=D.residents.filter(function(r){return !r._seed});save()}
     apiSetStatus('sy');
-    syncFromAPI(true).then(ok=>{
+    // 接続直後は必ず全件（この端末はまだサーバーの内容を1件も持っていない）
+    syncFromAPI(true,{full:true}).then(ok=>{
       if(ok){
         buildResSel();renderCfg();
         var sc=document.querySelector('.scr.on');
@@ -6417,7 +6600,8 @@ function init(){
 
   $('btnApiSync').addEventListener('click',async function(){
     if(!apiUrl){showToast('⚠️ 先にURLを保存してください');return}
-    const ok=await syncFromAPI(true);
+    // 手動の「同期」は復旧目的で押されるため全件で照合する（2026-09-08 修正）
+    const ok=await syncFromAPI(true,{full:true});
     if(ok){
       buildResSel();renderCfg();
       const sc=document.querySelector('.scr.on');
@@ -6495,6 +6679,9 @@ function autoLockSafe(){
     // 送信本流（記録・職員）に待機中／送信中が残っていないか。ここが hbcr_pq では見えない
     if(typeof _writeQ!=='undefined'&&_writeQ&&_writeQ.length)return false;
     if(typeof _writeSending!=='undefined'&&_writeSending)return false;
+    /* 永続側にも送信待ち・送信中が残っていないか（2026-09-08）。
+       メモリのキューと二重で見る＝回収前の起動直後でも消さない。 */
+    try{var wq=_storageGet(WQ_KEY);if(wq&&wq!=='[]')return false}catch(e){return false}
     if(typeof _staffSendQueue!=='undefined'&&_staffSendQueue&&_staffSendQueue.length)return false;
     if(typeof _staffSending!=='undefined'&&_staffSending)return false;
     if(typeof _pqFlushing!=='undefined'&&_pqFlushing)return false;      // 再送処理の途中
@@ -6521,8 +6708,14 @@ function autoLockWipe(){
   /* ★hbcr_res_id_hw（入居者idの高水位）はここに入れない。氏名も記録も含まない数値1個で、
      消すと再採番がサーバーの若いidと衝突し、紐づけが別人へ移る事故が再発する（2026-08-06）。
      ★LINK_BAK_KEY（修復前バックアップ）は氏名・記録を含むので必ず消す。 */
+  /* ★LAST_FULL_KEY も一緒に消す（2026-09-08）。残すと「最近全件で照合した」と誤認し、
+     消した本体データを差分同期だけで埋めようとして戻らない（LAST_SYNC_KEY と同じ理由）。
+     ★WQ_KEY はこの時点で空のはず（autoLockSafe が残存時は消させない）だが、
+     記録内容を含むキーなので消し漏れを作らないよう明示的に並べる。
+     ★DELREC_KEY（削除済みidの控え）は id の羅列で氏名も記録内容も含まないため残す。
+     消すと他端末で削除済みの記録を送り直してしまう。 */
   ['hbcr_v2','hbcr_v2_bak','hbcr_ls',
-   MASTER_ROSTER_KEY,SYS_STAFF_SNAPSHOT_LOCAL_KEY,LAST_SYNC_KEY,LINK_BAK_KEY]
+   MASTER_ROSTER_KEY,SYS_STAFF_SNAPSHOT_LOCAL_KEY,LAST_SYNC_KEY,LAST_FULL_KEY,WQ_KEY,LINK_BAK_KEY]
     .forEach(function(k){try{if(k)localStorage.removeItem(k)}catch(e){}});
 }
 

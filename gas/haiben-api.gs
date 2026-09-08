@@ -16,6 +16,14 @@ const CFG_DEFAULT_HEADERS = ['key','value'];
 const SHEETS_EPOCH_MS = -2209161600000; // = Date.UTC(1899,11,30)
 const RESIDENTS_CACHE_KEY = 'residents_v1';
 
+/** 差分同期の自己修復窓（2026-09-08 追加）。
+ * ?since= の値がどれだけ古かろうと新しかろうと、この日数ぶんの記録は必ず応答に含める。
+ * 差分同期は「基準時刻より前に書かれた行」を静かに落とすため、取りこぼしが一度でも起きると
+ * その端末には二度と届かない（端末操作では復旧できない）。現場が実際に見る直近数日だけでも
+ * 無条件に返しておけば、原因が何であれ次の同期で勝手に埋まる。
+ * シートの読み取り量は変わらず（元々どの行を返すか選ぶだけ）、増えるのは応答の大きさだけ。 */
+const RECENT_DAYS = 3;
+
 /** ============ 認証（2026-07-18 追加） ============
  * スクリプトプロパティ HAIBEN_TOKEN に合言葉を設定すると、全リクエスト（doGet/doPost）で
  * トークン検証が有効になる。未設定の間は従来通り認証なしで動作する「猶予モード」。
@@ -284,19 +292,38 @@ function doGet(e){
   try{
     // Phase 2 B-2: ?since= があれば updatedAt で差分フィルタ
     const since = parseInt(params.since, 10) || 0;
-    // Records は Advanced Service でバルク高速読込（per-cell formatDate を排除）。失敗時は readSheet_ へフォールバック。
-    let records = readRecords_();
-    let delta = false;
 
-    if(since > 0 && records.length > 0){
-      const filtered = records.filter(function(r){
-        const ts = parseTs_(r.updatedAt) || parseTs_(r.tsUTC) || parseTs_(r.createdAt);
-        if(!ts) return true; // タイムスタンプが取れない古いデータは念のため返す
-        return ts >= since;
-      });
-      if(filtered.length < records.length){
-        records = filtered;
-        delta = true;
+    /* ★同期カーソルは「シートを読み始める前」のサーバー時刻で取る（2026-09-08）。
+       応答が端末に届くのは読み取りの数秒〜十数秒後で、その間に他端末が書いた記録は
+       この応答には入らない。到達時刻を次回の since にすると、その窓のぶんが永久に落ちる。
+       読み取り開始時刻を返し、端末はこれ（さらに のりしろ を引いた値）を次回の since にする。 */
+    const readStart = Date.now();
+
+    // 自己修復窓の下限日（JST の yyyy-MM-dd）。この日以降の記録は since に関係なく必ず返す。
+    const recentFrom = _ymdJst_(readStart - RECENT_DAYS * 86400000);
+
+    // Records は Advanced Service でバルク高速読込（per-cell formatDate を排除）。失敗時は readSheet_ へフォールバック。
+    // 差分要求のときは、まず「判定に使う列だけ」を読んで対象行を絞り込む（全19列の読み取りを避ける）。
+    let records = null;
+    if(since > 0){
+      records = readRecordsWindow_(since, recentFrom);   // 絞り込めなければ null
+    }
+    let delta = false;
+    if(records !== null){
+      delta = true;   // 絞り込みが成立した＝差分応答
+    }else{
+      records = readRecords_();
+      if(since > 0 && records.length > 0){
+        const filtered = records.filter(function(r){
+          if(_isRecent_(r, recentFrom)) return true;   // 自己修復窓は無条件で返す
+          const ts = parseTs_(r.updatedAt) || parseTs_(r.tsUTC) || parseTs_(r.createdAt);
+          if(!ts) return true; // タイムスタンプが取れない古いデータは念のため返す
+          return ts >= since;
+        });
+        if(filtered.length < records.length){
+          records = filtered;
+          delta = true;
+        }
       }
     }
 
@@ -322,6 +349,12 @@ function doGet(e){
       // 能力宣言（2026-07-30）: schedule 列を持ち saveSched を受け付けるサーバーであることを示す。
       // クライアントはこれが 1 以上のときだけ排泄予定の移行完了フラグを立てる（旧版では undefined）。
       schedVer:  1,
+      /* ★次回の ?since= に使うべき値（2026-09-08）。シートを読み始めた時刻＝この応答が
+         「いつ時点のシートか」を表す。端末は自分の時計を一切使わずこれを保存する。
+         旧クライアントはこのキーを見ないため、追加しても挙動は変わらない。 */
+      syncCursor: readStart,
+      /* 自己修復窓の宣言。端末はこれを見て「直近何日ぶんはサーバーが必ず返す」を知る。 */
+      recentDays: RECENT_DAYS,
       serverTime: new Date().getTime()
     });
   }catch(err){
@@ -475,6 +508,149 @@ function readRecordsFast_(){
     if(o.id != null && o.id !== '') out.push(o);
   }
   return out;
+}
+
+/** ============ 差分同期の絞り込み読み（2026-09-08 追加・P1） ============
+ * doGet のホットパスは「シート全行 × 全19列」の読み取りが支配的で、記録件数に比例して重くなる。
+ * 差分要求では返す行はごく一部なので、まず判定に使う列（id/date/updatedAt/createdAt/tsUTC）だけを
+ * 読んで対象行を決め、その行だけを取り直す。転送量・解析量が大きく減る。
+ *
+ * ★安全側の設計: 少しでも想定と違えば null を返し、呼び出し側は従来どおり全件読みに落ちる。
+ *   「速いが取りこぼす」より「遅いが正しい」を必ず選ぶ（記録の欠落は静かに永久化するため）。
+ * ★返す行の条件は全件読み側のフィルタと同一に保つこと（片方だけ直すと差分だけが壊れる）。
+ */
+function readRecordsWindow_(sinceMs, recentFromYmd){
+  try{
+    if(!(sinceMs > 0)) return null;                  // 全件要求は従来経路へ
+    getOrCreateSheet_('Records', REC_DEFAULT_HEADERS);
+    var ssId = SS.getId();
+
+    // ── ヘッダー行だけ読む
+    var hres = Sheets.Spreadsheets.Values.get(ssId, 'Records!1:1', {valueRenderOption:'UNFORMATTED_VALUE'});
+    var headers = ((hres.values && hres.values[0]) || []).map(function(v){ return String(v).trim(); });
+    if(!headers.length) return null;
+    var idxOf = function(name){
+      for(var i=0;i<headers.length;i++){ if(headers[i] === name) return i; }
+      return -1;
+    };
+    var cId = idxOf('id'), cDate = idxOf('date'), cUpd = idxOf('updatedAt'),
+        cCre = idxOf('createdAt'), cTs = idxOf('tsUTC');
+    // id と updatedAt が無ければ判定できない＝従来経路へ
+    if(cId < 0 || cUpd < 0) return null;
+
+    // ── 判定に使う列だけを列単位で取得
+    var order = [], ranges = [];
+    [['id',cId],['date',cDate],['updatedAt',cUpd],['createdAt',cCre],['tsUTC',cTs]].forEach(function(p){
+      if(p[1] >= 0){
+        order.push(p[0]);
+        ranges.push('Records!' + _colA1_(p[1]+1) + ':' + _colA1_(p[1]+1));
+      }
+    });
+    var bres = Sheets.Spreadsheets.Values.batchGet(ssId, {
+      ranges: ranges,
+      valueRenderOption: 'UNFORMATTED_VALUE',
+      dateTimeRenderOption: 'SERIAL_NUMBER'
+    });
+    var vrs = bres.valueRanges || [];
+    if(vrs.length !== ranges.length) return null;
+    var col = {};
+    for(var k=0;k<order.length;k++) col[order[k]] = vrs[k].values || [];
+
+    var nRow = 0;
+    for(var k2=0;k2<order.length;k2++) nRow = Math.max(nRow, col[order[k2]].length);
+    if(nRow < 2) return [];                          // ヘッダーのみ＝記録なし
+
+    var cellAt = function(name, r){
+      var c = col[name];
+      if(!c) return '';
+      var row = c[r];
+      return (row && row.length) ? row[0] : '';
+    };
+
+    // ── 返すべきシート行番号を決める（条件は全件読み側と同一）
+    var wanted = [];
+    for(var r=1; r<nRow; r++){
+      var idv = cellAt('id', r);
+      if(idv == null || idv === '') continue;        // 空行は従来どおり捨てる
+      var recent = false;
+      if(cDate >= 0){
+        var dv = cellFromSerial_('date', cellAt('date', r));
+        if(dv && String(dv) >= recentFromYmd) recent = true;
+      }
+      if(!recent){
+        var ts = parseTs_(cellFromSerial_('updatedAt', cellAt('updatedAt', r)))
+              || (cTs >= 0 ? parseTs_(cellFromSerial_('tsUTC', cellAt('tsUTC', r))) : 0)
+              || (cCre >= 0 ? parseTs_(cellFromSerial_('createdAt', cellAt('createdAt', r))) : 0);
+        if(ts && ts < sinceMs) continue;             // 基準より古い＝返さない
+        // ts が取れない古いデータは念のため返す（全件読み側と同じ扱い）
+      }
+      wanted.push(r + 1);                            // シート行番号（1始まり・ヘッダーが1行目）
+    }
+    if(!wanted.length) return [];
+
+    // ── 絞り込みの効果が薄いなら全件読みに任せる（レンジ分割のほうが高くつく）
+    var total = nRow - 1;
+    if(wanted.length > total * 0.4) return null;
+
+    // ── 連続する行をまとめてレンジ化
+    var lastColA1 = _colA1_(headers.length);
+    var rowRanges = [], start = wanted[0], prev = wanted[0];
+    for(var w=1; w<wanted.length; w++){
+      if(wanted[w] === prev + 1){ prev = wanted[w]; continue; }
+      rowRanges.push([start, prev]); start = wanted[w]; prev = wanted[w];
+    }
+    rowRanges.push([start, prev]);
+    if(rowRanges.length > 120) return null;          // レンジが多すぎる＝全件読みのほうが速い
+
+    var rowA1 = rowRanges.map(function(pair){
+      return 'Records!A' + pair[0] + ':' + lastColA1 + pair[1];
+    });
+    var rres = Sheets.Spreadsheets.Values.batchGet(ssId, {
+      ranges: rowA1,
+      valueRenderOption: 'UNFORMATTED_VALUE',
+      dateTimeRenderOption: 'SERIAL_NUMBER'
+    });
+    var out = [];
+    (rres.valueRanges || []).forEach(function(vr){
+      (vr.values || []).forEach(function(row){
+        var o = {};
+        for(var i=0;i<headers.length;i++){
+          var h = headers[i];
+          if(h) o[h] = cellFromSerial_(h, row[i]);
+        }
+        if(o.id != null && o.id !== '') out.push(o);
+      });
+    });
+    return out;
+  }catch(err){
+    console.warn('readRecordsWindow_ フォールバック（全件読みに切替）:', String(err));
+    return null;
+  }
+}
+
+/** 列番号(1始まり) → A1記法の列文字（1→A, 27→AA） */
+function _colA1_(n){
+  var s = '';
+  while(n > 0){ var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+/** JST の yyyy-MM-dd（TZ設定に依存しない算術） */
+function _ymdJst_(ms){
+  var d = new Date(ms + 32400000);   // +9h
+  return d.getUTCFullYear() + '-' + ('0'+(d.getUTCMonth()+1)).slice(-2) + '-' + ('0'+d.getUTCDate()).slice(-2);
+}
+
+/** 自己修復窓（直近 RECENT_DAYS 日）に入る記録か。date 列は doGet 出口で正規化される前の値も来る。 */
+function _isRecent_(r, recentFromYmd){
+  if(!r || !r.date) return false;
+  var d = r.date;
+  if(typeof d !== 'string'){
+    var t = new Date(d);
+    if(isNaN(t.getTime())) return false;
+    d = _ymdJst_(t.getTime());
+  }
+  return d >= recentFromYmd;
 }
 
 // UTC 成分から 'yyyy-MM-dd' を組む
