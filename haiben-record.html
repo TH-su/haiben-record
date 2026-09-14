@@ -286,8 +286,12 @@ textarea{resize:vertical;min-height:76px}
 /* 履歴モーダル：上部ヘッダ（氏名・ボタン）を固定し、表のみスクロール */
 #mHist .md{display:flex;flex-direction:column;max-height:85vh;padding:0;overflow:hidden}
 #mHist .md > div:first-child{padding:18px 22px 10px;flex-shrink:0;background:#fff;border-bottom:1px solid var(--g2);margin-bottom:0!important;z-index:5;position:relative}
-/* mHistC：唯一のスクロール領域。padding-top を 0 にしてヘッダ直下から表が始まるように */
-#mHist #mHistC{flex:1;overflow-y:auto;padding:0 22px 18px;min-height:0;background:#fff}
+/* 平均間隔バー：#mHist .md は padding:0 のため、余白・背景・下罫線を自前で持つ。
+   スクロールしないヘッダ帯の一部なので flex-shrink:0（表側に潰されない） */
+#mHist #mHistStats{flex-shrink:0;padding:10px 22px 11px;background:#fff;border-bottom:1px solid var(--g2)}
+/* mHistC：唯一のスクロール領域。padding-top を 0 にしてヘッダ直下から表が始まるように。
+   min-height は、最大文字サイズで統計バーが折り返しても表領域が潰れないよう 120px を確保 */
+#mHist #mHistC{flex:1;overflow-y:auto;padding:0 22px 18px;min-height:120px;background:#fff}
 /* ht-w の内蔵スクロールを無効化し、外側 mHistC をスクロール元にする
    これで thead.sticky は mHistC を基準に top:0 で固定される */
 #mHist .ht-w{max-height:none;border:none;margin-top:0;overflow:visible;border-radius:0}
@@ -1143,6 +1147,7 @@ textarea{resize:vertical;min-height:76px}
     <button class="bn blax bsm" id="mHistLax">💊 下剤</button>
     <button class="bn bs bsm" id="mHistClose" style="margin-left:auto" title="閉じる">✕ 閉じる</button>
   </div>
+  <div id="mHistStats"></div>
   <div id="mHistC"></div>
 </div></div>
 
@@ -3016,6 +3021,22 @@ function isSlotInHospPeriod(resident,dateStr,slotIdx){
   }
   return false;
 }
+/* 2記録の間 [t1,t2]（ミリ秒）が入院区間と重なるか。平均間隔の集計で入院中の空白を除くために使う。
+   dischargeAt が無い（＝入院継続中）は Infinity 扱い。複数の入院履歴はどれか1つでも重なれば真。 */
+function hospOverlaps(res,t1,t2){
+  if(!res||!Array.isArray(res.hospitalizations))return false;
+  if(t1==null||t2==null||isNaN(t1)||isNaN(t2))return false;
+  for(var i=0;i<res.hospitalizations.length;i++){
+    var h=res.hospitalizations[i];
+    if(!h||!h.admissionAt)continue;
+    var ad=new Date(h.admissionAt).getTime();if(isNaN(ad))continue;
+    var dc=h.dischargeAt?new Date(h.dischargeAt).getTime():Infinity;
+    if(isNaN(dc))dc=Infinity;
+    // 開区間で判定（入院日時ちょうど・退院日時ちょうどの記録は重なりとしない）
+    if(t1<dc&&t2>ad)return true;
+  }
+  return false;
+}
 
 function elH(dt,rid){
   if(!dt)return null;
@@ -3059,17 +3080,16 @@ function resCfg(rid){var r=rid?D.residents.find(function(x){return x.id===rid}):
 function badgeCls(h,t,rid){if(h===null)return'eb-ng';var cfg=resCfg(rid);
   if(t==='u'){if(h>=cfg.urineDangerH)return'eb-ng';if(h>=cfg.urineWarnH)return'eb-w';return'eb-ok'}
   const d=h/24;if(d>=cfg.stoolDangerD)return'eb-ng';if(d>=cfg.stoolWarnD)return'eb-w';return'eb-ok'}
-function lastR(rid,t){
-  // インデックス（昇順済み）から該当タイプのみを抽出
-  var pool=recsByRes(rid);
-  var arr=[];for(var k=0;k<pool.length;k++){var rr=pool[k];if(t==='u'?(rr.type==='urine'||rr.type==='both'):(rr.type==='stool'||rr.type==='both'))arr.push(rr)}
-  if(t==='u')return arr.length?arr[arr.length-1]:null;
-  // 排便: 「少量」のみの記録は間隔リセットしない。最初の少量から24時間以内に4回連続で少量が
-  // 続いた場合、その4回目を排便1回分（リセット）として扱う。中等量・多量は従来どおり1件で
-  // リセット扱い。stoolAmtが空欄の場合も従来どおりリセット扱い。
-  // arr は recsByRes（datetime 昇順済みインデックス）から順序を保って抽出済みのため
-  // 再ソート不要（重複ソートを排除し描画コストを削減）。
-  var lastReset=null,chainStart=null,chainCount=0;
+/* 排便記録（stool/both・datetime 昇順）から「排便1回分」とみなすリセット点の全系列を返す。
+   判定は未排便アラート（lastR）と同一の基準：
+   「少量」のみの記録は間隔リセットしない。最初の少量から24時間以内に4回連続で少量が
+   続いた場合、その4回目を排便1回分（リセット）として扱う。中等量・多量は従来どおり1件で
+   リセット扱い。stoolAmtが空欄の場合も従来どおりリセット扱い。
+   ⚠️ ループ内の比較基準は datetime のまま（tsUTC に揃えると TZ 正規化済みの旧記録で判定が動く）。
+   lastR と intervalStats の両方がこの1本を使う（判定の写しを作らない）。 */
+function stoolResetSeries(arr){
+  var out=[];if(!arr||!arr.length)return out;
+  var chainStart=null,chainCount=0;
   for(var i=0;i<arr.length;i++){
     var r=arr[i];
     if(r.stoolAmt==='少量'){
@@ -3077,13 +3097,84 @@ function lastR(rid,t){
       else{
         var dt=r.datetime?(new Date(r.datetime)-new Date(chainStart.datetime))/3600000:0;
         if(dt>24){chainStart=r;chainCount=1}
-        else{chainCount++;if(chainCount>=4){lastReset=r;chainStart=null;chainCount=0}}
+        else{chainCount++;if(chainCount>=4){out.push(r);chainStart=null;chainCount=0}}
       }
     }else{
-      lastReset=r;chainStart=null;chainCount=0;
+      out.push(r);chainStart=null;chainCount=0;
     }
   }
-  return lastReset;
+  return out;
+}
+function lastR(rid,t){
+  // インデックス（昇順済み）から該当タイプのみを抽出
+  var pool=recsByRes(rid);
+  var arr=[];for(var k=0;k<pool.length;k++){var rr=pool[k];if(t==='u'?(rr.type==='urine'||rr.type==='both'):(rr.type==='stool'||rr.type==='both'))arr.push(rr)}
+  if(t==='u')return arr.length?arr[arr.length-1]:null;
+  // 排便: リセット判定は stoolResetSeries に統合（振る舞いは従来どおり＝最後のリセット点）。
+  // arr は recsByRes（datetime 昇順済みインデックス）から順序を保って抽出済みのため
+  // 再ソート不要（重複ソートを排除し描画コストを削減）。
+  var ser=stoolResetSeries(arr);
+  return ser.length?ser[ser.length-1]:null;
+}
+/* 過去3ヶ月の平均間隔（排尿／排便／下剤）。読み取り専用・保存しない。
+   返り値 {urine:{avgH,n},stool:{avgH,n},lax:{avgH,n},from,to,hospUnknown}
+   n＝平均に使った「間隔」の本数（記録件数ではない）。avgH は間隔が1本も無ければ null。
+   算出順序は固定：①母集団 ②全期間で系列 ③窓で絞る ④隣接差 ⑤入院またぎ・Δ≤0 を除外。 */
+function intervalStats(rid){
+  var res=D.residents.find(function(x){return x.id===rid})||null;
+  var pool=recsByRes(rid); // isUserRec 適用済み・datetime 昇順
+  // ② 全期間で系列を作る（窓で先に切ると、窓の直前に少量3回・直後に4回目という並びで
+  //    未排便アラート（lastR）と判定がズレるため）
+  var uAll=[],sSrc=[],lAll=[];
+  for(var i=0;i<pool.length;i++){
+    var r=pool[i];if(!r)continue;
+    if(r.type==='urine'||r.type==='both')uAll.push(r);
+    if(r.type==='stool'||r.type==='both')sSrc.push(r);
+    if(r.type==='laxative')lAll.push(r);
+  }
+  var sAll=stoolResetSeries(sSrc);
+  // ③ 窓：setMonth の月末繰り上がり事故を避けて日数で固定する（端末保持期間を超えては遡れない）
+  var keep=Number(D.cfg&&D.cfg.localKeepDays)||180;
+  var span=Math.min(92,keep>0?keep:180);
+  var from=dateOff(-span),to=today();
+  function inWin(r){var d=r.date||String(r.datetime||'').slice(0,10);return d>=from&&d<=to}
+  // 時刻は elH と同じ優先順位で読む（tsUTC → datetime）。どちらも読めなければ null
+  function recT(r){
+    if(typeof r.tsUTC==='number'&&!isNaN(r.tsUTC))return r.tsUTC;
+    var dt=r.datetime||(r.date&&r.time?(r.date+'T'+r.time):'');
+    if(!dt)return null;
+    var t=new Date(dt).getTime();
+    return isNaN(t)?null:t;
+  }
+  // ④⑤ 窓内の記録同士の隣接差を平均（窓外→窓内をまたぐ最初の区間は自動的に落ちる）
+  function avgOf(list){
+    var sum=0,n=0,prev=null;
+    for(var k=0;k<list.length;k++){
+      if(!inWin(list[k]))continue;
+      var t=recT(list[k]);
+      if(t===null)continue; // 時刻が読めない記録はスキップ
+      if(prev!==null){
+        var d=t-prev;
+        // Δ≤0（同分の二重打ち・順序逆転）と入院区間をまたぐ区間は捨て、n にも数えない
+        if(d>0&&!hospOverlaps(res,prev,t)){sum+=d;n++}
+      }
+      prev=t;
+    }
+    return{avgH:n?(sum/n)/36e5:null,n:n};
+  }
+  // 入居者マスタでは入院中だが、ローカルに入院履歴が無い＝区間を除外できない状態
+  var hospUnknown=!!(res&&res.masterHosp===true&&(!Array.isArray(res.hospitalizations)||!res.hospitalizations.length));
+  return{urine:avgOf(uAll),stool:avgOf(sAll),lax:avgOf(lAll),from:from,to:to,hospUnknown:hospUnknown};
+}
+/* 間隔の整形（「3時間20分」「2日4時間」）。総分に丸めてから日・時・分に分解する
+   （先に時で丸める fmtEl は h=1.999 で「1時間60分」になるため、そこは踏襲しない）。 */
+function fmtDur(h){
+  if(h===null||h===undefined||isNaN(h)||h<0)return'—';
+  var tm=Math.round(h*60);
+  var d=Math.floor(tm/1440),hr=Math.floor((tm%1440)/60),mn=tm%60;
+  if(d>0)return d+'日'+(hr>0?hr+'時間':'');
+  if(hr>0)return hr+'時間'+(mn>0?mn+'分':'');
+  return mn+'分';
 }
 function dayR(rid,d,t){
   var pool=recsByResDate(rid,d);var out=[];
@@ -4022,6 +4113,28 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   if($('mHistInput'))$('mHistInput').style.display=(res.active===false)?'none':'';
   if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
   $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
+  // 平均間隔バー（過去3ヶ月・排尿／排便／下剤）。記録0件でも「—」で出す。
+  // 値は太字・意味色、ラベルは通常の文字色（色は補助。ラベル文字だけでも読み分けられる）
+  var _sb=$('mHistStats');
+  if(_sb){
+    var _st=intervalStats(rid);
+    var _ivHtml=function(label,color,o){
+      return '<span style="display:inline-flex;align-items:baseline;gap:5px">'+
+        '<span style="color:var(--g9);font-size: 0.8125rem">'+escapeHtmlText(label)+'</span>'+
+        '<b style="color:'+color+';font-size: 1.25rem;font-weight:700">'+escapeHtmlText(fmtDur(o.avgH))+'</b></span>';
+    };
+    var _spanD=Math.round((new Date(_st.to+'T00:00:00')-new Date(_st.from+'T00:00:00'))/864e5);
+    var _note=(_spanD>=92?'過去3ヶ月':'過去'+_spanD+'日')+'（'+fmtMD(_st.from)+'〜'+fmtMD(_st.to)+'）　'+
+      '排尿 '+_st.urine.n+'・排便 '+_st.stool.n+'・下剤 '+_st.lax.n+' 件の間隔から算出';
+    // 区切り記号は置かず余白で分ける（文字サイズを上げて折り返した時に「｜」が行頭・行末へ孤立するため）
+    _sb.innerHTML='<div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 24px">'+
+        _ivHtml('平均排尿間隔','var(--u)',_st.urine)+
+        _ivHtml('平均排便間隔','var(--s)',_st.stool)+
+        _ivHtml('下剤使用間隔','#7b1fa2',_st.lax)+
+      '</div>'+
+      '<div style="font-size: 0.75rem;color:var(--g7);margin-top:4px">'+escapeHtmlText(_note)+'</div>'+
+      (_st.hospUnknown?'<div style="font-size: 0.75rem;color:var(--ng);margin-top:2px">⚠️ '+escapeHtmlText('入院区間の登録が無いため空白を含みます')+'</div>':'');
+  }
   // 上限撤廃：全件取得（仮想チャンクで描画）
   var baseRecs=recsByRes(rid).filter(isUserRec).slice();
   // 🏥 入退院イベントを仮想レコードとして注入
