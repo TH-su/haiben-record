@@ -296,7 +296,7 @@ function masterRosterResponse_(){
  * haiben-record.html は 575caaa で両方とも POST に移った。
  * ★合言葉の正誤は見ずに断る＝GET で合言葉を試す口を残さない。シート・ロックにも触れない。 */
 function doGet(e){
-  return json({ok:false, error:'この読み取りは POST でだけ受け付けます（画面が古い版です。再読み込みしてください）'});
+  return json({ok:false, error:'この読み取りは POST でだけ受け付けます。もう一度お試しください（何度も出る時は画面を再読み込みしてください）'});
 }
 
 /** ============ 記録の取得 getAll（doGet と doPost の共用・2026-09-23 切り出し） ============
