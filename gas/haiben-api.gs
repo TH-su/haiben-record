@@ -289,16 +289,14 @@ function masterRosterResponse_(){
   return {ok:true, roster: mr || [], available: mr !== null, fetchedAt: new Date().toISOString()};
 }
 
-/** ============ doGet（差分同期対応） ============ */
+/** ============ doGet（2026-09-23 夜にふさいだ） ============
+ * 合言葉を URL のクエリに載せる経路をなくすため、GET では読み取りを受けない（本人承認）。
+ * 記録の取得（getAll）と入居者マスタ名簿（masterRoster）は doPost の本文でだけ受ける
+ * （応答の形は 2026-09-23 までの GET と同じ＝getAllResponse_／masterRosterResponse_ を共用）。
+ * haiben-record.html は 575caaa で両方とも POST に移った。
+ * ★合言葉の正誤は見ずに断る＝GET で合言葉を試す口を残さない。シート・ロックにも触れない。 */
 function doGet(e){
-  // 認証: HAIBEN_TOKEN 設定時は全 GET を検証（要配慮個人情報の読取保護）
-  if(!_token(e)) return authError_();
-  // エディタの「実行」ボタンで直接呼ばれた場合の保護
-  const params = (e && e.parameter) || {};
-  // 入居者マスタ名簿の代理取得。既存の getAll 経路とは独立した別アクションにすることで、
-  // マスタ側の遅延・障害が記録同期のホットパスに一切影響しないようにする。
-  if(params.action === 'masterRoster') return json(masterRosterResponse_());
-  return getAllResponse_(params);
+  return json({ok:false, error:'この読み取りは POST でだけ受け付けます（画面が古い版です。再読み込みしてください）'});
 }
 
 /** ============ 記録の取得 getAll（doGet と doPost の共用・2026-09-23 切り出し） ============
@@ -423,7 +421,7 @@ function doPost(e){
            アクセスログ・Referer に残るため。画面は text/plain の POST 本文で読めるようにする
            （text/plain は CORS の preflight を起こさない）。
      ★認証の後・ロック取得より前に置く＝読み取りで書き込みの行列に並ばない（名簿の取得が保存を待たせない）。
-     ★応答は doGet の masterRoster と同じ（masterRosterResponse_ を共用）。doGet は残す（旧画面のため）。
+     ★応答は 2026-09-23 までの doGet の masterRoster と同じ（masterRosterResponse_ を共用）。2026-09-23 夜に GET の口はふさいだ。
      ★本文が JSON でない・空の時は何もせず下の従来経路へ落とす（従来と同じ応答になる）。
      ★getAll（記録の取得）は同じ日のうちに下で足した。 */
   var rb = null;
@@ -974,9 +972,10 @@ function normalizeCell_(header, v){
   return v;
 }
 
-/** ============ 🧪 エディタからのテスト関数（doGet を直接実行しない用） ============ */
+/** ============ 🧪 エディタからのテスト関数（doGet を直接実行しない用） ============
+ * 2026-09-23 夜: doGet は読み取りを受けなくなったので、同じ中身の getAllResponse_ を直接呼ぶ（エディタは本人だけが実行できる） */
 function testDoGet_full(){
-  const result = doGet({parameter: {action: 'getAll'}});
+  const result = getAllResponse_({action: 'getAll'});
   const data = JSON.parse(result.getContent());
   console.log('OK / residents:', data.residents.length, ' records:', data.records.length, ' delta:', data.delta);
   console.log('serverTime:', new Date(data.serverTime).toISOString());
@@ -985,7 +984,7 @@ function testDoGet_full(){
 function testDoGet_delta(){
   // 過去 1 時間以降の差分を取得するテスト
   const oneHourAgo = new Date().getTime() - 3600000;
-  const result = doGet({parameter: {action: 'getAll', since: String(oneHourAgo)}});
+  const result = getAllResponse_({action: 'getAll', since: String(oneHourAgo)});
   const data = JSON.parse(result.getContent());
   console.log('Delta flag:', data.delta);
   console.log('Records returned:', data.records.length, '(過去1時間以内に updatedAt が更新された記録)');
@@ -993,7 +992,7 @@ function testDoGet_delta(){
 
 function testDoGet_emptyParam(){
   // パラメータなし（旧アプリの動作確認）
-  const result = doGet({parameter: {}});
+  const result = getAllResponse_({});
   const data = JSON.parse(result.getContent());
   console.log('OK (no since) / records:', data.records.length, ' delta:', data.delta, '← false 期待');
 }
