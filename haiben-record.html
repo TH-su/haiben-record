@@ -1529,18 +1529,20 @@ function fetchTO(url,opts,ms){
    - GAS が ?since= をサポートしていれば差分のみ取得（数秒で完了）
    - 未サポートでも GAS は ?since= を無視して全件返す（後方互換）
    - レスポンスに .delta:true があれば差分マージ、無ければ全件置換 */
+/* ★2026-09-23: 合言葉を URL に載せないため POST 本文へ。排泄記録GASの doPost は getAll をロックの前で受け、
+   doGet と同じ応答を返す（since は GAS 側で文字列に寄せる）。text/plain なので CORS の preflight は起きない。 */
 async function apiGet(opts){
   if(!apiUrl)return null;
   opts=opts||{};
-  var url=apiUrl+'?action=getAll';
-  if(opts.since&&opts.since>0)url+='&since='+encodeURIComponent(opts.since);
-  if(apiToken)url+='&token='+encodeURIComponent(apiToken); // 認証（GAS: HAIBEN_TOKEN）
+  var body={action:'getAll'};
+  if(opts.since&&opts.since>0)body.since=opts.since;
+  if(apiToken)body.token=apiToken; // 認証（GAS: HAIBEN_TOKEN）
   // GAS は毎回シート全行を読むため差分でも約8秒・全件は約15秒かかる（記録7500件時点・実測）。
   // 既定12秒では全件取得（初回・日付回復・「同期」ボタン）が必ずタイムアウトし、
   // 未回復端末は since=0 の全件を強制するため回復フラグが立たず永久に同期不能になる。
   // データ増を見込み全件60秒／差分30秒へ緩和（応答自体は正常＝待てば成功する）。
   var _isFullGet=!(opts.since&&opts.since>0);
-  var r=await fetchTO(url,{cache:'no-store'},_isFullGet?60000:30000);
+  var r=await fetchTO(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),cache:'no-store'},_isFullGet?60000:30000);
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json()}
 var LAST_SYNC_KEY='hbcr_last_sync_ts';
@@ -2765,9 +2767,10 @@ async function syncMasterRoster(force){
     if(_lastTs>0&&_now>=_lastTs&&(_now-_lastTs)<MASTER_ROSTER_MIN_INTERVAL_MS)return false;
   }catch(e){}
   try{
-    var url=apiUrl+'?action=masterRoster';
-    if(apiToken)url+='&token='+encodeURIComponent(apiToken);
-    var r=await fetchTO(url,{},20000);
+    /* ★2026-09-23: 合言葉を URL に載せないため POST 本文へ。排泄記録GASの doPost は masterRoster をロックの前で受ける */
+    var body={action:'masterRoster'};
+    if(apiToken)body.token=apiToken;
+    var r=await fetchTO(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)},20000);
     if(!r.ok)return false;
     var j=await r.json();
     // available:false ＝ サーバー側でマスタ連携が未設定。静かに見送る（従来動作のまま）

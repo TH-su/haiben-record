@@ -298,6 +298,14 @@ function doGet(e){
   // 入居者マスタ名簿の代理取得。既存の getAll 経路とは独立した別アクションにすることで、
   // マスタ側の遅延・障害が記録同期のホットパスに一切影響しないようにする。
   if(params.action === 'masterRoster') return json(masterRosterResponse_());
+  return getAllResponse_(params);
+}
+
+/** ============ 記録の取得 getAll（doGet と doPost の共用・2026-09-23 切り出し） ============
+ * ★中身は 2026-09-23 以前の doGet の getAll 経路と1文字も同じ（応答の形・エラーの文言を変えない）。
+ * ★params は GET の e.parameter と同じ形（値は文字列。since が無ければ全件）。
+ * ★読み取りだけ。ロックを取らない。 */
+function getAllResponse_(params){
   try{
     // Phase 2 B-2: ?since= があれば updatedAt で差分フィルタ
     const since = parseInt(params.since, 10) || 0;
@@ -417,10 +425,19 @@ function doPost(e){
      ★認証の後・ロック取得より前に置く＝読み取りで書き込みの行列に並ばない（名簿の取得が保存を待たせない）。
      ★応答は doGet の masterRoster と同じ（masterRosterResponse_ を共用）。doGet は残す（旧画面のため）。
      ★本文が JSON でない・空の時は何もせず下の従来経路へ落とす（従来と同じ応答になる）。
-     ★getAll（記録の全件取得）など他の読み取りは、今回は足していない。 */
+     ★getAll（記録の取得）は同じ日のうちに下で足した。 */
   var rb = null;
   try{ rb = (e && e.postData) ? JSON.parse(e.postData.contents) : null; }catch(pe){ rb = null; }
   if(rb && typeof rb === 'object' && rb.action === 'masterRoster') return json(masterRosterResponse_());
+  /* ── 記録の取得 getAll も POST 本文で受ける（2026-09-23 追加）──
+     ★masterRoster と同じく認証の後・ロック取得より前＝同期の読み取りが保存の行列に並ばない。
+     ★応答は doGet の getAll と同じ（getAllResponse_ を共用）。
+     ★since は GET と同じ意味にするため文字列に寄せて渡す（null／undefined は「指定なし」＝渡さない）。 */
+  if(rb && typeof rb === 'object' && rb.action === 'getAll'){
+    var gp = {action:'getAll'};
+    if(rb.since !== null && rb.since !== undefined) gp.since = String(rb.since);
+    return getAllResponse_(gp);
+  }
   // 複数端末の同時POSTによる読み-書き競合（lost update・行重複・Configヘッダ破壊）を防ぐため
   // スクリプトロックで書き込みを直列化する。既存の switch / レスポンス形状は不変（外側で包むだけ）。
   var lock = LockService.getScriptLock();
