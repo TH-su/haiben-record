@@ -227,8 +227,10 @@ function setMasterState_(body){
     const log = Array.isArray(obj.stateLog) ? obj.stateLog : [];
     log.unshift({ts:at, src:'haiben', field:'hospitalized', val:hz});
     obj.stateLog = log.slice(0, MASTER_STATE_LOG_MAX);
+    _wrote_ = true;   // ここから入居者マスタ側へ書く（dataJson と meta A1）。別のスプレッドシートでも flush で確定する
     cell.setValue(JSON.stringify(obj));
-    try{ CacheService.getScriptCache().remove(MASTER_ROSTER_CACHE_KEY); }catch(e){}
+    // 名簿キャッシュはここでは消さず、doPost が flush した後に消す（2026-09-23・理由は _afterFlush_ の注記）
+    _afterFlush_.push(function(){ try{ CacheService.getScriptCache().remove(MASTER_ROSTER_CACHE_KEY); }catch(e){} });
     touchMasterMeta_(ss);   // 書き込み成功時のみ刻印（失敗しても本体は ok:true のまま返す）
     return {ok:true, hospitalized:hz, hospitalizedAt:at};
   }catch(err){
@@ -365,6 +367,40 @@ function doGet(e){
   }
 }
 
+/** ============ ロックを外す前に書き込みを確定させる（2026-09-23） ============
+ * Apps Script はシートへの書き込みをまとめて後から確定することがある（SpreadsheetApp.flush の公式説明）。
+ * 確定する前にロックを外すと、ロックを待っていた次の実行が確定前のシートを読む。
+ * 例: タイムアウト後の送り直しで同じ記録が続けて届くと、2回目は1回目の行を見つけられず
+ *     （upsertRow_ の id 突き合わせをすり抜けて）同じ id の行が2つになる。
+ * 公式の Lock.releaseLock() にも「スプレッドシートを扱う時は、解放の前に SpreadsheetApp.flush() を呼び、
+ * 排他を持っている間に保留中の変更を確定させる」とある。
+ * ★_wrote_ は各書き込み処理が「最初に書き得る所の直前」で true にする（シートの作成・見出し・不足列の追加、
+ *   入居者マスタ側の dataJson と meta A1 も含む）。中止の経路（1文字も書かない）は false のまま＝flush しない。
+ * ★_afterFlush_ は読み手に取り直しを促す合図（キャッシュの無効化）。書いた処理はその場で消さずにここへ積み、
+ *   flushBeforeRelease_ が flush の後に出す。先に消すと、確定前のシートを読んだ読み手が古い値を
+ *   キャッシュへ入れ直し得る。
+ * ★どちらも doPost 1回ぶんの状態。Apps Script は実行ごとにグローバルを作り直すが、doPost の頭でも戻す。 */
+var _wrote_ = false;
+var _afterFlush_ = [];
+
+/** 応答を返す前（＝finally でロックを外す前）に、書いていれば確定させ、そのあと合図を出す。
+ *  確定できなければ成功の応答を返さず {ok:false, error:'flush_fail'}（画面は未送信キューへ戻して後で送り直す）。
+ *  送り直しても、記録・入居者・予定は id で探して上書き・削除し、設定は丸ごと書き直すので二重にならない。
+ *  setMasterState だけは送るたびに stateLog の先頭へ1件足し hospitalizedAt も送った時刻へ更新するので、
+ *  同じ切り替えが1件増えうる（通信タイムアウト後の送り直しでも従来から起きうる性質。flush_fail で新たに生じるものではない）。
+ *  書いていなければ flush せず、応答もそのまま（従来どおり）。 */
+function flushBeforeRelease_(res){
+  var flushed = true;
+  if(_wrote_){
+    _wrote_ = false;
+    try{ SpreadsheetApp.flush(); }catch(err){ flushed = false; console.error('doPost flush error:', err); }
+  }
+  var sig = _afterFlush_; _afterFlush_ = [];
+  // flush が失敗しても合図は出す（書けたかもしれないので、古いキャッシュを残さない側に倒す）
+  for(var i=0;i<sig.length;i++){ try{ sig[i](); }catch(e){} }
+  return flushed ? res : {ok:false, error:'flush_fail'};
+}
+
 /** ============ doPost（既存通り。upsertRow_ が updatedAt を自動設定済み） ============ */
 function doPost(e){
   // 認証: HAIBEN_TOKEN 設定時は全 POST を検証（改竄・削除の防止）。ロック取得前に弾く。
@@ -372,6 +408,7 @@ function doPost(e){
   // 複数端末の同時POSTによる読み-書き競合（lost update・行重複・Configヘッダ破壊）を防ぐため
   // スクリプトロックで書き込みを直列化する。既存の switch / レスポンス形状は不変（外側で包むだけ）。
   var lock = LockService.getScriptLock();
+  _wrote_ = false; _afterFlush_ = [];   // この実行の「書いた」印と合図（flushBeforeRelease_）
   try{
     lock.waitLock(20000); // 取得できなければ throw → catch で ok:false（クライアントはキュー退避・再送）
     if(!e || !e.postData) return json({ok:false, error:'no postData'});
@@ -379,23 +416,25 @@ function doPost(e){
     const action = body.action;
     // 個人情報保護：body（氏名・排泄記録内容）はログに出力しない。action のみ記録する。
     console.log('doPost action=', action);
+    // 応答はいったん受け取り、書いていたら返す前（＝ロックを外す前）に確定させる（2026-09-23）
     switch(action){
-      case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
-      case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json({ok:true});
-      case 'delRecord':  deleteRow_('Records',   body.id);                            return json({ok:true});
-      case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident, true); invalidateResidentsCache_(); return json({ok:true});
-      case 'saveSched':  return json(saveSched_(body));
-      case 'delRes':     deleteRow_('Residents', body.id);                            invalidateResidentsCache_(); return json({ok:true});
-      case 'saveCfg':    writeConfig_(body.cfg);                                      return json({ok:true});
+      case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json(flushBeforeRelease_({ok:true}));
+      case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json(flushBeforeRelease_({ok:true}));
+      case 'delRecord':  deleteRow_('Records',   body.id);                            return json(flushBeforeRelease_({ok:true}));
+      case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident, true); _afterFlush_.push(invalidateResidentsCache_); return json(flushBeforeRelease_({ok:true}));
+      case 'saveSched':  return json(flushBeforeRelease_(saveSched_(body)));
+      case 'delRes':     deleteRow_('Residents', body.id);                            _afterFlush_.push(invalidateResidentsCache_); return json(flushBeforeRelease_({ok:true}));
+      case 'saveCfg':    writeConfig_(body.cfg);                                      return json(flushBeforeRelease_({ok:true}));
       // 入居者マスタの入院状態を更新（共通契約 C4）。旧版GASでは 'unknown action' となり、
       // クライアントはその応答を見て再送せずに破棄する（古い入院状態の送り直しでマスタを
       // 巻き戻さないため。状態そのものは名簿同期でマスタから読み直される＝デプロイ順に非依存）。
-      case 'setMasterState': return json(setMasterState_(body));
+      case 'setMasterState': return json(flushBeforeRelease_(setMasterState_(body)));
       default: return json({ok:false, error:'unknown action: '+action});
     }
   }catch(err){
     console.error('doPost error:', err);
-    return json({ok:false, error:String(err)});
+    // 途中で落ちても、書けた分は外す前に確定させる（外した後に確定すると、次の実行の書き込みと前後が入れ替わり得る）
+    return json(flushBeforeRelease_({ok:false, error:String(err)}));
   }finally{
     try{ lock.releaseLock(); }catch(_){}
   }
@@ -430,6 +469,7 @@ function parseTs_(v){
 function getOrCreateSheet_(name, defaultHeaders){
   let sh = SS.getSheetByName(name);
   if(!sh){
+    _wrote_ = true;   // シートの作成と見出しも書き込み（doPost はロックを外す前に確定させる）
     sh = SS.insertSheet(name);
     sh.getRange(1,1,1,defaultHeaders.length).setValues([defaultHeaders]);
     return sh;
@@ -437,6 +477,7 @@ function getOrCreateSheet_(name, defaultHeaders){
   const lastCol = Math.max(1, sh.getLastColumn());
   const headers = sh.getRange(1,1,1,lastCol).getValues()[0];
   if(headers.every(h => h===''||h==null)){
+    _wrote_ = true;
     sh.getRange(1,1,1,defaultHeaders.length).setValues([defaultHeaders]);
   }
   return sh;
@@ -455,6 +496,7 @@ function ensureHeaders_(sh, defaultHeaders){
   const lower = headers.map(h=>h.toLowerCase());
   const missing = defaultHeaders.filter(h => lower.indexOf(String(h).toLowerCase()) < 0);
   if(!missing.length) return;
+  _wrote_ = true;   // 不足列の追加も書き込み
   // 実際の列数が足りなければ先に列を挿入する。足りないまま setValues すると例外になり、
   // saveRes 全体が失敗して入居者情報が一切保存できなくなる（列を切り詰めたシートで起きる）。
   const short = lastCol + missing.length - sh.getMaxColumns();
@@ -787,6 +829,7 @@ function upsertRow_(name, defaultHeaders, obj, ensureCols){
     return (v==null)?'':v;
   });
 
+  _wrote_ = true;   // ここから行を書く
   if(rowIdx > 0){
     sh.getRange(rowIdx, 1, 1, headers.length).setValues([rowVals]);
     return;
@@ -819,8 +862,9 @@ function saveSched_(body){
     }
   }
   if(rowIdx < 0) return {ok:false, error:'resident not found'};
+  _wrote_ = true;
   sh.getRange(rowIdx, schedCol+1).setValue(JSON.stringify(body.schedule));
-  invalidateResidentsCache_();
+  _afterFlush_.push(invalidateResidentsCache_);   // キャッシュは doPost が flush した後に消す（2026-09-23）
   return {ok:true};
 }
 
@@ -835,6 +879,7 @@ function deleteRow_(name, id){
   const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
   for(let i=0;i<ids.length;i++){
     if(String(ids[i][0])===String(id)){
+      _wrote_ = true;
       sh.deleteRow(i+2);
       return;
     }
@@ -854,9 +899,10 @@ function readConfig_(){
 function writeConfig_(cfg){
   if(!cfg) return;
   const sh = getOrCreateSheet_('Config', CFG_DEFAULT_HEADERS);
-  if(sh.getLastRow()>1) sh.getRange(2,1,sh.getLastRow()-1,2).clearContent();
+  // 印は書く分岐の内側で立てる（見出しだけの Config に空の cfg が届いた時は1文字も書かない＝flush しない）
+  if(sh.getLastRow()>1){ _wrote_ = true; sh.getRange(2,1,sh.getLastRow()-1,2).clearContent(); }
   const rows = Object.keys(cfg).map(k => [k, cfg[k]]);
-  if(rows.length) sh.getRange(2,1,rows.length,2).setValues(rows);
+  if(rows.length){ _wrote_ = true; sh.getRange(2,1,rows.length,2).setValues(rows); }
 }
 
 function normalizeCell_(header, v){
