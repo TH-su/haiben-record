@@ -279,6 +279,16 @@ function checkMasterLink(){
   console.log('※氏名は表示していません');
 }
 
+/** ============ 入居者マスタ名簿の応答（doGet と doPost の共用・2026-09-23 切り出し） ============
+ * ★中身は 2026-09-23 以前の doGet の masterRoster と同じ（応答の形を変えない）。
+ * ★読み取りだけ。ロックを取らない・シートを作らない（fetchMasterRoster_ は openById して読むだけ）。 */
+function masterRosterResponse_(){
+  const mr = fetchMasterRoster_();
+  // fetchedAt: サーバー応答時刻（クライアントの鮮度表示・デバッグ用。凍結仕様S2）。
+  // 名簿本体はこの時刻から最大でもキャッシュTTL（60秒）だけ古い可能性がある。個人情報は含まない。
+  return {ok:true, roster: mr || [], available: mr !== null, fetchedAt: new Date().toISOString()};
+}
+
 /** ============ doGet（差分同期対応） ============ */
 function doGet(e){
   // 認証: HAIBEN_TOKEN 設定時は全 GET を検証（要配慮個人情報の読取保護）
@@ -287,12 +297,7 @@ function doGet(e){
   const params = (e && e.parameter) || {};
   // 入居者マスタ名簿の代理取得。既存の getAll 経路とは独立した別アクションにすることで、
   // マスタ側の遅延・障害が記録同期のホットパスに一切影響しないようにする。
-  if(params.action === 'masterRoster'){
-    const mr = fetchMasterRoster_();
-    // fetchedAt: サーバー応答時刻（クライアントの鮮度表示・デバッグ用。凍結仕様S2）。
-    // 名簿本体はこの時刻から最大でもキャッシュTTL（60秒）だけ古い可能性がある。個人情報は含まない。
-    return json({ok:true, roster: mr || [], available: mr !== null, fetchedAt: new Date().toISOString()});
-  }
+  if(params.action === 'masterRoster') return json(masterRosterResponse_());
   try{
     // Phase 2 B-2: ?since= があれば updatedAt で差分フィルタ
     const since = parseInt(params.since, 10) || 0;
@@ -405,6 +410,17 @@ function flushBeforeRelease_(res){
 function doPost(e){
   // 認証: HAIBEN_TOKEN 設定時は全 POST を検証（改竄・削除の防止）。ロック取得前に弾く。
   if(!_token(e)) return authError_();
+  /* ── 入居者マスタ名簿を POST 本文でも受ける（2026-09-23 追加）──
+     目的: 合言葉 token を URL のクエリ（GET）に載せる経路をなくす。URL はブラウザの履歴・
+           アクセスログ・Referer に残るため。画面は text/plain の POST 本文で読めるようにする
+           （text/plain は CORS の preflight を起こさない）。
+     ★認証の後・ロック取得より前に置く＝読み取りで書き込みの行列に並ばない（名簿の取得が保存を待たせない）。
+     ★応答は doGet の masterRoster と同じ（masterRosterResponse_ を共用）。doGet は残す（旧画面のため）。
+     ★本文が JSON でない・空の時は何もせず下の従来経路へ落とす（従来と同じ応答になる）。
+     ★getAll（記録の全件取得）など他の読み取りは、今回は足していない。 */
+  var rb = null;
+  try{ rb = (e && e.postData) ? JSON.parse(e.postData.contents) : null; }catch(pe){ rb = null; }
+  if(rb && typeof rb === 'object' && rb.action === 'masterRoster') return json(masterRosterResponse_());
   // 複数端末の同時POSTによる読み-書き競合（lost update・行重複・Configヘッダ破壊）を防ぐため
   // スクリプトロックで書き込みを直列化する。既存の switch / レスポンス形状は不変（外側で包むだけ）。
   var lock = LockService.getScriptLock();
