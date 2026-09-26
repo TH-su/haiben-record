@@ -218,7 +218,8 @@ textarea{resize:vertical;min-height:76px}
   pointer-events:none;z-index:1;text-shadow:0 0 2px #fff,0 0 2px #fff}
 /* 現在時刻の縦線。氏名列（.tl-nm・z-index 2）より下＝横スクロール時は氏名列の下に隠れる */
 .tl-now{position:absolute;top:0;left:0;width:2px;background:#c62828;pointer-events:none;z-index:1}
-@media print{.tl-now{display:none}}
+/* 印刷には出さない（縦線・「未」・赤枠・件数・今ボタン）。帳票印刷（rp-printing）の規則とは別 */
+@media print{.tl-now,.tl-c.ovd > .ovd-lbl,#tlOvdSum,#tlNowBtn{display:none !important}.tl-c.ovd::after{display:none !important}}
 .ev-d{width:10px;height:10px;border-radius:50%;display:inline-block;margin:0 1px}
 .ev-d.u{background:var(--u)}.ev-d.s{background:#a1887f}.ev-d.b{background:#e91e63}
 .ev-d.l{background:#ffd600;border:1px solid #f9a825;box-sizing:border-box}
@@ -1637,13 +1638,24 @@ async function apiPost(action,data){
   if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json()}
 
-var _syncInFlight=null;
+var _syncInFlight=null, _syncInFlightFull=false;   // 後者＝進行中の同期が全件取得か
 async function syncFromAPI(showLoader,opts){
   if(!apiUrl)return false;
   // 再入ガード：進行中の同期があれば結果Promiseを共有する。
   // 起動時自動同期と「🔄更新」連打等の多重同時実行による、古い同一スナップショットからの
   // 二重マージ（記録欠落）・lastSyncTs巻戻り・二重取得を防ぐ。既存のマージ/差分ロジックは不変。
-  if(_syncInFlight)return _syncInFlight;
+  if(_syncInFlight){
+    /* ★差分の進行中に全件の要求（「同期」・URL保存直後・全員を受信 等）が来たら相乗りしない（2026-09-26）。
+       相乗りすると全件の要求が差分の結果にすり替わり、全件の照合・送り直し・_markFullSync が走らない。
+       進行中の完了（成功・失敗とも）を待ってから、要求どおりの opts（quiet 等も要求側）で改めて実行する。
+       差分どうし・全件の進行中への相乗りは従来どおり。 */
+    if(opts&&opts.full&&!_syncInFlightFull){
+      var _prev=_syncInFlight;
+      return _prev.then(function(){},function(){}).then(function(){return syncFromAPI(showLoader,opts)});
+    }
+    return _syncInFlight;
+  }
+  var _runFull=!!((opts&&opts.full)||_dateHealNeeded);   // 下の _fullFetch と同じ条件（開始前に確定）
   var _run=(async function(){
   if(showLoader)ldShow('APIからデータを取得中...');
   apiSetStatus('sy');
@@ -1808,6 +1820,8 @@ async function syncFromAPI(showLoader,opts){
       if(!_isSnapshotRec(r)){
         // 送信待ちの削除がある記録は、サーバー版を戻さない（消したものが一時的に生き返らない）
         if(_unsentDel[String(r.id)]){seenRecId[r.id]=true;return;}
+        // 削除を送り終えた直後の記録も同じ（取得が削除より先に始まると、応答に削除前の行が載る）
+        if(_recentDelHas(r.id)){seenRecId[r.id]=true;return;}
         // 送信待ちの編集がある記録は、必ずローカル版を採る（時計に依存しない判定）
         if(_unsentEdit[String(r.id)]){
           var _lu=_localAll[String(r.id)];
@@ -1944,7 +1958,7 @@ async function syncFromAPI(showLoader,opts){
     return false}
   finally{ldHide()}
   })();
-  _syncInFlight=_run;
+  _syncInFlight=_run;_syncInFlightFull=_runFull;
   try{return await _run;}finally{_syncInFlight=null;}
 }
 
@@ -2002,6 +2016,18 @@ function _delRecAdd(id){
   }catch(e){}
 }
 function _delRecHas(id){try{return _delRecLoad().indexOf(String(id))>=0}catch(e){return false}}
+/* 最近サーバーで削除できた記録 id（2026-09-26）。端末内のメモリだけに持ち、10分で期限切れ（localStorage には保存しない）。
+   同期の取得（サーバーの読み取り）が削除より先に始まっていると、応答に削除前の行が載り、
+   送信待ちの削除（_unsentDel）からは既に外れているため端末に取り込み直されて残る。取り込み時に同様に除外する。 */
+var RECENT_DEL_MS=10*60*1000;
+var _recentDel={};
+function _recentDelAdd(id){if(id==null||id==='')return;_recentDel[String(id)]=Date.now()+RECENT_DEL_MS}
+function _recentDelHas(id){
+  var k=String(id),t=_recentDel[k];
+  if(!t)return false;
+  if(Date.now()>t){delete _recentDel[k];return false}
+  return true;
+}
 
 /* ════════ 未送信件数（2026-09-08 追加・E） ════════
    「送ったつもりで届いていない」を現場が気づけるようにバッジへ出す。
@@ -2129,6 +2155,7 @@ function flushPendingQueue(done){
         /* 既にキューへ入っている setMasterState も、旧GASに当たったら残さず捨てる
            （残すと GAS 更新後に古い入院状態を送り直してマスタを巻き戻す）。
            他のアクションは従来どおり remain へ戻して再送を続ける。 */
+        if(r&&r.ok!==false&&item.action==='delRecord'&&item.data)_recentDelAdd(item.data.id);   // 再送で削除できた記録も同じ
         if(!(r&&r.ok!==false)){
           if(isDroppableOnOldGas(item.action,r)){
             console.log('[hbcr] setMasterState は旧GASのため破棄・状態は名簿同期で復元されます');
@@ -2156,6 +2183,7 @@ function _writeDrain(){
   apiPost(item.action,item.data)
     .then(function(r){
       if(r&&r.ok!==false){
+        if(item.action==='delRecord'&&item.data)_recentDelAdd(item.data.id);   // 削除を送り終えた記録（取り込み時に除外）
         apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
       }else if(isDroppableOnOldGas(item.action,r)){
         /* 旧GAS＝再送しても通らない。キューに残さずここで捨てる。
@@ -3782,11 +3810,16 @@ function setupTopScroll(){setupTopScrollFor('tlScrollTop','tlBox')}
 /* ── 排泄予定の超過判定（2026-09-26・代表承認）──
    予定時刻 t を過ぎても実施の記録が無い予定を返す純関数（DOM・現在時刻に触れない＝テストで切り出せる）。
    schedule: "HH:MM" の配列／recs: その入居者の当日の記録／nowMin: 0時からの経過分
-   opt: {grace:分, before:分, isSkipped:function(分){…}}（isSkipped は入院期間中のコマ等を除く任意の関数）
+   opt: {grace:分, before:分, isSkipped:function(分){…}, prevRecs:前日の記録}（isSkipped・prevRecs は任意）
    ・実施とみなすのは urine / stool / both / none（none＝誘導・排泄なし）。water・laxative は数えない
-   ・予定 t の突き合わせ範囲は「t−before 〜 次の予定の範囲の手前（次の予定−before 未満）かつ nowMin まで」。
-     次の予定の範囲に入った記録は前の予定を満たさない。遅れて記録すれば（範囲内なら）実施扱いになる
+   ・予定 t の突き合わせ範囲は [前の境界, 次の境界) かつ nowMin まで。先頭の予定の始まりは t−before。
+     隣り合う予定 a<b の境界は max(b−before, (a+b)/2)＝十分離れていれば「次の予定−before」、
+     間隔が before×2 未満なら中点（近い予定どうしで範囲が潰れない）。次の境界以降の記録は次の予定の分。
+     その日最後の予定の「次」は翌日の最初の予定（先頭+1440分）。日付の終わりまで範囲を延ばさない
+   ・0時台の予定は範囲の始まりが前日にかかるので、前日の記録のうち (1440−before) 分以降を「マイナス分」で数える
+   ・遅れて記録しても範囲内なら実施扱いになる（赤枠が消える）
    ・超過＝nowMin ≥ t+grace かつ 実施なし かつ isSkipped(t) が偽
+     ※（仕様上の制約）23:30 以降の予定は nowMin が当日中に t+grace へ届かないため、その日のうちは超過にならない
    ・予定は昇順に並べ直し、不正な時刻は無視し、同じ時刻の重複は1つにまとめる
      （重複を残すと「次の予定」が同時刻になり範囲が空になって、記録があっても超過になるため） */
 function tlOverdueList(schedule,recs,nowMin,opt){
@@ -3808,20 +3841,25 @@ function tlOverdueList(schedule,recs,nowMin,opt){
   });
   ts.sort(function(a,b){return a-b});
   var done=[];
+  function isDone(r){return !!r&&(r.type==='urine'||r.type==='stool'||r.type==='both'||r.type==='none')}
   (Array.isArray(recs)?recs:[]).forEach(function(r){
-    if(!r)return;
-    if(r.type!=='urine'&&r.type!=='stool'&&r.type!=='both'&&r.type!=='none')return;
+    if(!isDone(r))return;
     var m=toMin(r.time);if(m>=0)done.push(m);
   });
+  (Array.isArray(opt.prevRecs)?opt.prevRecs:[]).forEach(function(r){
+    if(!isDone(r))return;
+    var m=toMin(r.time);if(m>=1440-before)done.push(m-1440);   // 前日の終わり際＝マイナス分
+  });
+  function bound(a,b){return Math.max(b-before,(a+b)/2)}
   var out=[];
   for(var i=0;i<ts.length;i++){
     var t=ts[i];
     if(nowMin<t+grace)break;                 // 昇順なので以降の予定もまだ猶予内
     if(skip&&skip(t))continue;
-    var from=t-before;
-    var nextFrom=(i+1<ts.length)?ts[i+1]-before:Infinity;
+    var from=(i===0)?t-before:bound(ts[i-1],t);
+    var to=bound(t,(i+1<ts.length)?ts[i+1]:ts[0]+1440);
     var hit=false;
-    for(var k=0;k<done.length;k++){var m=done[k];if(m>=from&&m<nextFrom&&m<=nowMin){hit=true;break}}
+    for(var k=0;k<done.length;k++){var m=done[k];if(m>=from&&m<to&&m<=nowMin){hit=true;break}}
     if(!hit)out.push({hm:(t<600?'0':'')+Math.floor(t/60)+':'+(t%60<10?'0':'')+(t%60),min:t});
   }
   return out;
@@ -3838,7 +3876,11 @@ function tlOvdForRes(re,date,nowMin){
   getHospEventsOnDate(re,date).forEach(function(ev){
     if(ev.type==='admission'){var s=hmToSlot(ev.time);if(s>=0)adm[s]=1}
   });
+  // 前日（0時台の予定の範囲が前日にかかる分）。ローカル日付で1日戻す
+  var pd=new Date(date+'T00:00:00'),prev='';
+  if(!isNaN(pd.getTime())){pd.setDate(pd.getDate()-1);prev=pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0')+'-'+String(pd.getDate()).padStart(2,'0')}
   return tlOverdueList(re.schedule,recsByResDate(re.id,date),nowMin,{grace:TL_OVD_GRACE,before:TL_OVD_BEFORE,
+    prevRecs:prev?recsByResDate(re.id,prev):[],
     isSkipped:function(min){var s=Math.floor(min/30);return !!adm[s]||isSlotInHospPeriod(re,date,s)}});
 }
 function _tlNowMin(){var n=new Date();return n.getHours()*60+n.getMinutes()}
