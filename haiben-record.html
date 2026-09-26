@@ -185,7 +185,8 @@ textarea{resize:vertical;min-height:76px}
 .nr{color:var(--g5);font-style:italic;font-size: 0.6875rem}
 
 /* timeline */
-.tl-w{overflow:auto;max-height:calc(100vh - 220px);border-radius:var(--r);box-shadow:var(--sh);background:#fff}
+.tl-w{overflow:auto;max-height:calc(100vh - 220px);border-radius:var(--r);box-shadow:var(--sh);background:#fff;
+  position:relative}   /* 現在時刻の縦線（.tl-now）の基準。表と一緒に横スクロールする */
 .tl-stop{overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:4px;background:#f5f5f5;border-radius:6px;border:1px solid var(--g2)}
 .tl-stop-inner{height:1px}
 .tl-t{border-collapse:separate;border-spacing:0;width:max-content}
@@ -209,6 +210,15 @@ textarea{resize:vertical;min-height:76px}
 .tl-c.sched::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:42px;height:42px;border-radius:50%;border:3px solid #9e9e9e;pointer-events:none;z-index:0;box-sizing:border-box;background:rgba(255,255,255,0.6)}
 .tl-c.sched > *{position:relative;z-index:1}
 .tl-c.sched .sch-lbl{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size: 0.625rem;font-weight:700;color:#424242;white-space:nowrap;pointer-events:none;z-index:1;line-height:1;text-shadow:0 0 2px #fff,0 0 2px #fff}
+/* 予定を過ぎて未記録のコマ（今日の表示のみ・2026-09-26）。色だけで伝えず「未」の文字を必ず併記する。
+   枠は ::after で描く。td の outline は位置指定された灰色の丸（::before）の下に塗られ、丸の半透明の白で薄まるため。 */
+.tl-c.ovd::after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;border:2px solid #c62828;pointer-events:none;z-index:1}
+/* z-index は 1 まで（2 にすると横スクロール時に氏名列 .tl-nm の上へ出る） */
+.tl-c.ovd > .ovd-lbl{position:absolute;top:3px;right:3px;font-size: 0.6875rem;font-weight:700;color:#c62828;line-height:1;
+  pointer-events:none;z-index:1;text-shadow:0 0 2px #fff,0 0 2px #fff}
+/* 現在時刻の縦線。氏名列（.tl-nm・z-index 2）より下＝横スクロール時は氏名列の下に隠れる */
+.tl-now{position:absolute;top:0;left:0;width:2px;background:#c62828;pointer-events:none;z-index:1}
+@media print{.tl-now{display:none}}
 .ev-d{width:10px;height:10px;border-radius:50%;display:inline-block;margin:0 1px}
 .ev-d.u{background:var(--u)}.ev-d.s{background:#a1887f}.ev-d.b{background:#e91e63}
 .ev-d.l{background:#ffd600;border:1px solid #f9a825;box-sizing:border-box}
@@ -802,6 +812,9 @@ textarea{resize:vertical;min-height:76px}
       <button class="bn bs bsm" data-off="0">今日</button>
     </div>
     <button class="bn bs bsm rf-sp" id="tlRefresh">🔄 更新</button>
+    <!-- 今日の表示中だけ出す（renderTL が切り替える）: 現在時刻の位置へ横スクロール／予定の未記録の件数 -->
+    <button class="bn bs bsm" id="tlNowBtn" style="display:none" title="現在時刻の位置へ移動" aria-label="現在時刻の位置へ移動">今</button>
+    <span id="tlOvdSum" role="status" style="display:none;font-size: 0.75rem;font-weight:700;white-space:nowrap"></span>
     <label style="font-size: 0.6875rem;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
     <button class="bn blax bsm" id="tlLax" style="margin-left:auto">💊 下剤</button>
   </div>
@@ -1926,7 +1939,8 @@ async function syncFromAPI(showLoader,opts){
     return true}
   catch(e){
     apiSetStatus('er','接続エラー: '+e.message);
-    showToast('⚠️ API同期失敗: '+e.message);
+    // opts.quiet＝時系列の自動取得（5分ごと）。失敗のたびにトーストを出さない（ヘッダの接続表示は従来どおり更新）
+    if(!(opts&&opts.quiet))showToast('⚠️ API同期失敗: '+e.message);
     return false}
   finally{ldHide()}
   })();
@@ -3505,7 +3519,7 @@ function submitRec(){
   apiPush('addRecord',{record:rec});
   if(rec.staff)localStorage.setItem('hbcr_ls',rec.staff);
   const res=D.residents.find(r=>r.id===ci.rid);
-  const tl={urine:'排尿',stool:'排便',both:'排尿＋排便',water:'水分摂取のみ'}[ci.type];
+  const tl={urine:'排尿',stool:'排便',both:'排尿＋排便',none:'誘導',water:'水分摂取のみ'}[ci.type];
   showToast('✅ '+(res?res.name:'')+' — '+tl+'を記録しました');resetForm()}
 
 // 記録の修正モードを開始
@@ -3765,8 +3779,200 @@ function setupTopScrollFor(topId,bottomId){
 function setupTopScroll(){setupTopScrollFor('tlScrollTop','tlBox')}
 
 /* ═══════════ TIMELINE (30分) ═══════════ */
+/* ── 排泄予定の超過判定（2026-09-26・代表承認）──
+   予定時刻 t を過ぎても実施の記録が無い予定を返す純関数（DOM・現在時刻に触れない＝テストで切り出せる）。
+   schedule: "HH:MM" の配列／recs: その入居者の当日の記録／nowMin: 0時からの経過分
+   opt: {grace:分, before:分, isSkipped:function(分){…}}（isSkipped は入院期間中のコマ等を除く任意の関数）
+   ・実施とみなすのは urine / stool / both / none（none＝誘導・排泄なし）。water・laxative は数えない
+   ・予定 t の突き合わせ範囲は「t−before 〜 次の予定の範囲の手前（次の予定−before 未満）かつ nowMin まで」。
+     次の予定の範囲に入った記録は前の予定を満たさない。遅れて記録すれば（範囲内なら）実施扱いになる
+   ・超過＝nowMin ≥ t+grace かつ 実施なし かつ isSkipped(t) が偽
+   ・予定は昇順に並べ直し、不正な時刻は無視し、同じ時刻の重複は1つにまとめる
+     （重複を残すと「次の予定」が同時刻になり範囲が空になって、記録があっても超過になるため） */
+function tlOverdueList(schedule,recs,nowMin,opt){
+  opt=opt||{};
+  var grace=(typeof opt.grace==='number'&&isFinite(opt.grace))?opt.grace:30;
+  var before=(typeof opt.before==='number'&&isFinite(opt.before))?opt.before:30;
+  var skip=(typeof opt.isSkipped==='function')?opt.isSkipped:null;
+  if(typeof nowMin!=='number'||!isFinite(nowMin))return[];
+  function toMin(hm){
+    var m=/^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(String(hm==null?'':hm).trim());
+    if(!m)return-1;
+    var h=parseInt(m[1],10),mi=parseInt(m[2],10);
+    if(h>23||mi>59)return-1;
+    return h*60+mi;
+  }
+  var ts=[],seen={};
+  (Array.isArray(schedule)?schedule:[]).forEach(function(hm){
+    var t=toMin(hm);if(t<0||seen[t])return;seen[t]=1;ts.push(t);
+  });
+  ts.sort(function(a,b){return a-b});
+  var done=[];
+  (Array.isArray(recs)?recs:[]).forEach(function(r){
+    if(!r)return;
+    if(r.type!=='urine'&&r.type!=='stool'&&r.type!=='both'&&r.type!=='none')return;
+    var m=toMin(r.time);if(m>=0)done.push(m);
+  });
+  var out=[];
+  for(var i=0;i<ts.length;i++){
+    var t=ts[i];
+    if(nowMin<t+grace)break;                 // 昇順なので以降の予定もまだ猶予内
+    if(skip&&skip(t))continue;
+    var from=t-before;
+    var nextFrom=(i+1<ts.length)?ts[i+1]-before:Infinity;
+    var hit=false;
+    for(var k=0;k<done.length;k++){var m=done[k];if(m>=from&&m<nextFrom&&m<=nowMin){hit=true;break}}
+    if(!hit)out.push({hm:(t<600?'0':'')+Math.floor(t/60)+':'+(t%60<10?'0':'')+(t%60),min:t});
+  }
+  return out;
+}
+var TL_OVD_GRACE=30, TL_OVD_BEFORE=30;       // 超過とみなすまでの猶予（分）・予定より前に記録を拾う幅（分）
+/* 今日の時系列で、この入居者の超過した予定を返す（描画と60秒ごとの再判定で共用）。
+   完全入院日の人・入居者マスタで入院中の人は判定しない（名前欄に「入院中」が出ている人に「未」を出さない）。
+   入院期間中のコマと入院マーカーのコマ（予定の丸を描かないコマ）は除く。 */
+function tlOvdForRes(re,date,nowMin){
+  if(!re||!Array.isArray(re.schedule)||!re.schedule.length)return[];
+  if(isFullHospDay(re,date))return[];
+  if(re.masterHosp===true)return[];
+  var adm={};
+  getHospEventsOnDate(re,date).forEach(function(ev){
+    if(ev.type==='admission'){var s=hmToSlot(ev.time);if(s>=0)adm[s]=1}
+  });
+  return tlOverdueList(re.schedule,recsByResDate(re.id,date),nowMin,{grace:TL_OVD_GRACE,before:TL_OVD_BEFORE,
+    isSkipped:function(min){var s=Math.floor(min/30);return !!adm[s]||isSlotInHospPeriod(re,date,s)}});
+}
+function _tlNowMin(){var n=new Date();return n.getHours()*60+n.getMinutes()}
+/* 上部の要約（今日の表示中のみ）。件数は超過した予定の数。最終取得は差分同期の基準時刻から出す
+   （基準はサーバーの読み取り開始時刻からのりしろ SYNC_OVERLAP_MS を引いた値なので、足し戻して表示する） */
+function tlOvdSummary(isToday,n){
+  var el=$('tlOvdSum'),nb=$('tlNowBtn');
+  if(nb)nb.style.display=isToday?'':'none';
+  if(!el)return;
+  if(!isToday){el.style.display='none';el.textContent='';return}
+  var ts=_getLastSyncTs(),last='';
+  if(apiUrl){
+    if(ts>0){var d=new Date(ts+SYNC_OVERLAP_MS);last='（最終取得 '+(d.getHours()<10?'0':'')+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes()+'）'}
+    else last='（最終取得 —）';
+  }
+  el.textContent=(n>0?'⚠️ 予定を過ぎて未記録 '+n+'件':'予定の未記録なし')+last;
+  el.style.color=n>0?'#c62828':'var(--g6)';
+  el.style.display='';
+}
+/* 現在時刻の縦線を置く（今日の表示中のみ）。x はコマ番号×幅で計算せず、
+   いまの「時」の見出し（th.hr-top）の実測位置と幅を分の割合で内分する（列幅の揺れに追従する） */
+function tlNowPlace(){
+  var box=$('tlBox');if(!box)return;
+  var ln=box.querySelector('.tl-now');
+  var date=$('tlDate').value||today();
+  var tbl=box.querySelector('table.tl-t');
+  if(date!==today()||!tbl){if(ln&&ln.parentNode)ln.parentNode.removeChild(ln);return}
+  var n=new Date();
+  var th=tbl.querySelectorAll('thead th.hr-top')[n.getHours()];
+  if(!th){if(ln&&ln.parentNode)ln.parentNode.removeChild(ln);return}
+  var left,w=th.offsetWidth;
+  if(th.offsetParent===box)left=th.offsetLeft;
+  else{var r1=th.getBoundingClientRect(),r0=box.getBoundingClientRect();left=r1.left-r0.left-box.clientLeft+box.scrollLeft}
+  var x=left+w*(n.getMinutes()+n.getSeconds()/60)/60;
+  if(!ln){ln=document.createElement('div');ln.className='tl-now';ln.setAttribute('aria-hidden','true');box.appendChild(ln)}
+  ln.style.left=Math.round(x-1)+'px';
+  ln.style.top=tbl.offsetTop+'px';
+  ln.style.height=tbl.offsetHeight+'px';
+}
+/* 「今」ボタン: 縦線が見えている範囲（氏名列を除く）の左から約1/3 に来るよう横スクロールする */
+function tlScrollToNow(){
+  var box=$('tlBox');if(!box)return;
+  tlNowPlace();
+  var ln=box.querySelector('.tl-now');if(!ln)return;
+  var nmTh=box.querySelector('table.tl-t thead th');
+  var nmW=nmTh?nmTh.offsetWidth:0;
+  var vis=Math.max(0,box.clientWidth-nmW);
+  /* 即時に動かす。smooth にすると上部の同期スクロールバー（setupTopScrollFor）が
+     scroll イベントで scrollLeft を書き戻し、動き始めの数pxで止まる（ヘッドレス Chrome で実測） */
+  box.scrollLeft=Math.max(0,Math.round(ln.offsetLeft-nmW-vis/3));
+}
+/* 表を描き直さずに「未」・件数・縦線だけを更新する（60秒ごと）。
+   renderTL は innerHTML を差し替えるため、毎分呼ぶとタップ中のコマやスクロールの慣性が途切れる。
+   描いている行（氏名リンクの入居者id）ごとに renderTL と同じ tlOvdForRes で判定し直す。 */
+function tlOvdRefresh(){
+  var box=$('tlBox');if(!box)return;
+  var date=$('tlDate').value||today();
+  var isToday=(date===today());
+  var tb=box.querySelector('table.tl-t tbody');
+  var nowM=_tlNowMin(),n=0;
+  if(tb)Array.prototype.forEach.call(tb.rows,function(tr){
+    var nm=tr.querySelector('.tl-nm-link');
+    var rid=nm?parseInt(nm.dataset.hist):NaN;
+    var re=isNaN(rid)?null:D.residents.find(function(x){return x.id===rid});
+    var set={};
+    if(isToday&&re)tlOvdForRes(re,date,nowM).forEach(function(o){set[Math.floor(o.min/30)]=1;n++});
+    $$('td.tl-c',tr).forEach(function(td){
+      var s=parseInt(String(td.dataset.slot||'').split('-')[1]);
+      var on=!!set[s],has=td.classList.contains('ovd');
+      if(on===has)return;
+      if(on){td.classList.add('ovd');td.insertAdjacentHTML('beforeend','<span class="ovd-lbl">未</span>')}
+      else{td.classList.remove('ovd');var l=td.querySelector('.ovd-lbl');if(l)td.removeChild(l)}
+    });
+  });
+  tlOvdSummary(isToday,n);
+  tlNowPlace();
+}
+/* 描き直してもスクロール位置を失わない（自動取得の後に使う。renderTL は innerHTML を差し替える） */
+function tlRenderKeepScroll(){
+  var box=$('tlBox');var sl=box?box.scrollLeft:0,st=box?box.scrollTop:0;
+  renderTL();
+  if(box){box.scrollLeft=sl;box.scrollTop=st}
+}
+/* ── 時系列の定期更新（60秒のタイマー1本）──
+   ①時系列が表示中・「今日」を表示中・画面が見えている時だけ、超過の再判定と縦線の再配置
+   ②同じ条件で5分ごとに、🔄更新と同じ差分同期（syncFromAPI）を静かに回して他端末の記録を取り込む。
+     成功・失敗のトーストは出さない（quiet）。失敗しても次の5分まで待つ＝連続でエラーを出さない。
+     接続先が無い・自動ロック中（判定中を含む）・同期が進行中・モーダルや読み込み表示が出ている時は回さない */
+var TL_TICK_MS=60*1000, TL_AUTO_SYNC_MS=5*60*1000;
+var _tlTickBound=false,_tlAutoSyncAt=0,_tlAutoSyncBusy=false;
+function _tlTick(){
+  try{
+    var sc=$('sc-tl');
+    if(!sc||!sc.classList.contains('on')||document.visibilityState!=='visible')return;
+    if(_locked)return;
+    var date=$('tlDate').value||today();
+    if(date!==today()){
+      // 日付をまたいで「今日」でなくなった表示に、前の描画の印が残っていれば消すだけ
+      var box=$('tlBox'),sum=$('tlOvdSum');
+      if((box&&box.querySelector('.ovd,.tl-now'))||(sum&&sum.style.display!=='none'))tlOvdRefresh();
+      return;
+    }
+    tlOvdRefresh();
+    if(Date.now()-_tlAutoSyncAt>=TL_AUTO_SYNC_MS)_tlAutoSync();
+  }catch(e){console.warn('[hbcr] 時系列の定期更新をスキップ:',e)}
+}
+function _tlAutoSync(){
+  if(!apiUrl||_tlAutoSyncBusy)return;
+  if(_locked||_autoLockBusy)return;
+  if(_syncInFlight)return;                         // 起動時・手動・自動ロック判定の同期が進行中＝次の回へ
+  if(document.querySelector('.mo.on'))return;     // 記録・予定・詳細などのモーダルを開いている間は回さない
+  var ld=$('ldOv');if(ld&&ld.classList.contains('on'))return;
+  _tlAutoSyncAt=Date.now();_tlAutoSyncBusy=true;
+  var p;
+  try{p=syncFromAPI(false,{quiet:true})}catch(e){_tlAutoSyncBusy=false;return}
+  Promise.resolve(p).then(function(ok){
+    _tlAutoSyncBusy=false;
+    if(ok!==true)return;
+    try{buildResSel()}catch(e){}                   // 🔄更新（refreshView）と同じく入力欄の名簿も揃える
+    var sc=$('sc-tl');
+    if(!sc||!sc.classList.contains('on')||_locked)return;
+    tlRenderKeepScroll();
+  },function(){_tlAutoSyncBusy=false});
+}
+function setupTlTick(){
+  if(_tlTickBound)return;                          // 二重登録しない（タイマーは1本）
+  _tlTickBound=true;
+  _tlAutoSyncAt=Date.now();                        // 起動時の同期の直後に重ねて取りに行かない
+  setInterval(_tlTick,TL_TICK_MS);
+}
 function renderTL(){const date=$('tlDate').value||today();
   const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  // 予定の超過表示は「今日」を見ているときだけ（過去日・未来日には出さない）
+  var tlIsToday=(date===today()),tlNowM=_tlNowMin(),tlOvdN=0;
   // ヘッダー行: 時刻（0〜23）を各2列（:00, :30）
   let h1='<th rowspan="2" style="min-width:96px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
   let h2='';
@@ -3780,6 +3986,8 @@ function renderTL(){const date=$('tlDate').value||today();
     const bk={};dr.forEach(r=>{const p=String(r.time||'').split(':');const h=parseInt(p[0]);const m=parseInt(p[1]||0);
       const slot=h*2+(m>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
     var schSet=schedSet(re);
+    var ovdSet={};
+    if(tlIsToday)tlOvdForRes(re,date,tlNowM).forEach(function(o){ovdSet[Math.floor(o.min/30)]=1;tlOvdN++});
     // 🏥 入院イベント取得（赤地/青地マーカー＆灰色化用）
     var hospEvents=getHospEventsOnDate(re,date);
     // 各イベントが入るスロット番号を計算
@@ -3807,7 +4015,8 @@ function renderTL(){const date=$('tlDate').value||today();
         cells+='<td class="tl-c'+schCls+'" data-slot="'+reIdA+'-'+s+'" style="background:#757575;color:#bdbdbd;pointer-events:none">'+schLbl+'</td>';
         continue;
       }
-      if(!recs.length){cells+='<td class="tl-c'+schCls+'" data-slot="'+reIdA+'-'+s+'">'+schLbl+'</td>';continue}
+      var ovdCls=ovdSet[s]?' ovd':'',ovdLbl=ovdSet[s]?'<span class="ovd-lbl">未</span>':'';
+      if(!recs.length){cells+='<td class="tl-c'+schCls+ovdCls+'" data-slot="'+reIdA+'-'+s+'">'+schLbl+ovdLbl+'</td>';continue}
       let inner=recs.map(r=>{
         const dot=tlMarks(r);
         let info='';
@@ -3821,7 +4030,7 @@ function renderTL(){const date=$('tlDate').value||today();
         if(r.type==='none'){info+='誘導'}
         if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'cc</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
-      cells+='<td class="tl-c has'+schCls+'" data-slot="'+reIdA+'-'+s+'">'+schLbl+inner+'</td>'}
+      cells+='<td class="tl-c has'+schCls+ovdCls+'" data-slot="'+reIdA+'-'+s+'">'+schLbl+inner+ovdLbl+'</td>'}
     // 最終排尿・排便の日付差 (表示中日付との差) ― マイナスのみ表示
     var lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
     var uDiff=lu?dayDiff(lu.date,date):null;
@@ -3856,6 +4065,8 @@ function renderTL(){const date=$('tlDate').value||today();
     return'<tr><td class="tl-nm"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
   $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
   setupTopScroll();
+  tlOvdSummary(tlIsToday,tlOvdN);
+  tlNowPlace();
   // セル/名前/5日ボタンのクリックは「イベント委譲」で処理する（tlBox へ一度だけ登録）。
   // 従来は毎描画で 48×入居者数（≒1,900個）のリスナ＋クロージャを生成していた。委譲で1個に集約。
   // date は描画毎に変わるためハンドラ内で常に最新値を読む（クロージャ固定を避ける）。
@@ -6379,6 +6590,7 @@ function init(){
     }
   })();
   $('tlRefresh').addEventListener('click',function(){refreshView('tl')});
+  if($('tlNowBtn'))$('tlNowBtn').addEventListener('click',tlScrollToNow);
 
   // 下剤モーダル
   if($('bdLax'))$('bdLax').addEventListener('click',function(){openLaxModal(null,null)});
@@ -6428,7 +6640,8 @@ function init(){
     if(!schCellCtx)return;
     var t=this.dataset.t;
     var rid=schCellCtx.rid;
-    var dateStr=$('tlDate')&&$('tlDate').value?$('tlDate').value:today();
+    // 押したコマの日付（5日表示から入ると #tlDate と違う日になる）。無い時だけ従来どおり #tlDate
+    var dateStr=schCellCtx.date||($('tlDate')&&$('tlDate').value?$('tlDate').value:today());
     var hm=$('mSchCellTime').value||slotToHM(schCellCtx.slot);
     closeSchedCellModal();
     jumpToInputForRecord(rid,dateStr,hm,t);
@@ -6597,14 +6810,22 @@ function init(){
     $('mHospAdmit').value='';$('mHospDischarge').value='';
   });
   if($('cfgShowInactive'))$('cfgShowInactive').addEventListener('change',renderCfg);
-  $('btnSaveCfg').addEventListener('click',function(){D.cfg={
+  $('btnSaveCfg').addEventListener('click',function(){
+    /* 画面の5項目だけを上書きし、他のキー（autoLockMin・_staffs・_staffsTs 等）は残す。
+       以前は D.cfg を5項目で作り直していたため、保存のたびに他の設定が端末から消えていた。 */
+    var _cf={
     urineWarnH:parseInt($('cfgUW').value)||6,urineDangerH:parseInt($('cfgUD').value)||8,
     stoolWarnD:parseInt($('cfgSW').value)||2,stoolDangerD:parseInt($('cfgSD').value)||3,
     localKeepDays:parseInt($('cfgKeep')&&$('cfgKeep').value)||180};
+    D.cfg=Object.assign({},D.cfg||{},_cf);
     // 保持期間を縮めた場合は即時整理（ローカルのみ。サーバーは全量保持）
     var _pruned=pruneOldLocalRecords();
     save();
-    apiPush('saveCfg',{cfg:D.cfg});
+    /* サーバーへは従来の5項目＋autoLockMin（数値の時だけ）。GAS の writeConfig_ は Config を全行消して
+       書き直すため、送らない項目はサーバーからも消える。_staffs 等の端末側だけのキーは従来どおり送らない。 */
+    var _send=Object.assign({},_cf);
+    if(typeof D.cfg.autoLockMin==='number'&&isFinite(D.cfg.autoLockMin))_send.autoLockMin=D.cfg.autoLockMin;
+    apiPush('saveCfg',{cfg:_send});
     if(typeof renderBoard==='function')renderBoard();
     if(typeof renderTL==='function')renderTL();
     showToast(_pruned>0?('✅ 設定を保存しました（古い記録 '+_pruned+'件を端末から整理）'):'✅ 設定を保存しました')});
@@ -6740,6 +6961,8 @@ function init(){
   /* 名簿の追い読みタイマーを起動（凍結仕様S3）。apiUrl 未設定でも起動してよい＝
      tick 側で未接続を判定するため、後からURLを保存した端末も再読み込み無しで効き始める */
   if(typeof setupMasterRosterPoll==='function')setupMasterRosterPoll();
+  /* 時系列の定期更新（60秒・超過の再判定と縦線／5分ごとの静かな差分同期）。条件は tick 側で判定する */
+  if(typeof setupTlTick==='function')setupTlTick();
 
   /* 保存の実行本体。btnApiSave から直接、または「保存済みトークンを空欄で消す」確認を経て呼ばれる。
      従来の処理内容は変えていない（空欄＝旧GAS互換の未認証モードという仕様も維持）。 */
