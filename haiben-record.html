@@ -1672,6 +1672,7 @@ async function syncFromAPI(showLoader,opts){
        未送信のローカル記録編集がサーバーの古い版で上書きされる。記録本体の消失につながる。 */
     var _schedHealing=_schedHealNeeded;
     var sinceTs=(opts.full||_healing)?0:_getLastSyncTs();
+    var _fetchStartAt=Date.now();   // 取得開始（これより後に削除が完了した記録は、応答に削除前の行が載りうる）
     var json=await apiGet({since:sinceTs});
     if(json.error)throw new Error(json.error);
     if(json.residents===undefined)throw new Error('レスポンス形式が不正です');
@@ -1820,8 +1821,8 @@ async function syncFromAPI(showLoader,opts){
       if(!_isSnapshotRec(r)){
         // 送信待ちの削除がある記録は、サーバー版を戻さない（消したものが一時的に生き返らない）
         if(_unsentDel[String(r.id)]){seenRecId[r.id]=true;return;}
-        // 削除を送り終えた直後の記録も同じ（取得が削除より先に始まると、応答に削除前の行が載る）
-        if(_recentDelHas(r.id)){seenRecId[r.id]=true;return;}
+        // 削除を送り終えた直後の記録も同じ（取得が削除の完了より先に始まると、応答に削除前の行が載る）
+        if(_recentDelHas(r.id,_fetchStartAt)){seenRecId[r.id]=true;return;}
         // 送信待ちの編集がある記録は、必ずローカル版を採る（時計に依存しない判定）
         if(_unsentEdit[String(r.id)]){
           var _lu=_localAll[String(r.id)];
@@ -2016,16 +2017,20 @@ function _delRecAdd(id){
   }catch(e){}
 }
 function _delRecHas(id){try{return _delRecLoad().indexOf(String(id))>=0}catch(e){return false}}
-/* 最近サーバーで削除できた記録 id（2026-09-26）。端末内のメモリだけに持ち、10分で期限切れ（localStorage には保存しない）。
-   同期の取得（サーバーの読み取り）が削除より先に始まっていると、応答に削除前の行が載り、
-   送信待ちの削除（_unsentDel）からは既に外れているため端末に取り込み直されて残る。取り込み時に同様に除外する。 */
+/* 最近サーバーで削除できた記録 id と削除の完了時刻（2026-09-26）。端末内のメモリだけに持ち、10分で期限切れ
+   （localStorage には保存しない）。同期の取得（サーバーの読み取り）が削除の完了より先に始まっていると、
+   応答に削除前の行が載り、送信待ちの削除（_unsentDel）からは既に外れているため端末に取り込み直されて残る。
+   ★除外するのは「削除の完了より前に取得を始めた同期」だけ。完了より後に始めた同期は、
+     作り直された正しいサーバー行を取り込む（時刻はどちらも同じ端末の時計なので比べられる）。 */
 var RECENT_DEL_MS=10*60*1000;
 var _recentDel={};
-function _recentDelAdd(id){if(id==null||id==='')return;_recentDel[String(id)]=Date.now()+RECENT_DEL_MS}
-function _recentDelHas(id){
+function _recentDelAdd(id){if(id==null||id==='')return;_recentDel[String(id)]=Date.now()}
+/* fetchStartAt＝その同期がリクエストを送る直前の時刻。省略時は期限内なら true（控えがあるかだけを見る） */
+function _recentDelHas(id,fetchStartAt){
   var k=String(id),t=_recentDel[k];
   if(!t)return false;
-  if(Date.now()>t){delete _recentDel[k];return false}
+  if(Date.now()>t+RECENT_DEL_MS){delete _recentDel[k];return false}
+  if(typeof fetchStartAt==='number')return t>=fetchStartAt;   // 取得開始の後（同時刻を含む）に削除が完了した
   return true;
 }
 
@@ -3812,7 +3817,9 @@ function setupTopScroll(){setupTopScrollFor('tlScrollTop','tlBox')}
    schedule: "HH:MM" の配列／recs: その入居者の当日の記録／nowMin: 0時からの経過分
    opt: {grace:分, before:分, isSkipped:function(分){…}, prevRecs:前日の記録}（isSkipped・prevRecs は任意）
    ・実施とみなすのは urine / stool / both / none（none＝誘導・排泄なし）。water・laxative は数えない
-   ・予定 t の突き合わせ範囲は [前の境界, 次の境界) かつ nowMin まで。先頭の予定の始まりは t−before。
+   ・予定 t の突き合わせ範囲は [前の境界, 次の境界) かつ nowMin まで。先頭の予定の始まりは
+     前日最後の予定（末尾−1440分）との境界＝max(t−before, 中点)。前日最後の範囲の終わりと一致させ、
+     日付をまたいで同じ記録を両方に数えない（十分離れていれば従来どおり t−before）。
      隣り合う予定 a<b の境界は max(b−before, (a+b)/2)＝十分離れていれば「次の予定−before」、
      間隔が before×2 未満なら中点（近い予定どうしで範囲が潰れない）。次の境界以降の記録は次の予定の分。
      その日最後の予定の「次」は翌日の最初の予定（先頭+1440分）。日付の終わりまで範囲を延ばさない
@@ -3856,7 +3863,7 @@ function tlOverdueList(schedule,recs,nowMin,opt){
     var t=ts[i];
     if(nowMin<t+grace)break;                 // 昇順なので以降の予定もまだ猶予内
     if(skip&&skip(t))continue;
-    var from=(i===0)?t-before:bound(ts[i-1],t);
+    var from=(i===0)?bound(ts[ts.length-1]-1440,t):bound(ts[i-1],t);
     var to=bound(t,(i+1<ts.length)?ts[i+1]:ts[0]+1440);
     var hit=false;
     for(var k=0;k<done.length;k++){var m=done[k];if(m>=from&&m<to&&m<=nowMin){hit=true;break}}
