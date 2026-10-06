@@ -6854,6 +6854,13 @@ function hbReadMasterIdParam(){
   if(!/^[0-9A-Za-z_-]{1,32}$/.test(id)){showToast('⚠️ 指定された入居者を開けませんでした');return null}
   return id;
 }
+/* ?view= は「入力画面ではなく、その方の個別表示で開く」指定（2026-10-06・訪問診療アプリの
+   「🚽 排泄記録」ボタン用）。hist＝排泄履歴／5day＝5日表示。それ以外は無視して従来どおり入力画面。 */
+function hbReadViewParam(){
+  var p=null;try{p=new URLSearchParams(location.search)}catch(e){return ''}
+  var v=p?String(p.get('view')||''):'';
+  return (v==='hist'||v==='5day')?v:'';
+}
 function hbClearMasterIdParam(){try{if(location.search)history.replaceState(null,'',location.pathname)}catch(e){}}
 function hbSetFromMasterBar(state,name){
   var bar=document.getElementById('fromMaster');if(!bar)return;
@@ -6870,9 +6877,10 @@ function hbSetFromMasterBar(state,name){
 /* 名簿がサーバ同期で後から揃う端末のための保留。
    ★職員が入居者を選んだ／画面を切り替えたら破棄する。破棄しないと、同期完了時の再適用が
      入力途中の選択を無言で差し替え、別人の記録として保存されてしまう。 */
-var hbMasterPending=null;
-function hbDropMasterPending(){hbMasterPending=null}
+var hbMasterPending=null,hbMasterPendingView='';
+function hbDropMasterPending(){hbMasterPending=null;hbMasterPendingView=''}
 function hbApplyMasterIdParam(isRetry){
+  var view=isRetry?hbMasterPendingView:hbReadViewParam();   // URLを消す前に読む
   var mid=isRetry?hbMasterPending:hbReadMasterIdParam();
   if(!mid)return;
   if(!isRetry)hbClearMasterIdParam();   // URLから即座に落とす（リロードで勝手に開き直さない）
@@ -6883,11 +6891,19 @@ function hbApplyMasterIdParam(isRetry){
   if(!hit){
     /* ★該当者が居ないのに前回の別人が選ばれたままだと、その人に記録してしまう。
        選択を空へ戻し、職員に明示的に選び直させる。名簿待ちの可能性は保留に残す。 */
-    hbMasterPending=mid;
+    hbMasterPending=mid;hbMasterPendingView=view;
     ci.rid=null; try{buildResSel()}catch(e){}
     hbSetFromMasterBar('fail');return;
   }
-  hbMasterPending=null;
+  hbMasterPending=null;hbMasterPendingView='';
+  /* 個別表示で開く指定（?view=）の時は、その方の排泄履歴／5日表示を開くだけにする。
+     ★入力画面の選択（ci.rid）は変えない＝訪問診療の場から開いた画面で誤って記録しない。
+     ★見るだけなので退去済みの方でも開く（排泄履歴は退去済みなら入力ボタンを隠す作り）。 */
+  if(view){
+    hbSetFromMasterBar('off');
+    if(view==='5day')showFiveDay(hit.id);else showHist(hit.id);
+    return;
+  }
   if(hit.active===false){   // 退去済みは選択肢に出ないため、開いたことにしない
     ci.rid=null; try{buildResSel()}catch(e){}
     hbSetFromMasterBar('gone',hit.name);return;
