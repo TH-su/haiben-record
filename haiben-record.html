@@ -359,6 +359,36 @@ textarea{resize:vertical;min-height:76px}
   opacity:0;transition:all .28s;z-index:400;pointer-events:none;white-space:nowrap}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* 通信の警告帯（2026-10-06）。送れていない・取れていない時だけ、下部ナビのすぐ上に出す。
+   bottom と本文の余白は JS（_netLayout）がナビの実際の高さに合わせる（文字サイズで高さが変わるため）。
+   色だけで伝えない（アイコン＋文字）。モーダル（300）より下・ナビ（100）より上。 */
+.net-warn{position:fixed;left:0;right:0;bottom:52px;z-index:150;
+  display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:8px 12px;
+  background:var(--ng-l);color:var(--ng);border-top:2px solid var(--ng);
+  font-size: 0.875rem;font-weight:700;line-height:1.5;box-shadow:0 -2px 10px rgba(0,0,0,.12)}
+.net-warn[hidden]{display:none}
+.net-warn .nw-msg{flex:1 1 220px;min-width:0}
+.net-warn button{min-height:44px;padding:6px 14px;border:2px solid var(--ng);border-radius:8px;
+  background:#fff;color:var(--ng);font-size: 0.875rem;font-weight:700;cursor:pointer;font-family:inherit}
+.net-warn button:focus-visible{outline:3px solid var(--ng);outline-offset:2px}
+@media screen{
+  body.net-warn-on{padding-bottom:calc(72px + var(--netwarn-h,64px))}
+  body.net-warn-on .toast{bottom:calc(80px + var(--netwarn-h,64px))}
+}
+@media print{#netWarn{display:none !important}}
+/* 通信の記録（設定画面・この端末だけ） */
+.net-log-sum{margin-top:6px;font-size: 0.8125rem;line-height:1.7;color:var(--g7)}
+.net-log details{margin-top:6px}
+.net-log summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-size: 0.8125rem;color:var(--pri)}
+.net-log summary:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+.net-log ol{list-style:none;margin-top:4px;max-height:320px;overflow-y:auto;border:1px solid var(--g2);border-radius:8px}
+.net-log li{padding:6px 10px;border-bottom:1px solid var(--g2);font-size: 0.75rem;line-height:1.6;color:var(--g9)}
+.net-log li:last-child{border-bottom:none}
+.net-log .nl-t{color:var(--g7);margin-right:6px;font-variant-numeric:tabular-nums}
+.net-log .nl-fail{color:var(--ng);font-weight:700}
+.net-log .nl-ok{color:var(--ok);font-weight:700}
+.net-log .nl-net{color:var(--warn-tx);font-weight:700}
+
 /* select for resident */
 #resSel{font-size: 1rem;padding:12px 14px;border-radius:10px}
 
@@ -968,6 +998,15 @@ textarea{resize:vertical;min-height:76px}
     <div id="apiStatus" style="margin-top:10px;font-size: 0.75rem;color:var(--g5)">
       GASデプロイ後に取得したURLを入力して「URLを保存・接続」を押してください。
     </div>
+    <!-- 通信の記録（2026-10-06）。中身は renderNetLog が入れる。氏名・記録の中身は残さない -->
+    <div class="net-log">
+      <div class="fl" style="margin-top:14px">📶 通信の記録（この端末）</div>
+      <div class="net-log-sum" id="netLogSum"></div>
+      <details id="netLogDet">
+        <summary id="netLogSummary">新しい順に最大50件を見る</summary>
+        <ol id="netLogList"></ol>
+      </details>
+    </div>
   </div>
 
   <div class="cd">
@@ -1046,6 +1085,12 @@ textarea{resize:vertical;min-height:76px}
   <div id="rpSheet" class="rp-sheet">
     <div class="rp-empty">上の条件を選んで「📄 画面に出す」を押してください。</div>
   </div>
+</div>
+
+<!-- 通信の警告帯（2026-10-06）。中身と表示は _netEval が決める -->
+<div class="net-warn" id="netWarn" role="alert" aria-live="assertive" hidden>
+  <span class="nw-msg" id="netWarnMsg"></span>
+  <button type="button" id="netWarnBtn">🔄 今すぐ送り直す</button>
 </div>
 
 <!-- ── Bottom Nav ── -->
@@ -1506,7 +1551,11 @@ setInterval(_heartbeatApiUrl,5*60*1000);
 let apiUrl='';
 let apiToken='';
 
-function apiSetStatus(st,msg){
+/* route … '同期'／'書き込み'。実際にサーバーと行き来した結果の呼び出しだけが渡す（2026-10-06）。
+   起動直後の表示合わせ（route なし）は通信の記録・警告帯の「通信できた／できなかった」に数えない。 */
+function apiSetStatus(st,msg,route){
+  // 通信の見張り（警告帯・通信の記録）。ここが壊れてもヘッダの接続表示は従来どおり出す
+  try{if(typeof _netOnStatus==='function')_netOnStatus(st,msg,route)}catch(e){}
   var b=$('apiBd');if(!b)return;
   b.className='api-bd';
   if(st==='ok'){b.classList.add('api-ok');b.innerHTML='✅ API接続中'}
@@ -1948,12 +1997,12 @@ async function syncFromAPI(showLoader,opts){
     // 日付TZ修正の回復が全件取得で完了したらフラグを立て、以後は通常の差分同期に戻す
     if(_healing){_dateHealNeeded=false;try{localStorage.setItem(DATEFIX_HEAL_KEY,'1')}catch(e){}}
     // ヘッダには時刻のみ表示（「(差分)」ラベルは現場画面で不要のため非表示。差分同期動作は維持）
-    apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
+    apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'),'同期');
     // 未送信キューを再送
     flushPendingQueue();
     return true}
   catch(e){
-    apiSetStatus('er','接続エラー: '+e.message);
+    apiSetStatus('er','接続エラー: '+e.message,'同期');
     // opts.quiet＝時系列の自動取得（5分ごと）。失敗のたびにトーストを出さない（ヘッダの接続表示は従来どおり更新）
     if(!(opts&&opts.quiet))showToast('⚠️ API同期失敗: '+e.message);
     return false}
@@ -1980,6 +2029,7 @@ var PQ_KEY='hbcr_pq';
 var WQ_KEY='hbcr_wq';
 var _wqCurrent=null;                 // 送信中の1件（_writeQ から取り出し済み）
 function _wqPersist(){
+  try{if(typeof _netEvalSoon==='function')_netEvalSoon()}catch(e){}   // 未送信の始まり・終わりを警告帯へ（2026-10-06）
   try{
     var live=(_wqCurrent?[_wqCurrent]:[]).concat(_writeQ||[]);
     if(!live.length){localStorage.removeItem(WQ_KEY);return}
@@ -2097,6 +2147,7 @@ function savePendingQueue(q){
   // 本体(hbcr_v2)と同様に圧縮保存し、容量圧迫時の失敗を減らす。
   // 失敗（QuotaExceeded 等）を無音で握り潰さず、間引き再試行＋通知で「未送信の消失」を防ぐ。
   try{_pqCount=Array.isArray(q)?q.length:0}catch(e){}   // 未送信バッジ用の件数（2026-09-08）
+  try{if(typeof _netEvalSoon==='function')_netEvalSoon()}catch(e){}   // 送り切れたら警告帯をすぐ消す（2026-10-06）
   try{
     _storageSet(PQ_KEY,JSON.stringify(q));
   }catch(e){
@@ -2189,21 +2240,21 @@ function _writeDrain(){
     .then(function(r){
       if(r&&r.ok!==false){
         if(item.action==='delRecord'&&item.data)_recentDelAdd(item.data.id);   // 削除を送り終えた記録（取り込み時に除外）
-        apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
+        apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'),'書き込み');
       }else if(isDroppableOnOldGas(item.action,r)){
         /* 旧GAS＝再送しても通らない。キューに残さずここで捨てる。
            入院状態そのものは入居者マスタ側が正本で、名簿同期のたびに読み直されるため失われない。
            ※個人情報保護のため action 名だけを出す（masterId・氏名は出さない）。 */
         console.log('[hbcr] setMasterState は旧GASのため破棄・状態は名簿同期で復元されます');
-        apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'));
+        apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'),'書き込み');
       }else{
-        apiSetStatus('er','書き込みエラー');
+        apiSetStatus('er','書き込みエラー','書き込み');
         enqueuePending(item.action,item.data);
         showToast('⚠️ API書き込み失敗（ローカルに保存・後で再送）');
       }
     })
     .catch(function(e){
-      apiSetStatus('er',e&&e.message);
+      apiSetStatus('er',e&&e.message,'書き込み');
       enqueuePending(item.action,item.data);
       showToast('⚠️ API書き込み失敗（ローカルに保存・後で再送）');
     })
@@ -4067,6 +4118,200 @@ function setupSyncPoll(){
     _unsentPollTick();
   });
 }
+/* ════════ 通信が不調な時の被害を小さくする（2026-10-06・A 即再送／B 警告帯／C 通信の記録） ════════
+   10/06 の実測: 記録が他の端末に届くまでの遅れは中央値2〜3秒だが、14日で5分を超える遅れが92件あった（Wi-Fi の不調）。
+   その時に困るのは次の3つだった。
+     ①Wi-Fi が戻っても送り直しは次の60秒 tick 待ち。失敗が続いていれば取得は15分間隔に落ちたまま
+     ②送れていないことが右上の小さなバッジでしか分からない（職員が気づけない）
+     ③どの端末が・いつ通信できなかったかを後から確かめられない
+   A: online を受けたら2秒後に送り直し・取りに行く（落とした取得間隔も戻す）。
+   B: 送れていない・取れていない時だけ、下部ナビの上に帯を出す（平常時は出ない）。
+   C: 失敗・復帰・切断/再接続の通知をこの端末に残し、設定画面に出す。
+   ★navigator.onLine は「試すきっかけ」と📵の表示にだけ使う。届いたかどうかは実際の通信（apiSetStatus）で判定する。
+   ★ここの時刻はすべて端末の時計で、「この端末で何分通信できていないか」を測るためだけに使う。
+     差分同期の基準（hbcr_last_sync_ts・サーバーの時計）には触れない。
+   ★通信の記録には氏名・記録の中身・入居者ID・合言葉・URL を入れない。自動ロックでも連携解除でも消さない
+     （個人情報を含まず、後から不調を確かめるための記録のため＝DELREC_KEY と同じ扱い）。 */
+var NET_WARN_UNSENT_MS=2*60*1000;      // 未送信がこれだけ残ったら帯を出す
+var NET_WARN_STALE_MS=10*60*1000;      // 通信に失敗していて、最後に通信できてからこれだけ経ったら帯を出す
+var NET_ONLINE_DELAY_MS=2000;          // online を受けてから送り直すまでの待ち（再接続の直後は届かないことがある）
+var NET_LOG_KEY='hbcr_net_log';
+var NET_LOG_MAX=200;                   // 端末に残す件数（新しい順・古いものから捨てる）
+var NET_LOG_SHOW=50;                   // 設定画面に出す件数
+var NET_LOG_MERGE_MS=60*1000;          // 同じ失敗がこの間に続いたら1件にまとめて回数を数える（未送信が続けて失敗する時）
+var _netOkAt=Date.now();               // 最後にサーバーと通信できた時刻（起動時刻で始める＝起動直後に帯を出さない）
+var _netOkReal=0;                      // 読み込み後に実際に通信できた時刻（設定画面の表示用。0＝まだ）
+var _netErAt=0;                        // 最後に通信に失敗した時刻
+var _netFailSince=0;                   // 失敗が続き始めた時刻（0＝失敗中でない）
+var _netUnsentSince=0;                 // 未送信が残り始めた時刻（0＝残っていない）
+var _netEvalTimer=null,_netOnlineTimer=null,_netBound=false;
+
+/* 帯の判定（純粋関数）。s={now,apiUrl,locked,offline,unsent,unsentSince,okAt,erAt}
+   返り値: null＝出さない／{kind:'offline'|'unsent'|'stale',text}。上の条件ほど優先する。 */
+function _netBannerState(s){
+  if(!s||!s.apiUrl||s.locked)return null;
+  if(s.offline)return{kind:'offline',text:'📵 Wi-Fi が切れています。この端末の記録は他の端末に届いていません'};
+  if(s.unsent>0&&s.unsentSince>0&&s.now-s.unsentSince>=NET_WARN_UNSENT_MS)
+    return{kind:'unsent',text:'📤 この端末の記録 '+s.unsent+'件 がまだサーバーに届いていません'};
+  /* 「実際に失敗した」時だけ出す。画面を消していた・モーダルを開いたままで取りに行っていないだけなら、
+     取りに行けば戻るので出さない（現場を驚かせない）。 */
+  if(s.erAt>s.okAt&&s.now-s.okAt>=NET_WARN_STALE_MS)
+    return{kind:'stale',text:'⚠️ '+Math.round(NET_WARN_STALE_MS/60000)+'分以上サーバーと通信できていません。他の端末の記録が表示されていない可能性があります'};
+  return null;
+}
+/* 未送信が残り始めた時刻を取る。件数が 0 になったら消す（0→1 の瞬間からの経過で2分を測る） */
+function _netObserveUnsent(){
+  var n=0;
+  try{n=(typeof _unsentCount==='function')?_unsentCount():0}catch(e){}
+  if(n>0){if(!_netUnsentSince)_netUnsentSince=Date.now()}
+  else _netUnsentSince=0;
+  return n;
+}
+function _netEval(){
+  var n=_netObserveUnsent();
+  var el=$('netWarn');if(!el)return;
+  if(document.visibilityState==='hidden')return;   // 見えていない間は帯を動かさない（戻った時に判定し直す）
+  var st=_netBannerState({now:Date.now(),apiUrl:apiUrl,locked:!!_locked,
+    offline:(navigator.onLine===false),unsent:n,unsentSince:_netUnsentSince,okAt:_netOkAt,erAt:_netErAt});
+  var on=!!st;
+  if(on){
+    var m=$('netWarnMsg');
+    if(m&&m.textContent!==st.text)m.textContent=st.text;   // 同じ文言なら書き換えない（読み上げを繰り返さない）
+    el.setAttribute('data-kind',st.kind);
+  }
+  if(el.hidden===on){el.hidden=!on;document.body.classList.toggle('net-warn-on',on)}
+  if(on)_netLayout();
+}
+/* 送信キュー・接続表示から呼ばれる。同じ瞬間の呼び出しは1回にまとめ、処理の途中ではなく後で判定する */
+function _netEvalSoon(){
+  if(_netEvalTimer)return;
+  _netEvalTimer=setTimeout(function(){_netEvalTimer=null;try{_netEval()}catch(e){}},0);
+}
+/* 帯を下部ナビのすぐ上に置き、本文がその下に隠れないよう余白を合わせる（文字サイズでナビの高さが変わる） */
+function _netLayout(){
+  var el=$('netWarn');if(!el||el.hidden)return;
+  var nav=document.querySelector('.bnav');
+  el.style.bottom=(nav?nav.offsetHeight:0)+'px';
+  document.documentElement.style.setProperty('--netwarn-h',el.offsetHeight+'px');
+}
+/* apiSetStatus から呼ばれる。route がある＝実際にサーバーと行き来した結果 */
+function _netOnStatus(st,msg,route){
+  if(route){
+    var now=Date.now();
+    if(st==='ok'){
+      if(_netFailSince){
+        var d=Math.max(0,now-_netFailSince);
+        _netLogAdd('ok',route,'失敗が続いた時間 '+_netFmtDur(d),d);
+      }
+      _netFailSince=0;_netOkAt=now;_netOkReal=now;
+    }else if(st==='er'){
+      if(!_netFailSince)_netFailSince=now;
+      _netErAt=now;
+      _netLogAdd('fail',route,_netClassify(msg));
+    }
+  }
+  _netEvalSoon();
+}
+/* 失敗の文言を定型の説明に寄せる（ブラウザごとの言い回しの違いを吸収・URL や長い数字は残さない） */
+function _netClassify(msg){
+  var s=String(msg==null?'':msg).replace(/^接続エラー:\s*/,'');
+  if(/タイムアウト/.test(s))return 'タイムアウト（時間内に応答が返らない）';
+  var h=/HTTP\s*(\d{3})/.exec(s);if(h)return 'HTTP '+h[1]+'（サーバーが受け付けない）';
+  if(/Failed to fetch|Load failed|NetworkError|Network request failed|network connection|ネットワーク/i.test(s))
+    return '通信不可（サーバーに届かない）';
+  if(/書き込みエラー/.test(s))return '書き込みエラー（サーバーが受け付けない）';
+  if(/unauthori[sz]ed|forbidden|token|認証|合言葉/i.test(s))return '認証エラー（合言葉が合わない）';
+  if(/レスポンス形式|Unexpected token|JSON/i.test(s))return '応答の形式が不正';
+  s=s.replace(/https?:\/\/\S+/g,'(URL)').replace(/\d{5,}/g,'#').trim();
+  return 'その他: '+(s?s.slice(0,40):'（内容なし）');
+}
+function _netLogLoad(){
+  try{var s=_storageGet(NET_LOG_KEY);var a=s?JSON.parse(s):[];return Array.isArray(a)?a:[]}catch(e){return[]}
+}
+/* 1件 = {t:時刻, k:'fail'|'ok'|'offline'|'online', r:経路, m:説明, d:止まっていた長さ(ms・復帰だけ), n:回数, l:最後の時刻} */
+function _netLogAdd(kind,route,desc,dur){
+  try{
+    var log=_netLogLoad(),now=Date.now(),top=log[0];
+    var m=String(desc==null?'':desc).slice(0,60),r=route||'';
+    if(kind==='fail'&&top&&top.k==='fail'&&top.r===r&&top.m===m&&now-(top.l||top.t)<NET_LOG_MERGE_MS){
+      top.n=(top.n||1)+1;top.l=now;
+    }else{
+      var e={t:now,k:kind,r:r,m:m};
+      if(dur>0)e.d=Math.round(dur);
+      log.unshift(e);
+      if(log.length>NET_LOG_MAX)log.length=NET_LOG_MAX;
+    }
+    _storageSet(NET_LOG_KEY,JSON.stringify(log));
+  }catch(e){/* 容量不足等。記録できなくても通信そのものには影響させない */}
+  try{var sc=$('sc-cfg');if(sc&&sc.classList.contains('on'))renderNetLog()}catch(e){}
+}
+/* A: 待たずに送り直し・取りに行く。可視・ロック中・同期中・モーダルの抑止は追い読みのものをそのまま使う */
+function _netRetryNow(){
+  _syncPollFails=0;                    // 失敗続きで落とした取得間隔（15分）を元に戻す
+  try{_unsentPollTick()}catch(e){}
+  try{_syncPollTick(true)}catch(e){}
+}
+function _netOnOnline(){
+  _netLogAdd('online','','ブラウザが「通信が戻った」と通知');
+  _netEvalSoon();
+  if(_netOnlineTimer)clearTimeout(_netOnlineTimer);
+  _netOnlineTimer=setTimeout(function(){_netOnlineTimer=null;_netRetryNow()},NET_ONLINE_DELAY_MS);
+}
+function _netOnOffline(){
+  _netLogAdd('offline','','ブラウザが「通信が切れた」と通知');
+  _netEvalSoon();
+}
+function setupNetHealth(){
+  if(_netBound)return;                             // 二重登録しない
+  _netBound=true;
+  window.addEventListener('online',_netOnOnline);
+  window.addEventListener('offline',_netOnOffline);
+  window.addEventListener('resize',function(){try{_netLayout()}catch(e){}});
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')_netEvalSoon()});
+  setInterval(function(){try{_netEval()}catch(e){}},TL_TICK_MS);   // 2分・10分は時間だけで来るので定期的に判定し直す
+  var b=$('netWarnBtn');
+  if(b)b.addEventListener('click',function(){
+    showToast(navigator.onLine===false?'📵 Wi-Fi が切れています。接続を確かめてください':'🔄 サーバーへ送り直しています…');
+    _netRetryNow();
+  });
+  _netEvalSoon();
+}
+/* C: 設定画面の「通信の記録（この端末）」 */
+var NET_LOG_LABEL={fail:'❌ 失敗',ok:'✅ 復帰',offline:'📵 切断の通知',online:'📶 再接続の通知'};
+var NET_LOG_CLS={fail:'nl-fail',ok:'nl-ok',offline:'nl-net',online:'nl-net'};
+function _netFmtTime(t){
+  var d=new Date(t),p=function(n){return('0'+n).slice(-2)};
+  return (d.getMonth()+1)+'/'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+function _netFmtDur(ms){
+  var m=Math.round(ms/60000);
+  if(m<1)return '1分未満';
+  if(m<60)return '約'+m+'分';
+  return '約'+Math.floor(m/60)+'時間'+(m%60?(m%60)+'分':'');
+}
+function renderNetLog(){
+  var sum=$('netLogSum'),list=$('netLogList');if(!sum||!list)return;
+  var log=_netLogLoad(),now=Date.now(),DAY=24*60*60*1000,fails=0,longest=0,ongoing=false;
+  log.forEach(function(e){
+    if(!e||!(now-e.t<DAY))return;
+    if(e.k==='fail')fails+=(e.n||1);
+    if(e.k==='ok'&&e.d>longest)longest=e.d;
+  });
+  if(_netFailSince&&now-_netFailSince>longest){longest=now-_netFailSince;ongoing=true}   // いま続いている失敗も候補
+  sum.innerHTML=[
+    '直近24時間の失敗: '+fails+'回',
+    '最長の不通: '+(longest>0?_netFmtDur(longest)+(ongoing?'（いまも続いています）':''):'なし'),
+    '最後に通信できた時刻: '+(_netOkReal?_netFmtTime(_netOkReal):'読み込み後まだ通信していません')
+  ].map(escapeHtmlText).join('<br>');
+  var rows=log.slice(0,NET_LOG_SHOW).map(function(e){
+    var times=(e.n>1)?' ×'+e.n+'回（最後 '+_netFmtTime(e.l||e.t)+'）':'';
+    return '<li><span class="nl-t">'+escapeHtmlText(_netFmtTime(e.t))+'</span>'
+      +'<span class="'+(NET_LOG_CLS[e.k]||'')+'">'+escapeHtmlText(NET_LOG_LABEL[e.k]||'記録')+'</span> '
+      +escapeHtmlText((e.r?'（'+e.r+'）':'')+(e.m||'')+times)+'</li>';
+  });
+  list.innerHTML=rows.length?rows.join(''):'<li>記録はまだありません（通信に失敗しなければ増えません）</li>';
+  var sm=$('netLogSummary');if(sm)sm.textContent='新しい順に最大'+NET_LOG_SHOW+'件を見る（いま'+log.length+'件）';
+}
 function renderTL(){const date=$('tlDate').value||today();
   const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   // 予定の超過表示は「今日」を見ているときだけ（過去日・未来日には出さない）
@@ -4693,6 +4938,7 @@ function renderCfg(){
   if($('apiStatus')&&apiUrl)$('apiStatus').textContent='接続URL: '+apiUrl.slice(0,60)+'...';
   renderStaffList();
   if(typeof renderLinkAudit==='function')renderLinkAudit();
+  try{if(typeof renderNetLog==='function')renderNetLog()}catch(e){}   // 通信の記録（この端末・2026-10-06）
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -7064,6 +7310,8 @@ function init(){
   /* 記録の追い読み（画面に依存しない・5分ごと＋画面に戻った時）。apiUrl 未設定でも起動してよい＝
      tick 側で未接続を判定するため、後からURLを保存した端末も再読み込み無しで効き始める */
   if(typeof setupSyncPoll==='function')setupSyncPoll();
+  /* 通信の見張り（online で即再送・送れていない時の警告帯・通信の記録）。apiUrl 未設定なら帯は出ない */
+  if(typeof setupNetHealth==='function')setupNetHealth();
 
   /* 保存の実行本体。btnApiSave から直接、または「保存済みトークンを空欄で消す」確認を経て呼ばれる。
      従来の処理内容は変えていない（空欄＝旧GAS互換の未認証モードという仕様も維持）。 */
