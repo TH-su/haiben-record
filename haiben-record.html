@@ -3973,11 +3973,10 @@ function tlRenderKeepScroll(){
 }
 /* ── 時系列の定期更新（60秒のタイマー1本）──
    ①時系列が表示中・「今日」を表示中・画面が見えている時だけ、超過の再判定と縦線の再配置
-   ②同じ条件で5分ごとに、🔄更新と同じ差分同期（syncFromAPI）を静かに回して他端末の記録を取り込む。
-     成功・失敗のトーストは出さない（quiet）。失敗しても次の5分まで待つ＝連続でエラーを出さない。
-     接続先が無い・自動ロック中（判定中を含む）・同期が進行中・モーダルや読み込み表示が出ている時は回さない */
-var TL_TICK_MS=60*1000, TL_AUTO_SYNC_MS=5*60*1000;
-var _tlTickBound=false,_tlAutoSyncAt=0,_tlAutoSyncBusy=false;
+   ②記録の取得は 2026-10-06 にここから外し、画面に依存しない _syncPollTick へ移した（下の節）。
+     この tick は時系列の表示（超過の再判定と現在時刻線）だけを受け持つ。 */
+var TL_TICK_MS=60*1000;
+var _tlTickBound=false;
 function _tlTick(){
   try{
     var sc=$('sc-tl');
@@ -3991,32 +3990,82 @@ function _tlTick(){
       return;
     }
     tlOvdRefresh();
-    if(Date.now()-_tlAutoSyncAt>=TL_AUTO_SYNC_MS)_tlAutoSync();
+    /* 記録の取得はここから外した（2026-10-06）。下の _syncPollTick が画面に関係なく受け持つ。
+       ここに置いていた間は、時系列画面を開いている端末しか記録を取りに行かなかった。 */
   }catch(e){console.warn('[hbcr] 時系列の定期更新をスキップ:',e)}
-}
-function _tlAutoSync(){
-  if(!apiUrl||_tlAutoSyncBusy)return;
-  if(_locked||_autoLockBusy)return;
-  if(_syncInFlight)return;                         // 起動時・手動・自動ロック判定の同期が進行中＝次の回へ
-  if(document.querySelector('.mo.on'))return;     // 記録・予定・詳細などのモーダルを開いている間は回さない
-  var ld=$('ldOv');if(ld&&ld.classList.contains('on'))return;
-  _tlAutoSyncAt=Date.now();_tlAutoSyncBusy=true;
-  var p;
-  try{p=syncFromAPI(false,{quiet:true})}catch(e){_tlAutoSyncBusy=false;return}
-  Promise.resolve(p).then(function(ok){
-    _tlAutoSyncBusy=false;
-    if(ok!==true)return;
-    try{buildResSel()}catch(e){}                   // 🔄更新（refreshView）と同じく入力欄の名簿も揃える
-    var sc=$('sc-tl');
-    if(!sc||!sc.classList.contains('on')||_locked)return;
-    tlRenderKeepScroll();
-  },function(){_tlAutoSyncBusy=false});
 }
 function setupTlTick(){
   if(_tlTickBound)return;                          // 二重登録しない（タイマーは1本）
   _tlTickBound=true;
-  _tlAutoSyncAt=Date.now();                        // 起動時の同期の直後に重ねて取りに行かない
   setInterval(_tlTick,TL_TICK_MS);
+}
+/* ════════ 記録の追い読み（2026-10-06・画面に依存しない） ════════
+   なぜ: それまで記録の取得（syncFromAPI）が自動で走るのは時系列画面を開いている間だけで、
+   一覧表示・入力画面を開いたままの端末は起動後ずっとサーバーと行き来しなかった。これが同時に2つを止めていた。
+     ①受信: 他の端末が入れた記録が、画面を切り替えるか読み込み直すまで届かない
+     ②送信: 送信に失敗して未送信キューへ退避した記録が再送されない
+            （再送の主な契機が「syncFromAPI の成功時」だったため、取りに行かない端末は送り直しもしない）
+   2026-10-06 朝、1台で入れた6時台の排便記録が他のタブレットに午後まで出なかった事象がこれに当たる。
+   名簿の追い読み（_mrPollTick）と同じ型: setInterval ＋ 可視タブのみ ＋ 失敗は次の回へ。
+   画面の描き直しは syncFromAPI 側（renderBoard / renderTL）が従来どおり行う。 */
+var SYNC_POLL_MS=5*60*1000;            // 取得間隔。短くするならここ1箇所（サーバー負荷は間隔に反比例）
+var SYNC_POLL_BACKOFF_MS=15*60*1000;   // 連続失敗が続く間の間隔（落ちているサーバーを全端末で叩き続けない）
+var SYNC_POLL_FAIL_MAX=3;              // これだけ連続で失敗したら間隔を落とす（成功で戻す）
+var SYNC_VISIBLE_GAP_MS=30*1000;       // 画面に戻った時の最短間隔（切替の連打で何度も取りに行かない）
+var _syncPollAt=0,_syncPollBusy=false,_syncPollFails=0,_syncPollBound=false;
+function _syncPollDue(){
+  var gap=(_syncPollFails>=SYNC_POLL_FAIL_MAX)?SYNC_POLL_BACKOFF_MS:SYNC_POLL_MS;
+  return Date.now()-_syncPollAt>=gap;
+}
+/* force=true は「画面に戻った」等の即時取得。間隔の判定だけを飛ばし、他の抑止条件は同じ。 */
+function _syncPollTick(force){
+  if(!apiUrl||_syncPollBusy)return;
+  if(document.visibilityState!=='visible')return;  // 画面が消えている端末では回さない
+  if(_locked||_autoLockBusy)return;                // 自動ロック中（無操作が続いた端末）は回さない
+  if(_syncInFlight)return;                         // 起動時・手動・自動ロック判定の同期が進行中＝次の回へ
+  if(document.querySelector('.mo.on'))return;      // 記録・予定・詳細などのモーダルを開いている間は回さない
+  var ld=$('ldOv');if(ld&&ld.classList.contains('on'))return;
+  if(!force&&!_syncPollDue())return;
+  _syncPollAt=Date.now();_syncPollBusy=true;
+  var p;
+  try{p=syncFromAPI(false,{quiet:true})}catch(e){_syncPollBusy=false;return}
+  Promise.resolve(p).then(function(ok){
+    _syncPollBusy=false;
+    if(ok!==true){_syncPollFails++;return}
+    _syncPollFails=0;
+    try{buildResSel()}catch(e){}                   // 🔄更新（refreshView）と同じく入力欄の名簿も揃える
+    /* ★表示中の画面を描き直す。syncFromAPI は取り込むだけで画面に触らない（手動の🔄更新＝refreshView も
+       同期のあとに自分で renderBoard/renderTL を呼んでいる）。ここを省くと、記録は手元に届いているのに
+       一覧の「最終日時・経過時間・本日回数」が古いまま＝現場には届いていないのと同じになる。 */
+    if(_locked)return;
+    var scTl=$('sc-tl'), scBd=$('sc-board');
+    // 時系列は横スクロールの位置を保つ描き直しに差し替える（従来の _tlAutoSync と同じ配慮）
+    if(scTl&&scTl.classList.contains('on')){try{tlRenderKeepScroll()}catch(e){}}
+    else if(scBd&&scBd.classList.contains('on')){try{renderBoard()}catch(e){}}
+  },function(){_syncPollBusy=false;_syncPollFails++});
+}
+/* 未送信キューの追い読み。再送の契機が「同期の成功時・次の書き込み・自動ロック判定」しか無く、
+   サーバーが一時的に不調だと送れていない記録が端末に溜まったままになる（その端末にだけ📤未送信が出る）。 */
+function _unsentPollTick(){
+  if(!apiUrl||_locked||_autoLockBusy)return;
+  if(document.visibilityState!=='visible')return;
+  try{
+    if(typeof _unsentCount==='function'&&_unsentCount()>0&&typeof flushPendingQueue==='function')flushPendingQueue();
+  }catch(e){}
+}
+function setupSyncPoll(){
+  if(_syncPollBound)return;                        // 二重登録しない（タイマーは1本）
+  _syncPollBound=true;
+  _syncPollAt=Date.now();                          // 起動時の同期の直後に重ねて取りに行かない
+  setInterval(function(){_syncPollTick();_unsentPollTick()},TL_TICK_MS);
+  /* 画面に戻った瞬間に取りに行く＝タブレットを手に取った時点で最新になる。
+     直前の取得から SYNC_VISIBLE_GAP_MS 未満なら何もしない（画面の切替を繰り返しても叩かない）。 */
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState!=='visible')return;
+    if(Date.now()-_syncPollAt<SYNC_VISIBLE_GAP_MS)return;
+    _syncPollTick(true);
+    _unsentPollTick();
+  });
 }
 function renderTL(){const date=$('tlDate').value||today();
   const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
@@ -7010,8 +7059,11 @@ function init(){
   /* 名簿の追い読みタイマーを起動（凍結仕様S3）。apiUrl 未設定でも起動してよい＝
      tick 側で未接続を判定するため、後からURLを保存した端末も再読み込み無しで効き始める */
   if(typeof setupMasterRosterPoll==='function')setupMasterRosterPoll();
-  /* 時系列の定期更新（60秒・超過の再判定と縦線／5分ごとの静かな差分同期）。条件は tick 側で判定する */
+  /* 時系列の表示更新（60秒・超過の再判定と現在時刻線）。条件は tick 側で判定する */
   if(typeof setupTlTick==='function')setupTlTick();
+  /* 記録の追い読み（画面に依存しない・5分ごと＋画面に戻った時）。apiUrl 未設定でも起動してよい＝
+     tick 側で未接続を判定するため、後からURLを保存した端末も再読み込み無しで効き始める */
+  if(typeof setupSyncPoll==='function')setupSyncPoll();
 
   /* 保存の実行本体。btnApiSave から直接、または「保存済みトークンを空欄で消す」確認を経て呼ばれる。
      従来の処理内容は変えていない（空欄＝旧GAS互換の未認証モードという仕様も維持）。 */
