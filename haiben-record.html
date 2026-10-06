@@ -2600,6 +2600,7 @@ function _persistWrite(json,compressed,gen){
     if(compressed!=null&&compressed.length<json.length)localStorage.setItem('hbcr_v2',COMPRESS_MAGIC+compressed);
     else _storageSet('hbcr_v2',json);
     if(gen>_pzWrittenGen)_pzWrittenGen=gen;
+    _pzSettle();
   }catch(e){
     _persistFail(e);
   }
@@ -2633,6 +2634,12 @@ function _pzFlushPending(){
   var g=gens[0];
   if(g&&g>_pzWrittenGen&&!_locked)_persistWrite(_pzPending[g],null,g);
 }
+/* 書き終えた世代までの圧縮待ちを片付ける。離脱時にその場で書いた後、凍結明けに見張りが
+   「返事が無い」と誤って Worker を見限らないように（後から届く結果は json が無いので捨てられる） */
+function _pzSettle(){
+  Object.keys(_pzPending).forEach(function(k){if(Number(k)<=_pzWrittenGen)delete _pzPending[k]});
+  if(!Object.keys(_pzPending).length&&_pzWatch!=null){clearTimeout(_pzWatch);_pzWatch=null}
+}
 /* 書き込みの失敗（容量不足など）。従来の _persistNow の catch と同じ処理 */
 function _persistFail(e){
   // 書けなかった内容を「書いた」扱いにしない（次の保存が「前回と同じ」で飛ばされないように）
@@ -2645,7 +2652,7 @@ function _persistFail(e){
     if(typeof pruneOldLocalRecords==='function'&&pruneOldLocalRecords()>0){
       var _j2=JSON.stringify(D);
       _storageSet('hbcr_v2',_j2);
-      _pzQueuedJson=_j2;_pzWrittenGen=_pzGen;   // これが最新＝圧縮中の古い世代は書かせない
+      _pzQueuedJson=_j2;_pzWrittenGen=_pzGen;_pzSettle();   // これが最新＝圧縮中の古い世代は書かせない
       _saved2=true;
     }
   }catch(e2){}
