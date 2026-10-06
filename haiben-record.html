@@ -1602,6 +1602,10 @@ async function apiGet(opts){
   opts=opts||{};
   var body={action:'getAll'};
   if(opts.since&&opts.since>0)body.since=opts.since;
+  /* 2026-10-07: heal===false の時だけ「自己修復窓（直近14日）を省いて」と頼む。旧 GAS は無視して従来の応答を返す */
+  if(opts.heal===false)body.heal=false;
+  /* 2026-10-07: 日を指定した取得（日別の照合で違った日だけ）。応答の形は差分と同じ・基準時刻は返らない */
+  if(Array.isArray(opts.days)&&opts.days.length)body={action:'getDays',days:opts.days.slice()};
   if(apiToken)body.token=apiToken; // 認証（GAS: HAIBEN_TOKEN）
   // GAS は毎回シート全行を読むため差分でも約8秒・全件は約15秒かかる（記録7500件時点・実測）。
   // 既定12秒では全件取得（初回・日付回復・「同期」ボタン）が必ずタイムアウトし、
@@ -1654,6 +1658,83 @@ function _needFullSync(){
   }catch(e){return true}
 }
 function _markFullSync(){try{localStorage.setItem(LAST_FULL_KEY,String(Date.now()))}catch(e){}}
+
+/* ════════ 日別の照合（2026-10-07・1日1回の全件取得の代わり） ════════
+   全件取得は全記録（約1.8万件・約4.4MB）を受け取り、GAS の読み取りに最大46秒かかっていた（10/06 実測）。
+   記録は月に約3,400件ずつ増えるため、いずれ端末の待ち上限60秒に当たり、照合が毎回失敗し続ける。
+   代わりにサーバーから「日ごとの 件数・id の要約値・最終更新時刻」（180日ぶんで数KB）をもらい、
+   手元で同じ要約を計算して、違う日だけを getDays で取り直す。取り込みは同期と同じ処理（syncFromAPI の日指定）。
+   ★要約の規則は GAS の digestResponse_ と同じにする（片方だけ変えると毎日すべての日が「違う」になる）:
+     日付は yyyy-MM-dd・id が「sys_」で始まる記録（職員の控え等）と日付の無い記録は数えない・
+     同じ日の同じ id は1件・id の要約値は FNV-1a 32ビットの和。
+   ★旧 GAS（digest を知らない）・通信の失敗の時は、従来の全件照合に戻る（照合の手段を失わない）。 */
+var HB_DIGEST_CHUNK=7;   // getDays 1回で取り直す日数（GAS の GETDAYS_MAX と同じ）
+var _verifyBusy=false;
+function _hbIdHash32(s){
+  var h=0x811c9dc5;
+  for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}
+  return h>>>0;
+}
+/* 照合の始まりの日＝端末に残す日数の始まり（pruneOldLocalRecords と同じ計算） */
+function _hbKeepFrom(){
+  var days=(D.cfg&&Number(D.cfg.localKeepDays))||180;
+  if(!(days>0)||days>=3650)days=180;
+  var d=new Date();d.setDate(d.getDate()-days);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _hbDigestLocal(from,recs){
+  var days={},seen={};
+  (recs||[]).forEach(function(r){
+    if(!r||r.id==null||r.id===''||/^sys_/.test(String(r.id)))return;
+    var d=String(r.date||'').slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d<from)return;
+    var sid=String(r.id),key=d+'|'+sid;
+    if(seen[key])return;seen[key]=1;
+    var t=new Date(r.updatedAt||r.createdAt||0).getTime();if(!(t>0))t=0;
+    var e=days[d]||(days[d]=[0,0,0]);
+    e[0]++;e[1]=(e[1]+_hbIdHash32(sid))>>>0;if(t>e[2])e[2]=t;
+  });
+  return days;
+}
+/* 違う日: 件数か id の要約値が違う日／サーバーの方が新しく直されている日（手元が新しいのは未送信の編集＝違いに数えない） */
+function _hbDigestDiff(srv,loc,from){
+  var all={},out=[];
+  Object.keys(srv||{}).forEach(function(d){all[d]=1});
+  Object.keys(loc||{}).forEach(function(d){all[d]=1});
+  Object.keys(all).sort().forEach(function(d){
+    if(d<from)return;
+    var a=srv[d],b=loc[d];
+    if(!a&&!b)return;
+    if(!a||!b){if((a&&a[0]>0)||(b&&b[0]>0))out.push(d);return}
+    if(a[0]!==b[0]||a[1]!==b[1]||a[2]>b[2])out.push(d);
+  });
+  return out;
+}
+async function verifyByDigest(){
+  if(!apiUrl||_dateHealNeeded||_verifyBusy)return false;
+  _verifyBusy=true;
+  try{
+    var from=_hbKeepFrom(),j=null;
+    try{
+      var body={action:'digest',from:from};if(apiToken)body.token=apiToken;
+      var r=await fetchTO(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),cache:'no-store'},30000);
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      j=await r.json();
+      if(!j||j.ok!==true||!j.days||typeof j.days!=='object')throw new Error((j&&j.error)||'digest 非対応');
+    }catch(e){
+      console.warn('[hbcr] 日別の照合ができない → 従来の全件照合へ:',e&&e.message);
+      return await syncFromAPI(false,{full:true,quiet:true});
+    }
+    var diff=_hbDigestDiff(j.days,_hbDigestLocal(from,D.records),from);
+    for(var i=0;i<diff.length;i+=HB_DIGEST_CHUNK){
+      var ok=await syncFromAPI(false,{quiet:true,days:diff.slice(i,i+HB_DIGEST_CHUNK)});
+      if(ok!==true)return false;   // 途中で失敗＝照合済みにしない（次の起動で改めて照合する）
+    }
+    _markFullSync();
+    if(diff.length)console.log('[hbcr] 日別の照合: 違った日',diff.length,'日を取り直しました');
+    return true;
+  }finally{_verifyBusy=false}
+}
 /* 日付TZ修正（2026-06-15・サーバー側で date を JST yyyy-MM-dd に正規化）に伴う一度きりの回復。
    旧サーバーは date を1日前で返していたため、端末ローカルに誤日付で取り込まれた記録が残る。
    差分同期では updatedAt 未変更の既存記録を取り直さないので、次回同期を一度だけ全件にして上書き是正する。 */
@@ -1691,6 +1772,8 @@ async function apiPost(action,data){
   return r.json()}
 
 var _syncInFlight=null, _syncInFlightFull=false;   // 後者＝進行中の同期が全件取得か
+var HEAL_INTERVAL_MS=60*60*1000;   // 自己修復窓（直近14日）つきで受け取る間隔（2026-10-07・本人承認「起動時と1時間ごと」）
+var _healOkAt=0;                   // 最後に自己修復窓つきで受け取れた時刻（メモリだけ＝起動して最初の同期は必ず窓つき）
 async function syncFromAPI(showLoader,opts){
   if(!apiUrl)return false;
   // 再入ガード：進行中の同期があれば結果Promiseを共有する。
@@ -1701,7 +1784,7 @@ async function syncFromAPI(showLoader,opts){
        相乗りすると全件の要求が差分の結果にすり替わり、全件の照合・送り直し・_markFullSync が走らない。
        進行中の完了（成功・失敗とも）を待ってから、要求どおりの opts（quiet 等も要求側）で改めて実行する。
        差分どうし・全件の進行中への相乗りは従来どおり。 */
-    if(opts&&opts.full&&!_syncInFlightFull){
+    if(opts&&((opts.full&&!_syncInFlightFull)||(Array.isArray(opts.days)&&opts.days.length))){
       var _prev=_syncInFlight;
       return _prev.then(function(){},function(){}).then(function(){return syncFromAPI(showLoader,opts)});
     }
@@ -1724,8 +1807,15 @@ async function syncFromAPI(showLoader,opts){
        未送信のローカル記録編集がサーバーの古い版で上書きされる。記録本体の消失につながる。 */
     var _schedHealing=_schedHealNeeded;
     var sinceTs=(opts.full||_healing)?0:_getLastSyncTs();
+    /* 日を指定した取得（日別の照合・2026-10-07）。取り込みは差分と同じ処理を通すが、
+       差分同期の基準時刻は動かさない・全件照合済みの印も付けない（照合の側がまとめて付ける） */
+    var _daysMode=Array.isArray(opts.days)&&opts.days.length>0&&!_healing;
+    var _daysSet={};if(_daysMode)opts.days.forEach(function(d){_daysSet[d]=1});
+    /* 自己修復窓（直近14日）を付けてもらうか（2026-10-07）。付けるのは 起動して最初の同期・前回から60分たった時・
+       opts.heal===true（🔄更新など）だけ。それ以外の追い読みは「変わった記録だけ」を受け取る（約490KB→数KB）。 */
+    var _wantHeal=(opts.heal===true)||(Date.now()-_healOkAt>=HEAL_INTERVAL_MS);
     var _fetchStartAt=Date.now();   // 取得開始（これより後に削除が完了した記録は、応答に削除前の行が載りうる）
-    var json=await apiGet({since:sinceTs});
+    var json=await apiGet(_daysMode?{days:opts.days}:{since:sinceTs,heal:(sinceTs>0&&!_wantHeal)?false:undefined});
     if(json.error)throw new Error(json.error);
     if(json.residents===undefined)throw new Error('レスポンス形式が不正です');
     var apiRes=Array.isArray(json.residents)?json.residents:[];
@@ -1825,7 +1915,7 @@ async function syncFromAPI(showLoader,opts){
     //    同一IDで両者に updatedAt があり、ローカルが厳密に新しい通常記録はローカル版を採用する。
     //    差分同期(delta)ではサーバーが最新を返す前提のため適用しない（回帰面を最小化）。
     //    どちらかに updatedAt が無ければ従来どおりサーバー優先。
-    var _fullFetch=(opts.full||_healing);
+    var _fullFetch=(opts.full||_healing||_daysMode);
     var localRecById={};
     if(_fullFetch){localRec.forEach(function(r){if(r&&r.id!=null&&!_isSnapshotRec(r))localRecById[r.id]=r});}
     function _recTs(rec){var v=rec&&(rec.updatedAt||rec.createdAt);if(!v)return 0;var t=new Date(v).getTime();return isNaN(t)?0:t;}
@@ -1888,6 +1978,20 @@ async function syncFromAPI(showLoader,opts){
     if(localSnap&&!mergedRec.some(_isSnapshotRec)){
       mergedRec.push(localSnap);
     }
+    /* ════════ 削除の印（2026-10-07） ════════
+       他の端末で消された記録は、サーバーの印（json.deleted）を見て手元からも外す。外した id は削除済みの控えにも入れ、
+       1日1回の照合で送り直さない（それまでは送り直してサーバーに戻していた＝10/07 に再現）。
+       ★送信待ちの編集がある記録は外さない（同時に別の端末で直していた入力を失わない側に倒す）。旧 GAS は deleted を返さない＝何もしない */
+    var _srvDelIds=Array.isArray(json.deleted)?json.deleted:[];
+    if(_srvDelIds.length){
+      var _dset={};
+      _srvDelIds.forEach(function(id){if(id!=null&&id!=='')_dset[String(id)]=1});
+      mergedRec=mergedRec.filter(function(r){
+        if(!r||r.id==null||!_dset[String(r.id)]||_isSnapshotRec(r))return true;
+        return !!_unsentEdit[String(r.id)];
+      });
+      _delRecAddMany(Object.keys(_dset).filter(function(k){return !_unsentEdit[k]}));
+    }
     D.residents=mergedRes;
     D.records=mergedRec;
     D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
@@ -1924,6 +2028,7 @@ async function syncFromAPI(showLoader,opts){
         var _cut=Date.now()-14*24*60*60*1000, _resend=[];
         (D.records||[]).forEach(function(r){
           if(!r||r.id==null||r.id==='')return;
+          if(_daysMode&&!_daysSet[String(r.date||'').slice(0,10)])return;   // 日指定の時は、その日の記録だけを見る
           if(_srvIds[String(r.id)])return;                 // サーバーに在る＝送り直し不要
           if(_isSnapshotRec(r))return;                     // 職員スナップショットは専用経路が持つ
           if(_seedRes[toNum(r.residentId)])return;         // サンプル入居者の記録は送らない
@@ -1994,9 +2099,10 @@ async function syncFromAPI(showLoader,opts){
        ★端末時計(Date.now())ではなくサーバーが返した読み取り開始時刻を使う（2026-09-08 修正）。
          詳細は _cursorFromResponse のコメント。0 が返る＝基準を作れないサーバーなので、
          次回は全件取得に落として取りこぼしを作らない。 */
-    _setLastSyncTs(_cursorFromResponse(json));
-    // 全件取得が成功したときだけ「最後に全件で照合した時刻」を更新する
-    if(_fullFetch)_markFullSync();
+    if(!_daysMode)_setLastSyncTs(_cursorFromResponse(json));   // 日指定の取得は「いつ時点」を表さない＝基準を動かさない
+    // 全件取得が成功したときだけ「最後に全件で照合した時刻」を更新する（日別の照合は verifyByDigest がまとめて付ける）
+    if(_fullFetch&&!_daysMode)_markFullSync();
+    if(!_daysMode&&(sinceTs===0||_wantHeal))_healOkAt=Date.now();   // 自己修復窓つきで受け取れた時刻
     // 日付TZ修正の回復が全件取得で完了したらフラグを立て、以後は通常の差分同期に戻す
     if(_healing){_dateHealNeeded=false;try{localStorage.setItem(DATEFIX_HEAL_KEY,'1')}catch(e){}}
     // ヘッダには時刻のみ表示（「(差分)」ラベルは現場画面で不要のため非表示。差分同期動作は維持）
@@ -2070,6 +2176,18 @@ function _delRecAdd(id){
   }catch(e){}
 }
 function _delRecHas(id){try{return _delRecLoad().indexOf(String(id))>=0}catch(e){return false}}
+/* まとめて控える（サーバーの削除の印を受けた時・2026-10-07）。1件ずつ読み書きしない */
+function _delRecAddMany(ids){
+  if(!ids||!ids.length)return;
+  try{
+    var a=_delRecLoad(),have={},n=0;
+    a.forEach(function(x){have[x]=1});
+    ids.forEach(function(id){var k=String(id);if(id!=null&&id!==''&&!have[k]){a.push(k);have[k]=1;n++}});
+    if(!n)return;
+    if(a.length>3000)a=a.slice(-3000);
+    localStorage.setItem(DELREC_KEY,JSON.stringify(a));
+  }catch(e){}
+}
 /* 最近サーバーで削除できた記録 id と削除の完了時刻（2026-09-26）。端末内のメモリだけに持ち、10分で期限切れ
    （localStorage には保存しない）。同期の取得（サーバーの読み取り）が削除の完了より先に始まっていると、
    応答に削除前の行が載り、送信待ちの削除（_unsentDel）からは既に外れているため端末に取り込み直されて残る。
@@ -3830,7 +3948,7 @@ async function refreshView(view){
   if(btn){btn.disabled=true;btn.textContent='⏳ 更新中';btn.style.opacity='0.6'}
   try{
     if(apiUrl){
-      var ok=await syncFromAPI(false);
+      var ok=await syncFromAPI(false,{heal:true});   // 職員が「足りない」と感じて押す所＝直近14日も取り直す（2026-10-07）
       if(ok){buildResSel();showToast('✅ 最新データを取得しました')}
       else{showToast('⚠️ API取得失敗 — ローカルデータを表示します')}
     }
@@ -7410,7 +7528,20 @@ function init(){
          （差分2〜7秒・1日1回の全件照合は最大46秒・10/06 実測）で、その間は画面を一切触れなかった。
          記録が1件も無い端末（初回・消去の直後）だけは従来どおり全画面で待つ（空の画面で迷わせない）。 */
     var _startupBlock=!(D&&Array.isArray(D.records)&&D.records.length>0);
-    syncFromAPI(_startupBlock,{full:_needFullSync()}).then(ok=>{
+    /* ★1日1回の全件照合は、手元に記録と差分の基準がある端末では「日別の照合」に替える（2026-10-07）。
+       起動の同期は差分（自己修復窓つき）で先に済ませ、照合は裏で続ける。記録が無い端末・基準が無い端末は従来どおり全件。 */
+    var _wantVerify=_needFullSync();
+    var _byDigest=_wantVerify&&!_startupBlock&&_getLastSyncTs()>0&&!_dateHealNeeded;
+    syncFromAPI(_startupBlock,{full:_wantVerify&&!_byDigest}).then(ok=>{
+      if(ok&&_byDigest){
+        verifyByDigest().then(function(v){
+          if(v!==true||_locked)return;
+          try{buildResSel()}catch(e){}
+          var sc2=document.querySelector('.scr.on');
+          if(sc2&&sc2.id==='sc-board')renderBoard();
+          if(sc2&&sc2.id==='sc-tl')tlRenderKeepScroll();
+        });
+      }
       if(ok){
         buildResSel();renderCfg();
         var sc=document.querySelector('.scr.on');

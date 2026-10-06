@@ -26,6 +26,20 @@ const RESIDENTS_CACHE_KEY = 'residents_v1';
  * 振り返れなかったため 3 → 14 日へ拡大（10日程度は確実に振り返れる状態を担保する）。 */
 const RECENT_DAYS = 14;
 
+/** ============ 削除の印（2026-10-07 追加） ============
+ * それまで削除は行を物理的に消すだけで、他の端末には「消えた」ことが伝わらなかった。
+ * 他の端末は記録を持ち続け、1日1回の全件照合で「サーバーに無い直近の記録」として送り直し、
+ * 消したはずの記録がサーバーに戻っていた（2026-10-07 にローカルの実物 GAS・端末2台で再現）。
+ * 削除のたびに Deleted シートへ「id・削除時刻・記録の日付」を1行足し、getAll／getDays が返す。
+ * ★氏名・記録の中身は入れない。90日より古い印は、行数が増えた時に書き込みのついでに間引く。 */
+const DEL_SHEET = 'Deleted';
+const DEL_DEFAULT_HEADERS = ['id','deletedAt','date'];
+const DEL_KEEP_DAYS = 90;
+const DEL_TRIM_AT = 3000;            // 印がこれを超えたら古いものを間引く
+const DELETED_CACHE_KEY = 'deleted_v1';
+const DIGEST_MAX_DAYS = 200;         // digest で返す日数の上限（端末は既定180日）
+const GETDAYS_MAX = 7;               // getDays 1回で受ける日数の上限
+
 /** ============ 認証（2026-07-18 追加） ============
  * スクリプトプロパティ HAIBEN_TOKEN に合言葉を設定すると、全リクエスト（doGet/doPost）で
  * トークン検証が有効になる。未設定の間は従来通り認証なしで動作する「猶予モード」。
@@ -307,6 +321,10 @@ function getAllResponse_(params){
   try{
     // Phase 2 B-2: ?since= があれば updatedAt で差分フィルタ
     const since = parseInt(params.since, 10) || 0;
+    /* heal=false（端末が明示した時だけ）＝自己修復窓を省き「since 以降に変わった記録」だけを返す（2026-10-07）。
+       5分ごとの追い読みが毎回 直近14日ぶん（約2,000件・約490KB）を受け取っていたため。
+       端末は起動時と1時間ごとに heal を付けずに送る＝自己修復は従来どおり働く。 */
+    const heal = !(params.heal === '0');
 
     /* ★同期カーソルは「シートを読み始める前」のサーバー時刻で取る（2026-09-08）。
        応答が端末に届くのは読み取りの数秒〜十数秒後で、その間に他端末が書いた記録は
@@ -315,7 +333,7 @@ function getAllResponse_(params){
     const readStart = Date.now();
 
     // 自己修復窓の下限日（JST の yyyy-MM-dd）。この日以降の記録は since に関係なく必ず返す。
-    const recentFrom = _ymdJst_(readStart - RECENT_DAYS * 86400000);
+    const recentFrom = heal ? _ymdJst_(readStart - RECENT_DAYS * 86400000) : null;
 
     // Records は Advanced Service でバルク高速読込（per-cell formatDate を排除）。失敗時は readSheet_ へフォールバック。
     // 差分要求のときは、まず「判定に使う列だけ」を読んで対象行を絞り込む（全19列の読み取りを避ける）。
@@ -330,7 +348,7 @@ function getAllResponse_(params){
       records = readRecords_();
       if(since > 0 && records.length > 0){
         const filtered = records.filter(function(r){
-          if(_isRecent_(r, recentFrom)) return true;   // 自己修復窓は無条件で返す
+          if(recentFrom && _isRecent_(r, recentFrom)) return true;   // 自己修復窓は無条件で返す（heal 時だけ）
           const ts = parseTs_(r.updatedAt) || parseTs_(r.tsUTC) || parseTs_(r.createdAt);
           if(!ts) return true; // タイムスタンプが取れない古いデータは念のため返す
           return ts >= since;
@@ -370,6 +388,9 @@ function getAllResponse_(params){
       syncCursor: readStart,
       /* 自己修復窓の宣言。端末はこれを見て「直近何日ぶんはサーバーが必ず返す」を知る。 */
       recentDays: RECENT_DAYS,
+      heal: heal,
+      /* 削除の印（2026-10-07）。差分なら since 以降、全件なら保持している全期間（90日）。旧版の端末は見ない。 */
+      deleted: readDeletedIds_(since),
       serverTime: new Date().getTime()
     });
   }catch(err){
@@ -434,8 +455,12 @@ function doPost(e){
   if(rb && typeof rb === 'object' && rb.action === 'getAll'){
     var gp = {action:'getAll'};
     if(rb.since !== null && rb.since !== undefined) gp.since = String(rb.since);
+    if(rb.heal === false) gp.heal = '0';   // 2026-10-07: 端末が明示した時だけ自己修復窓を省く（無指定＝従来どおり）
     return getAllResponse_(gp);
   }
+  /* ── 日別の照合（2026-10-07 追加）。どちらも読み取りだけ＝ロックの前で受ける ── */
+  if(rb && typeof rb === 'object' && rb.action === 'digest') return digestResponse_(rb);
+  if(rb && typeof rb === 'object' && rb.action === 'getDays') return getDaysResponse_(rb);
   // 複数端末の同時POSTによる読み-書き競合（lost update・行重複・Configヘッダ破壊）を防ぐため
   // スクリプトロックで書き込みを直列化する。既存の switch / レスポンス形状は不変（外側で包むだけ）。
   var lock = LockService.getScriptLock();
@@ -451,7 +476,7 @@ function doPost(e){
     switch(action){
       case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json(flushBeforeRelease_({ok:true}));
       case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json(flushBeforeRelease_({ok:true}));
-      case 'delRecord':  deleteRow_('Records',   body.id);                            return json(flushBeforeRelease_({ok:true}));
+      case 'delRecord':  deleteRecordMarked_(body.id);                              _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident, true); _afterFlush_.push(invalidateResidentsCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveSched':  return json(flushBeforeRelease_(saveSched_(body)));
       case 'delRes':     deleteRow_('Residents', body.id);                            _afterFlush_.push(invalidateResidentsCache_); return json(flushBeforeRelease_({ok:true}));
@@ -594,6 +619,198 @@ function readRecordsFast_(){
  *   「速いが取りこぼす」より「遅いが正しい」を必ず選ぶ（記録の欠落は静かに永久化するため）。
  * ★返す行の条件は全件読み側のフィルタと同一に保つこと（片方だけ直すと差分だけが壊れる）。
  */
+/** ============ 削除の印の書き込み・読み取り（2026-10-07） ============ */
+/** 記録を消して印を残す。行が見つからなくても印は残す（他の端末が持っている写しを送り直させない）。 */
+function deleteRecordMarked_(id){
+  if(id == null || id === '') return;
+  var dateYmd = '';
+  const sh = SS.getSheetByName('Records');
+  if(sh){
+    const last = sh.getLastRow();
+    if(last >= 2){
+      const headers = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(v=>String(v).trim());
+      const idCol = headers.findIndex(h=>h.toLowerCase()==='id');
+      const dateCol = headers.indexOf('date');
+      if(idCol >= 0){
+        const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
+        for(let i=0;i<ids.length;i++){
+          if(String(ids[i][0])===String(id)){
+            if(dateCol >= 0){
+              try{ dateYmd = _normYmd_(sh.getRange(i+2, dateCol+1).getValue()); }catch(e){ dateYmd = ''; }
+            }
+            _wrote_ = true;
+            sh.deleteRow(i+2);
+            break;
+          }
+        }
+      }
+    }
+  }
+  const ds = getOrCreateSheet_(DEL_SHEET, DEL_DEFAULT_HEADERS);
+  _wrote_ = true;
+  ds.appendRow([String(id), Date.now(), dateYmd]);
+  trimDeleted_(ds);
+}
+/** 印が増えすぎたら、90日より古いものを先頭から間引く（追記順＝古い順に並んでいる） */
+function trimDeleted_(ds){
+  try{
+    const last = ds.getLastRow();
+    if(last - 1 <= DEL_TRIM_AT) return;
+    const cut = Date.now() - DEL_KEEP_DAYS * 86400000;
+    const ts = ds.getRange(2, 2, last-1, 1).getValues();
+    let k = 0;
+    while(k < ts.length && Number(ts[k][0]) > 0 && Number(ts[k][0]) < cut) k++;
+    if(k > 0){ _wrote_ = true; ds.deleteRows(2, k); }
+  }catch(e){ console.warn('trimDeleted_ スキップ:', String(e)); }
+}
+/** 印の全件 [[id, deletedAt, date], ...]（90日以内）。読むたびにシートを開かないようキャッシュする。 */
+function readDeletedRows_(){
+  const cache = CacheService.getScriptCache();
+  try{ const c = cache.get(DELETED_CACHE_KEY); if(c) return JSON.parse(c); }catch(e){}
+  const ds = SS.getSheetByName(DEL_SHEET);
+  let rows = [];
+  if(ds){
+    const last = ds.getLastRow();
+    if(last >= 2){
+      const cut = Date.now() - DEL_KEEP_DAYS * 86400000;
+      rows = ds.getRange(2,1,last-1,3).getValues()
+        .filter(r => r[0] !== '' && r[0] != null && Number(r[1]) >= cut)
+        .map(r => [String(r[0]), Number(r[1]), String(r[2]||'')]);
+    }
+  }
+  try{ const s = JSON.stringify(rows); if(s.length <= 90000) cache.put(DELETED_CACHE_KEY, s, 300); }catch(e){}
+  return rows;
+}
+function invalidateDeletedCache_(){ try{ CacheService.getScriptCache().remove(DELETED_CACHE_KEY); }catch(e){} }
+/** sinceMs 以降に消された id（0＝保持している全期間）。読めなければ空（＝従来と同じ応答に倒す） */
+function readDeletedIds_(sinceMs){
+  try{
+    return readDeletedRows_().filter(r => !(sinceMs > 0) || r[1] >= sinceMs).map(r => r[0]);
+  }catch(e){ console.warn('readDeletedIds_ スキップ:', String(e)); return []; }
+}
+
+/** ============ 日別の照合（2026-10-07 追加） ============
+ * 1日1回の全件取得（全記録・約4.4MB・最大46秒）の代わり。
+ * digest: 日ごとに [件数（id で重複を除く）, id の要約値, 最終更新時刻] を返す（180日ぶんで数KB）。
+ * getDays: 指定した日の記録すべて（getAll の差分応答と同じ形）＋削除の印。
+ * ★端末側も同じ規則で要約を計算する（haiben-record.html の _hbDigestLocal）。規則を変える時は両方を同時に変える。
+ *   ・日付は getAll の出口と同じ正規化（JST の yyyy-MM-dd）
+ *   ・id が「sys_」で始まる行（職員の控え等）と、日付の無い行は数えない
+ *   ・id の要約値 = 各 id（文字列）の FNV-1a 32ビットの和（mod 2^32）＝並び順に依存しない */
+function _normYmd_(v){
+  if(v == null || v === '') return '';
+  if(typeof v === 'number') v = cellFromSerial_('date', v);
+  const d = new Date(v);
+  if(isNaN(d.getTime())) return (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : '';
+  const j = new Date(d.getTime() + 32400000); // +9h = JST（getAll の出口の正規化と同じ）
+  return j.getUTCFullYear()+'-'+('0'+(j.getUTCMonth()+1)).slice(-2)+'-'+('0'+j.getUTCDate()).slice(-2);
+}
+function _idHash32_(s){
+  let h = 0x811c9dc5;
+  for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+function _digestSkipId_(id){ return id == null || id === '' || /^sys_/.test(String(id)); }
+/** id・date・updatedAt・createdAt の4列だけを読む（全19列は読まない） */
+function _readDigestCols_(){
+  getOrCreateSheet_('Records', REC_DEFAULT_HEADERS);
+  const ssId = SS.getId();
+  const hres = Sheets.Spreadsheets.Values.get(ssId, 'Records!1:1', {valueRenderOption:'UNFORMATTED_VALUE'});
+  const headers = ((hres.values && hres.values[0]) || []).map(v => String(v).trim());
+  const want = ['id','date','updatedAt','createdAt'], idx = {}, ranges = [], order = [];
+  want.forEach(n => { const i = headers.indexOf(n); idx[n] = i; if(i >= 0){ order.push(n); ranges.push('Records!' + _colA1_(i+1) + ':' + _colA1_(i+1)); } });
+  if(idx.id < 0 || idx.date < 0) throw new Error('id/date 列がありません');
+  const bres = Sheets.Spreadsheets.Values.batchGet(ssId, {ranges: ranges, valueRenderOption:'UNFORMATTED_VALUE', dateTimeRenderOption:'SERIAL_NUMBER'});
+  const col = {};
+  (bres.valueRanges || []).forEach((vr, k) => { col[order[k]] = vr.values || []; });
+  let n = 0; order.forEach(k => { n = Math.max(n, col[k].length); });
+  const at = (name, r) => { const c = col[name]; if(!c) return ''; const row = c[r]; return (row && row.length) ? row[0] : ''; };
+  return {headers: headers, n: n, at: at};
+}
+function digestResponse_(rb){
+  try{
+    const from = (rb && typeof rb.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rb.from)) ? rb.from : _ymdJst_(Date.now() - 180*86400000);
+    const t0 = Date.now();
+    const cols = _readDigestCols_();
+    const days = {}, seen = {};
+    for(let r = 1; r < cols.n; r++){
+      const id = cols.at('id', r);
+      if(_digestSkipId_(id)) continue;
+      const d = _normYmd_(cellFromSerial_('date', cols.at('date', r)));
+      if(!d || d < from) continue;
+      const sid = String(id);
+      const key = d + '|' + sid;
+      if(seen[key]) continue;              // 同じ日の同じ id（重複行）は1件として数える
+      seen[key] = 1;
+      const ts = parseTs_(cellFromSerial_('updatedAt', cols.at('updatedAt', r))) || parseTs_(cellFromSerial_('createdAt', cols.at('createdAt', r)));
+      const e = days[d] || (days[d] = [0, 0, 0]);
+      e[0]++;
+      e[1] = (e[1] + _idHash32_(sid)) >>> 0;
+      if(ts > e[2]) e[2] = ts;
+    }
+    const keys = Object.keys(days).sort();
+    if(keys.length > DIGEST_MAX_DAYS) keys.splice(0, keys.length - DIGEST_MAX_DAYS).forEach(k => { delete days[k]; });
+    return json({ok:true, from: from, days: days, readMs: Date.now() - t0, serverTime: Date.now()});
+  }catch(err){
+    console.error('digest error:', err);
+    return json({ok:false, error:String(err)});
+  }
+}
+function getDaysResponse_(rb){
+  try{
+    let want = Array.isArray(rb && rb.days) ? rb.days.filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) : [];
+    if(!want.length) return json({ok:false, error:'days が空です'});
+    if(want.length > GETDAYS_MAX) return json({ok:false, error:'days は1回 '+GETDAYS_MAX+' 日まで'});
+    const set = {}; want.forEach(d => { set[d] = 1; });
+    const cols = _readDigestCols_();
+    const rows = [];
+    for(let r = 1; r < cols.n; r++){
+      const id = cols.at('id', r);
+      if(id == null || id === '') continue;
+      const d = _normYmd_(cellFromSerial_('date', cols.at('date', r)));
+      if(set[d]) rows.push(r + 1);       // シート行番号（1始まり・ヘッダーが1行目）
+    }
+    let records = [];
+    if(rows.length){
+      const rr = [];
+      let s0 = rows[0], p = rows[0];
+      for(let i = 1; i < rows.length; i++){ if(rows[i] === p + 1){ p = rows[i]; continue; } rr.push([s0, p]); s0 = p = rows[i]; }
+      rr.push([s0, p]);
+      if(rr.length > 200){
+        // まとまりが多すぎる＝全件を読んで絞る（行の読み取りを分けるほうが高くつく）
+        records = readRecords_().filter(r => r && set[_normYmd_(r.date)]);
+      }else{
+        const lastA1 = _colA1_(cols.headers.length);
+        const rres = Sheets.Spreadsheets.Values.batchGet(SS.getId(), {
+          ranges: rr.map(x => 'Records!A' + x[0] + ':' + lastA1 + x[1]),
+          valueRenderOption:'UNFORMATTED_VALUE', dateTimeRenderOption:'SERIAL_NUMBER'});
+        (rres.valueRanges || []).forEach(vr => {
+          (vr.values || []).forEach(row => {
+            const o = {};
+            for(let i = 0; i < cols.headers.length; i++){ const h = cols.headers[i]; if(h) o[h] = cellFromSerial_(h, row[i]); }
+            if(o.id != null && o.id !== '') records.push(o);
+          });
+        });
+      }
+    }
+    records.forEach(r => { if(r && r.date) r.date = _normYmd_(r.date) || r.date; });   // getAll の出口と同じ正規化
+    return json({ok:true,
+      residents: readResidentsCached_(),
+      records: records,
+      cfg: readConfig_(),
+      delta: true,
+      schedVer: 1,
+      days: want,
+      deleted: readDeletedIds_(0),
+      serverTime: Date.now()
+      /* ★syncCursor は返さない＝端末の差分同期の基準時刻を動かさない（日を指定した読み取りは「いつ時点」を表さない） */
+    });
+  }catch(err){
+    console.error('getDays error:', err);
+    return json({ok:false, error:String(err)});
+  }
+}
+
 function readRecordsWindow_(sinceMs, recentFromYmd){
   try{
     if(!(sinceMs > 0)) return null;                  // 全件要求は従来経路へ
@@ -615,7 +832,7 @@ function readRecordsWindow_(sinceMs, recentFromYmd){
 
     // ── 判定に使う列だけを列単位で取得
     var order = [], ranges = [];
-    [['id',cId],['date',cDate],['updatedAt',cUpd],['createdAt',cCre],['tsUTC',cTs]].forEach(function(p){
+    [['id',cId],['date',recentFromYmd ? cDate : -1],['updatedAt',cUpd],['createdAt',cCre],['tsUTC',cTs]].forEach(function(p){
       if(p[1] >= 0){
         order.push(p[0]);
         ranges.push('Records!' + _colA1_(p[1]+1) + ':' + _colA1_(p[1]+1));
@@ -648,7 +865,7 @@ function readRecordsWindow_(sinceMs, recentFromYmd){
       var idv = cellAt('id', r);
       if(idv == null || idv === '') continue;        // 空行は従来どおり捨てる
       var recent = false;
-      if(cDate >= 0){
+      if(cDate >= 0 && recentFromYmd){
         var dv = cellFromSerial_('date', cellAt('date', r));
         if(dv && String(dv) >= recentFromYmd) recent = true;
       }
