@@ -1299,7 +1299,10 @@ textarea{resize:vertical;min-height:76px}
    - 平均圧縮率: JSON データで 25〜35%（4 倍前後の容量拡張効果）
    - 1MB の圧縮/解凍は ~50ms（modernブラウザ）
 */
-var LZString=function(){var o=String.fromCharCode,n="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/=",e="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-$",t={},i={compressToBase64:function(o){if(null==o)return"";var r=i._compress(o,6,function(o){return n.charAt(o)});switch(r.length%4){default:case 0:return r;case 1:return r+"===";case 2:return r+"==";case 3:return r+"="}},decompressFromBase64:function(r){return null==r?"":""==r?null:i._decompress(r.length,32,function(e){return s(n,r.charAt(e))})},compressToUTF16:function(n){return null==n?"":i._compress(n,15,function(n){return o(n+32)})+" "},decompressFromUTF16:function(r){return null==r?"":""==r?null:i._decompress(r.length,16384,function(o){return r.charCodeAt(o)-32})},compress:function(r){return i._compress(r,16,function(r){return o(r)})},_compress:function(o,r,n){if(null==o)return"";var e,t,i,s={},u={},a="",p="",c="",l=2,f=3,h=2,d=[],m=0,v=0;for(i=0;i<o.length;i+=1)if(a=o.charAt(i),Object.prototype.hasOwnProperty.call(s,a)||(s[a]=f++,u[a]=!0),p=c+a,Object.prototype.hasOwnProperty.call(s,p))c=p;else{if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;h>e;e++)m<<=1,v==r-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;8>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;h>e;e++)m=m<<1|t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;16>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}l--,0==l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;h>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;l--,0==l&&(l=Math.pow(2,h),h++),s[p]=f++,c=String(a)}if(""!==c){if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;h>e;e++)m<<=1,v==r-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;8>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;h>e;e++)m=m<<1|t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;16>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}l--,0==l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;h>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;l--,0==l&&(l=Math.pow(2,h),h++)}for(t=2,e=0;h>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;for(;;){if(m<<=1,v==r-1){d.push(n(m));break}v++}return d.join("")},decompress:function(o){return null==o?"":""==o?null:i._decompress(o.length,32768,function(r){return o.charCodeAt(r)})},_decompress:function(n,e,t){var s,u,a,p,c,l,f,h=[],d=4,m=4,v=3,w="",b=[],g={val:t(0),position:e,index:1};for(s=0;3>s;s+=1)h[s]=s;for(a=0,c=Math.pow(2,2),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;switch(a){case 0:for(a=0,c=Math.pow(2,8),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;f=o(a);break;case 1:for(a=0,c=Math.pow(2,16),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;f=o(a);break;case 2:return""}for(h[3]=f,u=f,b.push(f);;){if(g.index>n)return"";for(a=0,c=Math.pow(2,v),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;switch(f=a){case 0:for(a=0,c=Math.pow(2,8),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;h[m++]=o(a),f=m-1,d--;break;case 1:for(a=0,c=Math.pow(2,16),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;h[m++]=o(a),f=m-1,d--;break;case 2:return b.join("")}if(0==d&&(d=Math.pow(2,v),v++),h[f])w=h[f];else{if(f!==m)return null;w=u+u.charAt(0)}b.push(w),h[m++]=u+w.charAt(0),d--,u=w,0==d&&(d=Math.pow(2,v),v++)}}};function s(o,r){if(!t[o]){t[o]={};for(var n=0;n<o.length;n++)t[o][o.charAt(n)]=n}return t[o][r]}return i}();
+/* 工場関数に包み直した（2026-10-07）。中身は 1.4.4 のまま1文字も変えていない。
+   _lzFactory.toString() から保存用の Worker（別スレッドの圧縮）を作るため。 */
+function _lzFactory(){var o=String.fromCharCode,n="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/=",e="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-$",t={},i={compressToBase64:function(o){if(null==o)return"";var r=i._compress(o,6,function(o){return n.charAt(o)});switch(r.length%4){default:case 0:return r;case 1:return r+"===";case 2:return r+"==";case 3:return r+"="}},decompressFromBase64:function(r){return null==r?"":""==r?null:i._decompress(r.length,32,function(e){return s(n,r.charAt(e))})},compressToUTF16:function(n){return null==n?"":i._compress(n,15,function(n){return o(n+32)})+" "},decompressFromUTF16:function(r){return null==r?"":""==r?null:i._decompress(r.length,16384,function(o){return r.charCodeAt(o)-32})},compress:function(r){return i._compress(r,16,function(r){return o(r)})},_compress:function(o,r,n){if(null==o)return"";var e,t,i,s={},u={},a="",p="",c="",l=2,f=3,h=2,d=[],m=0,v=0;for(i=0;i<o.length;i+=1)if(a=o.charAt(i),Object.prototype.hasOwnProperty.call(s,a)||(s[a]=f++,u[a]=!0),p=c+a,Object.prototype.hasOwnProperty.call(s,p))c=p;else{if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;h>e;e++)m<<=1,v==r-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;8>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;h>e;e++)m=m<<1|t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;16>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}l--,0==l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;h>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;l--,0==l&&(l=Math.pow(2,h),h++),s[p]=f++,c=String(a)}if(""!==c){if(Object.prototype.hasOwnProperty.call(u,c)){if(c.charCodeAt(0)<256){for(e=0;h>e;e++)m<<=1,v==r-1?(v=0,d.push(n(m)),m=0):v++;for(t=c.charCodeAt(0),e=0;8>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}else{for(t=1,e=0;h>e;e++)m=m<<1|t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t=0;for(t=c.charCodeAt(0),e=0;16>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1}l--,0==l&&(l=Math.pow(2,h),h++),delete u[c]}else for(t=s[c],e=0;h>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;l--,0==l&&(l=Math.pow(2,h),h++)}for(t=2,e=0;h>e;e++)m=m<<1|1&t,v==r-1?(v=0,d.push(n(m)),m=0):v++,t>>=1;for(;;){if(m<<=1,v==r-1){d.push(n(m));break}v++}return d.join("")},decompress:function(o){return null==o?"":""==o?null:i._decompress(o.length,32768,function(r){return o.charCodeAt(r)})},_decompress:function(n,e,t){var s,u,a,p,c,l,f,h=[],d=4,m=4,v=3,w="",b=[],g={val:t(0),position:e,index:1};for(s=0;3>s;s+=1)h[s]=s;for(a=0,c=Math.pow(2,2),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;switch(a){case 0:for(a=0,c=Math.pow(2,8),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;f=o(a);break;case 1:for(a=0,c=Math.pow(2,16),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;f=o(a);break;case 2:return""}for(h[3]=f,u=f,b.push(f);;){if(g.index>n)return"";for(a=0,c=Math.pow(2,v),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;switch(f=a){case 0:for(a=0,c=Math.pow(2,8),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;h[m++]=o(a),f=m-1,d--;break;case 1:for(a=0,c=Math.pow(2,16),l=1;l!=c;)p=g.val&g.position,g.position>>=1,0==g.position&&(g.position=e,g.val=t(g.index++)),a|=(p>0?1:0)*l,l<<=1;h[m++]=o(a),f=m-1,d--;break;case 2:return b.join("")}if(0==d&&(d=Math.pow(2,v),v++),h[f])w=h[f];else{if(f!==m)return null;w=u+u.charAt(0)}b.push(w),h[m++]=u+w.charAt(0),d--,u=w,0==d&&(d=Math.pow(2,v),v++)}}};function s(o,r){if(!t[o]){t[o]={};for(var n=0;n<o.length;n++)t[o][o.charAt(n)]=n}return t[o][r]}return i}
+var LZString=_lzFactory();
 
 /* 圧縮/復号ヘルパ — magic prefix で plain vs compressed を判別 */
 var COMPRESS_MAGIC='LZ1:';
@@ -2444,7 +2447,7 @@ function load(){
   try{s=_storageGet('hbcr_v2')}catch(e){console.error('[hbcr] localStorage読込失敗:',e)}
   var isNew=false;
   if(s){
-    try{D=JSON.parse(s)}
+    try{D=JSON.parse(s);_pzQueuedJson=s}   // 端末に書かれている中身＝これと同じなら次の保存は書かない
     catch(e){
       // 破損時はバックアップから復旧を試みる
       console.error('[hbcr] JSON解析失敗、バックアップから復旧を試行:',e);
@@ -2532,36 +2535,125 @@ function load(){
    ・書き込み前バックアップ（hbcr_v2_bak）は従来どおり維持 */
 var _saveTimer=null, _saveDirty=false;
 var _SAVE_DELAY_MS=300;
-function _persistNow(){
+/* ════════ 保存を軽くする（2026-10-07） ════════
+   実測（記録1.8万件・CPU 4分の1）: 保存1回 2.7秒のうち、ほぼ全部が端末内の全記録の LZ 圧縮だった。
+   しかも5分ごとの追い読みのたびに、何も変わっていなくても保存が走り、画面が3.5秒固まっていた。
+   ① 変化が無ければ書かない: JSON 化（19ms）した結果を前回書いた内容と比べ、同じなら圧縮も書き込みもしない
+   ② 圧縮を別スレッド（Worker）へ: 画面を止めずに圧縮し、終わった順に書く（新しい世代だけ・古い結果は捨てる）
+   ③ ページを離れる時（flushSave）は従来どおりその場で圧縮して書き切る（Worker の結果を待たない＝取りこぼさない）
+   ★Worker が作れない・失敗した時は従来の同期圧縮に戻る。書く中身・書く順（旧版を hbcr_v2_bak へ退避→新版）・
+     容量不足の救済は従来のまま。 */
+var _pzQueuedJson=null;   // 最後に書いた（または書くために圧縮へ回した）内容。同じなら書かない
+var _pzGen=0, _pzWrittenGen=0, _pzPending={};   // 圧縮の世代・書き終えた世代・圧縮中の世代→JSON
+var _pzWorker=null, _pzWorkerBroken=false;
+var PZ_WORKER_MIN=2048;   // これ未満は _storageSet も圧縮しない＝別スレッドに回す意味が無い
+var PZ_WORKER_TIMEOUT_MS=20000;   // これだけ待っても圧縮の結果が返らなければ Worker を見限ってその場で書く（端末での沈黙対策）
+var _pzWatch=null;
+function _pzArmWatch(){
+  if(_pzWatch!=null)clearTimeout(_pzWatch);
+  _pzWatch=setTimeout(function(){_pzWatch=null;if(Object.keys(_pzPending).length)_pzOnBroken()},PZ_WORKER_TIMEOUT_MS);
+}
+function _pzWorkerReady(){
+  if(_pzWorkerBroken)return false;
+  if(_pzWorker)return true;
+  try{
+    if(typeof Worker==='undefined'||typeof Blob==='undefined'||typeof URL==='undefined'||!URL.createObjectURL)throw new Error('Worker 非対応');
+    var src='var LZString=('+_lzFactory.toString()+')();'
+      +'onmessage=function(e){var d=e.data;try{postMessage({gen:d.gen,c:LZString.compressToUTF16(d.s)})}'
+      +'catch(err){postMessage({gen:d.gen,err:String(err&&err.message||err)})}};';
+    var url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+    _pzWorker=new Worker(url);
+    _pzWorker.onmessage=_pzOnDone;
+    _pzWorker.onerror=_pzOnBroken;
+    return true;
+  }catch(e){_pzWorkerBroken=true;_pzWorker=null;return false}
+}
+/* Worker から圧縮結果が届いた。書き終えた世代より新しい時だけ書く（離脱時の同期書き込みに追い越されていたら捨てる） */
+function _pzOnDone(ev){
+  var m=ev&&ev.data;if(!m||!m.gen)return;
+  var json=_pzPending[m.gen];
+  delete _pzPending[m.gen];
+  if(Object.keys(_pzPending).length)_pzArmWatch();else if(_pzWatch!=null){clearTimeout(_pzWatch);_pzWatch=null}
+  if(json===undefined||m.gen<=_pzWrittenGen)return;
+  if(_locked)return;                                   // 自動ロック後は書き戻さない（_persistNow と同じ）
+  if(m.err||typeof m.c!=='string'){_persistWrite(json,null,m.gen);return}   // 圧縮に失敗＝その場で圧縮して書く
+  _persistWrite(json,m.c,m.gen);
+}
+/* Worker が壊れた: 以後は同期圧縮。圧縮中だった一番新しい世代をその場で書く */
+function _pzOnBroken(){
+  _pzWorkerBroken=true;
+  if(_pzWatch!=null){clearTimeout(_pzWatch);_pzWatch=null}
+  try{if(_pzWorker)_pzWorker.terminate()}catch(e){}
+  _pzWorker=null;
+  var gens=Object.keys(_pzPending).map(Number).sort(function(a,b){return b-a});
+  var g=gens[0];
+  if(g&&g>_pzWrittenGen&&!_locked)_persistWrite(_pzPending[g],null,g);
+  _pzPending={};
+}
+/* 実際の書き込み。compressed が null ならその場で圧縮（従来の _storageSet）。
+   ★旧版を hbcr_v2_bak へ退避してから新版を書く順・容量不足の救済は従来どおり。 */
+function _persistWrite(json,compressed,gen){
+  try{
+    // 現状のデータを上書き前にバックアップとして保持（圧縮形式そのままコピー）
+    try{var prevRaw=localStorage.getItem('hbcr_v2');if(prevRaw)localStorage.setItem('hbcr_v2_bak',prevRaw)}catch(e){}
+    // Phase 1 A-2: LZString 圧縮で localStorage 容量を実効 4〜5 倍に拡張
+    if(compressed!=null&&compressed.length<json.length)localStorage.setItem('hbcr_v2',COMPRESS_MAGIC+compressed);
+    else _storageSet('hbcr_v2',json);
+    if(gen>_pzWrittenGen)_pzWrittenGen=gen;
+  }catch(e){
+    _persistFail(e);
+  }
+}
+function _persistNow(syncNow){
   _saveTimer=null;
   // 自動ロック後は disk へ書き戻さない。ロック直前の同期完了で走る save()（syncFromAPI 末尾）が
   // 消去済みの hbcr_v2 を個人情報ごと復活させるのを防ぐ。正本はサーバーにあり、再開時に読み直す。
   if(_locked)return;
   if(!_saveDirty)return;
   _saveDirty=false;
+  var json;
+  try{json=JSON.stringify(D)}catch(e){_persistFail(e);return}
+  if(json===_pzQueuedJson){
+    /* 中身が前回と同じ＝書かない。ただし離脱時に圧縮中の世代が残っていれば、それをその場で書き切る */
+    if(syncNow===true)_pzFlushPending();
+    return;
+  }
+  _pzQueuedJson=json;
+  var gen=++_pzGen;
+  if(syncNow!==true&&json.length>=PZ_WORKER_MIN&&_pzWorkerReady()){
+    _pzPending[gen]=json;
+    try{_pzWorker.postMessage({gen:gen,s:json});_pzArmWatch();return}
+    catch(e){delete _pzPending[gen];_pzOnBroken()}
+  }
+  _persistWrite(json,null,gen);   // 同期圧縮（従来の経路）。離脱時・Worker 不可・小さいデータ
+}
+/* 圧縮中の世代が残っていれば、一番新しいものをその場で書き切る（離脱時の取りこぼし防止） */
+function _pzFlushPending(){
+  var gens=Object.keys(_pzPending).map(Number).sort(function(a,b){return b-a});
+  var g=gens[0];
+  if(g&&g>_pzWrittenGen&&!_locked)_persistWrite(_pzPending[g],null,g);
+}
+/* 書き込みの失敗（容量不足など）。従来の _persistNow の catch と同じ処理 */
+function _persistFail(e){
+  // 書けなかった内容を「書いた」扱いにしない（次の保存が「前回と同じ」で飛ばされないように）
+  _pzQueuedJson=null;
+  // 容量超過(QuotaExceeded)の可能性：古いローカル記録を整理して「その場で一度だけ」再試行する。
+  // 離脱時(flushSave→_persistNow)は後続の save() が無く再試行機会が無いため、ここで救済しないと
+  // 直前の記録が失われうる。サーバーは全期間を保持しているためローカルの古い記録削除は安全。
+  var _saved2=false;
   try{
-    var json=JSON.stringify(D);
-    // 現状のデータを上書き前にバックアップとして保持（圧縮形式そのままコピー）
-    try{var prevRaw=localStorage.getItem('hbcr_v2');if(prevRaw)localStorage.setItem('hbcr_v2_bak',prevRaw)}catch(e){}
-    // Phase 1 A-2: LZString 圧縮で localStorage 容量を実効 4〜5 倍に拡張
-    _storageSet('hbcr_v2',json);
-  }catch(e){
-    // 容量超過(QuotaExceeded)の可能性：古いローカル記録を整理して「その場で一度だけ」再試行する。
-    // 離脱時(flushSave→_persistNow)は後続の save() が無く再試行機会が無いため、ここで救済しないと
-    // 直前の記録が失われうる。サーバーは全期間を保持しているためローカルの古い記録削除は安全。
-    var _saved2=false;
-    try{
-      if(typeof pruneOldLocalRecords==='function'&&pruneOldLocalRecords()>0){
-        _storageSet('hbcr_v2',JSON.stringify(D));
-        _saved2=true;
-      }
-    }catch(e2){}
-    if(!_saved2){
-      console.error('[hbcr] 保存失敗:',e);
-      // 書き込み失敗時は dirty を戻し、次回フラッシュで再試行
-      _saveDirty=true;
-      try{showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'))}catch(e3){}
+    if(typeof pruneOldLocalRecords==='function'&&pruneOldLocalRecords()>0){
+      var _j2=JSON.stringify(D);
+      _storageSet('hbcr_v2',_j2);
+      _pzQueuedJson=_j2;_pzWrittenGen=_pzGen;   // これが最新＝圧縮中の古い世代は書かせない
+      _saved2=true;
     }
+  }catch(e2){}
+  if(!_saved2){
+    console.error('[hbcr] 保存失敗:',e);
+    // 書き込み失敗時は dirty を戻し、次回フラッシュで再試行
+    _saveDirty=true;
+    try{showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'))}catch(e3){}
   }
 }
 function save(){
@@ -2571,10 +2663,12 @@ function save(){
   // 連続呼び出しを集約：保留中タイマがあれば再利用（多重 setTimeout を張らない）
   if(_saveTimer==null)_saveTimer=setTimeout(_persistNow,_SAVE_DELAY_MS);
 }
-/* 離脱前など、確実に書き込みたい場面での同期フラッシュ */
+/* 離脱前など、確実に書き込みたい場面での同期フラッシュ。
+   ★別スレッドの圧縮は待たない: 変更があればその場で圧縮して書き、圧縮中の世代が残っていればそれを書き切る */
 function flushSave(){
   if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}
-  if(_saveDirty)_persistNow();
+  if(_saveDirty)_persistNow(true);
+  else _pzFlushPending();
 }
 
 /* ════════ 共通入居者情報の自動取り込み（入居者マスタ → 当アプリ） ════════
@@ -2898,7 +2992,9 @@ async function syncMasterRoster(force){
    setInterval + document.hidden スキップ + 直近成功10秒スロットル + 失敗は次tick任せ。
    実際の取得頻度は C8 スロットル（50秒）とサーバー側60秒キャッシュが律速するため tick は軽量。
    名簿の追い読み専用＝記録同期（syncFromAPI）・mergeCommonResidents の適用経路には触れない。 */
-const MASTER_ROSTER_POLL_MS=60000;      // 60秒ごとに名簿を追い読み（可視タブのみ）
+/* ★60秒→5分（2026-10-07・本人承認）。1台あたりのサーバー呼び出しが約60回/時あり、記録の追い読み（5分）より多かった。
+   画面に戻った時の即1回・記録の同期に相乗りする取得（syncFromAPI 内・50秒スロットル）は従来どおり＝反映の遅れは最大5分。 */
+const MASTER_ROSTER_POLL_MS=5*60*1000;  // 5分ごとに名簿を追い読み（可視タブのみ）
 const MASTER_ROSTER_POLL_GAP_MS=10000;  // 直近成功から10秒未満はskip（タブ復帰直後の重複防止）
 var _mrPollBound=false;                 // 一度だけ束縛ガード（init 二重呼びでもタイマーは1本）
 /* 実行中フラグ（2026-08-01 追加）。C8スロットルは「取得**成功**時刻」だけを見るため、
@@ -4063,13 +4159,17 @@ var SYNC_POLL_MS=5*60*1000;            // 取得間隔。短くするならこ�
 var SYNC_POLL_BACKOFF_MS=15*60*1000;   // 連続失敗が続く間の間隔（落ちているサーバーを全端末で叩き続けない）
 var SYNC_POLL_FAIL_MAX=3;              // これだけ連続で失敗したら間隔を落とす（成功で戻す）
 var SYNC_VISIBLE_GAP_MS=30*1000;       // 画面に戻った時の最短間隔（切替の連打で何度も取りに行かない）
+var SYNC_RESUME_RETRY_MS=3000;         // 画面に戻った直後の取得が通信系で失敗したら、これだけ待って1回だけやり直す
 var _syncPollAt=0,_syncPollBusy=false,_syncPollFails=0,_syncPollBound=false;
 function _syncPollDue(){
   var gap=(_syncPollFails>=SYNC_POLL_FAIL_MAX)?SYNC_POLL_BACKOFF_MS:SYNC_POLL_MS;
   return Date.now()-_syncPollAt>=gap;
 }
-/* force=true は「画面に戻った」等の即時取得。間隔の判定だけを飛ばし、他の抑止条件は同じ。 */
-function _syncPollTick(force){
+/* force=true は「画面に戻った」等の即時取得。間隔の判定だけを飛ばし、他の抑止条件は同じ。
+   retryOnce=true は画面に戻った時だけ。失敗が通信系（通信不可・タイムアウト）なら3秒後に1回だけやり直す（2026-10-07）。
+   iPhone はスリープ明けの直後、Wi-Fi が戻る前に送ってしまい「Load failed」で落ちることが多い。
+   やり直しは1回だけ（やり直しの側は retryOnce を渡さない＝連鎖しない）。 */
+function _syncPollTick(force,retryOnce){
   if(!apiUrl||_syncPollBusy)return;
   if(document.visibilityState!=='visible')return;  // 画面が消えている端末では回さない
   if(_locked||_autoLockBusy)return;                // 自動ロック中（無操作が続いた端末）は回さない
@@ -4082,7 +4182,7 @@ function _syncPollTick(force){
   try{p=syncFromAPI(false,{quiet:true})}catch(e){_syncPollBusy=false;return}
   Promise.resolve(p).then(function(ok){
     _syncPollBusy=false;
-    if(ok!==true){_syncPollFails++;return}
+    if(ok!==true){_syncPollFails++;_syncPollRetrySoon(retryOnce);return}
     _syncPollFails=0;
     try{buildResSel()}catch(e){}                   // 🔄更新（refreshView）と同じく入力欄の名簿も揃える
     /* ★表示中の画面を描き直す。syncFromAPI は取り込むだけで画面に触らない（手動の🔄更新＝refreshView も
@@ -4093,7 +4193,12 @@ function _syncPollTick(force){
     // 時系列は横スクロールの位置を保つ描き直しに差し替える（従来の _tlAutoSync と同じ配慮）
     if(scTl&&scTl.classList.contains('on')){try{tlRenderKeepScroll()}catch(e){}}
     else if(scBd&&scBd.classList.contains('on')){try{renderBoard()}catch(e){}}
-  },function(){_syncPollBusy=false;_syncPollFails++});
+  },function(){_syncPollBusy=false;_syncPollFails++;_syncPollRetrySoon(retryOnce)});
+}
+function _syncPollRetrySoon(retryOnce){
+  if(retryOnce!==true)return;
+  try{if(typeof _netLastErTransient==='function'&&!_netLastErTransient())return}catch(e){return}
+  setTimeout(function(){_syncPollTick(true)},SYNC_RESUME_RETRY_MS);
 }
 /* 未送信キューの追い読み。再送の契機が「同期の成功時・次の書き込み・自動ロック判定」しか無く、
    サーバーが一時的に不調だと送れていない記録が端末に溜まったままになる（その端末にだけ📤未送信が出る）。 */
@@ -4114,7 +4219,7 @@ function setupSyncPoll(){
   document.addEventListener('visibilitychange',function(){
     if(document.visibilityState!=='visible')return;
     if(Date.now()-_syncPollAt<SYNC_VISIBLE_GAP_MS)return;
-    _syncPollTick(true);
+    _syncPollTick(true,true);
     _unsentPollTick();
   });
 }
@@ -4145,6 +4250,7 @@ var _netErAt=0;                        // 最後に通信に失敗した時刻
 var _netFailSince=0;                   // 失敗が続き始めた時刻（0＝失敗中でない）
 var _netUnsentSince=0;                 // 未送信が残り始めた時刻（0＝残っていない）
 var _netEvalTimer=null,_netOnlineTimer=null,_netBound=false;
+var _netLastErMsg='';                  // 最後の失敗の文言（画面復帰直後のやり直しの判定に使う・保存しない）
 
 /* 帯の判定（純粋関数）。s={now,apiUrl,locked,offline,unsent,unsentSince,okAt,erAt}
    返り値: null＝出さない／{kind:'offline'|'unsent'|'stale',text}。上の条件ほど優先する。 */
@@ -4206,11 +4312,15 @@ function _netOnStatus(st,msg,route){
       _netFailSince=0;_netOkAt=now;_netOkReal=now;
     }else if(st==='er'){
       if(!_netFailSince)_netFailSince=now;
-      _netErAt=now;
+      _netErAt=now;_netLastErMsg=msg;
       _netLogAdd('fail',route,_netClassify(msg));
     }
   }
   _netEvalSoon();
+}
+/* 最後の失敗が通信系（届かない・時間切れ）か。サーバーが断った（認証・HTTP・書き込みエラー）ならやり直しても同じ */
+function _netLastErTransient(){
+  return /^(通信不可|タイムアウト)/.test(_netClassify(_netLastErMsg));
 }
 /* 失敗の文言を定型の説明に寄せる（ブラウザごとの言い回しの違いを吸収・URL や長い数字は残さない） */
 function _netClassify(msg){
@@ -7287,8 +7397,13 @@ function init(){
     apiSetStatus('sy');
     /* 起動時の同期。★毎回の全件取得はしない（2026-09-08）。
        差分同期の基準がサーバー時計になり取りこぼさなくなったため、全件は 1 日 1 回の
-       照合で足りる。毎回全件にすると記録件数に比例して起動が待たされる。 */
-    syncFromAPI(true,{full:_needFullSync()}).then(ok=>{
+       照合で足りる。毎回全件にすると記録件数に比例して起動が待たされる。
+       ★端末に記録がある時は全画面の「取得中」を出さない（2026-10-07）。手元の記録ですぐ使え、
+         同期は裏で進む（ヘッダの🔄同期中・接続表示は従来どおり）。待たせていたのはサーバーの応答
+         （差分2〜7秒・1日1回の全件照合は最大46秒・10/06 実測）で、その間は画面を一切触れなかった。
+         記録が1件も無い端末（初回・消去の直後）だけは従来どおり全画面で待つ（空の画面で迷わせない）。 */
+    var _startupBlock=!(D&&Array.isArray(D.records)&&D.records.length>0);
+    syncFromAPI(_startupBlock,{full:_needFullSync()}).then(ok=>{
       if(ok){
         buildResSel();renderCfg();
         var sc=document.querySelector('.scr.on');
