@@ -474,8 +474,8 @@ function doPost(e){
     console.log('doPost action=', action);
     // 応答はいったん受け取り、書いていたら返す前（＝ロックを外す前）に確定させる（2026-09-23）
     switch(action){
-      case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json(flushBeforeRelease_({ok:true}));
-      case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  return json(flushBeforeRelease_({ok:true}));
+      case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  if(unmarkDeleted_(body.record && body.record.id)) _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
+      case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  if(unmarkDeleted_(body.record && body.record.id)) _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
       case 'delRecord':  deleteRecordMarked_(body.id);                              _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident, true); _afterFlush_.push(invalidateResidentsCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveSched':  return json(flushBeforeRelease_(saveSched_(body)));
@@ -650,6 +650,22 @@ function deleteRecordMarked_(id){
   _wrote_ = true;
   ds.appendRow([String(id), Date.now(), dateYmd]);
   trimDeleted_(ds);
+}
+/** 記録が書かれたら（作り直し・編集が削除に勝った時）、その id の削除の印を外す。
+ *  外さないと、他の端末は作り直された記録を受け取っても印に従って外し続け、見えなくなる。
+ *  外した時だけ true（＝印のキャッシュを無効化する）。印のシートが無い・該当が無ければ何も書かない。 */
+function unmarkDeleted_(id){
+  if(id == null || id === '') return false;
+  const ds = SS.getSheetByName(DEL_SHEET);
+  if(!ds) return false;
+  const last = ds.getLastRow();
+  if(last < 2) return false;
+  const ids = ds.getRange(2, 1, last-1, 1).getValues();
+  let n = 0;
+  for(let i = ids.length - 1; i >= 0; i--){          // 下から消す（行番号がずれない）
+    if(String(ids[i][0]) === String(id)){ _wrote_ = true; ds.deleteRow(i+2); n++; }
+  }
+  return n > 0;
 }
 /** 印が増えすぎたら、90日より古いものを先頭から間引く（追記順＝古い順に並んでいる） */
 function trimDeleted_(ds){
