@@ -165,6 +165,7 @@ textarea{resize:vertical;min-height:76px}
 .lax-tab.on{background:#7b1fa2;color:#fff;border-color:#4a148c;font-weight:700;box-shadow:0 0 0 2px #ce93d8 inset}
 .bd-hdr .rf-sp{margin-left:16px}
 .bd-w{overflow:auto;border-radius:var(--r);box-shadow:var(--sh);max-height:calc(100vh - 180px)}
+@media screen{.bd-w.box-fit{max-height:var(--fit-h)}}   /* 時系列の .tl-w と同じ（_fitScrollBox・2026-10-07） */
 .bt{width:100%;border-collapse:separate;border-spacing:0;background:#fff;min-width:680px}
 .bt th{background:#1565c0;color:#fff;padding:9px 10px;text-align:center;font-size: 0.6875rem;font-weight:700;white-space:nowrap;position:sticky;top:0;z-index:3}
 .bt thead tr:nth-child(2) th{top:35px;z-index:3}
@@ -205,8 +206,8 @@ textarea{resize:vertical;min-height:76px}
 /* timeline */
 .tl-w{overflow:auto;max-height:calc(100vh - 220px);border-radius:var(--r);box-shadow:var(--sh);background:#fff;
   position:relative}   /* 現在時刻の縦線（.tl-now）の基準。表と一緒に横スクロールする */
-/* 画面の高さに合わせた上限（tlFitHeight が付ける・2026-10-07）。画面表示の時だけ効かせる＝印刷は従来どおり */
-@media screen{.tl-w.tl-fit{max-height:var(--tl-fit-h)}}
+/* 画面の高さに合わせた上限（_fitScrollBox が付ける・2026-10-07）。画面表示の時だけ効かせる＝印刷は従来どおり */
+@media screen{.tl-w.box-fit{max-height:var(--fit-h)}}
 .tl-stop{overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:4px;background:#f5f5f5;border-radius:6px;border:1px solid var(--g2)}
 .tl-stop-inner{height:1px}
 .tl-t{border-collapse:separate;border-spacing:0;width:max-content}
@@ -4086,6 +4087,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     if(dAll.length===1)showDet(dAll[0].id);else showDetMulti(dAll);
   })});
   setupTopScrollFor('bdScrollTop','bdBox');
+  bdFitHeight();
 }
 
 /* 同期スクロールバー（タイムライン・一覧表示の上部） */
@@ -4103,45 +4105,52 @@ function setupTopScrollFor(topId,bottomId){
 }
 function setupTopScroll(){setupTopScrollFor('tlScrollTop','tlBox')}
 
-/* 時系列の表の高さを、ページを一番下まで送っても時刻欄（表の見出し）が上のヘッダの下に残る大きさに抑える（2026-10-07）。
+/* 時系列・一覧の表の高さを、ページを一番下まで送っても表の見出しが上に貼り付く部分の下に残る大きさに抑える
+   （時系列 2026-10-07・一覧 2026-10-07）。
    なぜ: CSS の 100vh は iPhone/iPad の Safari では「ツールバーを畳んだ時の高さ」で、縦画面では見える高さより大きい。
-   そのため表を下まで送るとページごと上へ流れ、時刻欄がヘッダの裏へ隠れていた。
+   さらに縦画面ではヘッダが2段になり、どちらの画面も日付の操作バー（.bd-hdr）が上に貼り付く。CSS の固定の引き算
+   （時系列 220px・一覧 180px）では足りず、表を下まで送るとページごと上へ流れて見出しが隠れていた。
    見える高さはツールバーを出した時の高さ（100svh）で測る＝スクロール中にツールバーが出入りしても表の高さが変わらない。
-   CSS の上限（100vh - 220px）より大きくはしない＝時刻欄が隠れない端末（PC など）の見た目は従来どおり。
-   上限は画面表示の時だけ効く（.tl-fit・@media screen）＝印刷の見た目は変えない。 */
-var _tlFitBound=false,_tlFitRaf=0,_tlSvhProbe=null;
-function _tlSmallVh(){
-  if(!_tlSvhProbe){
-    _tlSvhProbe=document.createElement('div');
-    _tlSvhProbe.setAttribute('aria-hidden','true');
-    _tlSvhProbe.style.cssText='position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:100vh;height:100svh';
-    document.body.appendChild(_tlSvhProbe);
+   CSS の上限より大きくはしない＝見出しが隠れない端末の見た目は従来どおり。
+   上限は画面表示の時だけ効く（.box-fit・@media screen）＝印刷の見た目は変えない。 */
+var _boxFitBound=false,_boxFitRaf=0,_svhProbe=null;
+function _smallVh(){
+  if(!_svhProbe){
+    _svhProbe=document.createElement('div');
+    _svhProbe.setAttribute('aria-hidden','true');
+    _svhProbe.style.cssText='position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:100vh;height:100svh';
+    document.body.appendChild(_svhProbe);
   }
-  var h=_tlSvhProbe.offsetHeight;
+  var h=_svhProbe.offsetHeight;
   return Math.min(h>0?h:Infinity,window.innerHeight||Infinity);   // svh 非対応（100vh に戻る）でも見える高さを超えない
 }
-function tlFitHeight(){
-  var box=$('tlBox');if(!box||!box.offsetParent)return;           // 時系列が表示中の時だけ
-  box.classList.remove('tl-fit');
+/* box: 縦にスクロールする表の箱／stickies: 表より上でページに貼り付く要素（ヘッダ・確認バー以外） */
+function _fitScrollBox(box,stickies){
+  if(!box||!box.offsetParent)return;                              // 表示中の画面の時だけ
+  box.classList.remove('box-fit');
   var cssMax=parseFloat(getComputedStyle(box).maxHeight);
   if(!(cssMax>0))return;
-  var top=0,hdr=document.querySelector('.hdr'),fb=document.querySelector('.frombar');
-  if(hdr)top=hdr.offsetHeight;
-  if(fb&&fb.offsetParent)top=Math.max(top,(parseFloat(getComputedStyle(fb).top)||0)+fb.offsetHeight);
+  var hdr=document.querySelector('.hdr'),top=hdr?hdr.offsetHeight:0;
+  [document.querySelector('.frombar')].concat(stickies||[]).forEach(function(el){
+    if(el&&el.offsetParent)top=Math.max(top,(parseFloat(getComputedStyle(el).top)||0)+el.offsetHeight);   // 貼り付いた時の下端
+  });
   var below=document.body.getBoundingClientRect().bottom-box.getBoundingClientRect().bottom;   // 表の下の余白（下メニューぶんの余白を含む）
-  var fit=Math.floor(_tlSmallVh()-top-below-4);
-  // 最低でも見出しと1行は見せる（表示200% など極端に狭い時。ここだけは時刻欄が少し隠れうる）
+  var fit=Math.floor(_smallVh()-top-below-4);
+  // 見出しと1行も入らないほど狭い時（iPhone の横・表示200% など）は縮めず従来の高さのまま（縮めても見出しは残せず、行が減るだけ）
   var th=box.querySelector('thead'),tr=box.querySelector('tbody tr');
   var floor=(th?th.offsetHeight:56)+(tr?tr.offsetHeight:40)+2;
-  if(fit<cssMax){box.style.setProperty('--tl-fit-h',Math.max(fit,floor)+'px');box.classList.add('tl-fit')}
-  if(!_tlFitBound){
-    _tlFitBound=true;
-    var again=function(){if(_tlFitRaf)return;_tlFitRaf=requestAnimationFrame(function(){_tlFitRaf=0;try{tlFitHeight()}catch(e){}})};
+  if(fit<cssMax&&fit>=floor){box.style.setProperty('--fit-h',fit+'px');box.classList.add('box-fit')}
+  if(!_boxFitBound){
+    _boxFitBound=true;
+    var again=function(){if(_boxFitRaf)return;_boxFitRaf=requestAnimationFrame(function(){_boxFitRaf=0;refitBoxes()})};
     window.addEventListener('resize',again);
     window.addEventListener('orientationchange',again);
     if(window.ResizeObserver&&hdr)new ResizeObserver(again).observe(hdr);   // ヘッダの折り返し（接続表示の長さ）が変わった時
   }
 }
+function tlFitHeight(){_fitScrollBox($('tlBox'),[document.querySelector('#sc-tl .bd-hdr')])}
+function bdFitHeight(){_fitScrollBox($('bdBox'),[document.querySelector('#sc-board .bd-hdr')])}
+function refitBoxes(){try{tlFitHeight()}catch(e){}try{bdFitHeight()}catch(e){}}
 
 /* ═══════════ TIMELINE (30分) ═══════════ */
 /* ── 排泄予定の超過判定（2026-09-26・代表承認）──
@@ -4470,7 +4479,7 @@ function _netEval(){
     if(m&&m.textContent!==st.text)m.textContent=st.text;   // 同じ文言なら書き換えない（読み上げを繰り返さない）
     el.setAttribute('data-kind',st.kind);
   }
-  if(el.hidden===on){el.hidden=!on;document.body.classList.toggle('net-warn-on',on);try{requestAnimationFrame(function(){try{tlFitHeight()}catch(e){}})}catch(e){}}   // 帯の出入りで表の下の余白が変わる（帯の高さが決まってから測る）
+  if(el.hidden===on){el.hidden=!on;document.body.classList.toggle('net-warn-on',on);try{requestAnimationFrame(refitBoxes)}catch(e){}}   // 帯の出入りで表の下の余白が変わる（帯の高さが決まってから測る）
   if(on)_netLayout();
 }
 /* 送信キュー・接続表示から呼ばれる。同じ瞬間の呼び出しは1回にまとめ、処理の途中ではなく後で判定する */
