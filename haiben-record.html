@@ -4149,7 +4149,7 @@ function _fitScrollBox(box,stickies){
   if(!(cssMax>0))return;
   var hdr=document.querySelector('.hdr'),top=hdr?hdr.offsetHeight:0;
   [document.querySelector('.frombar')].concat(stickies||[]).forEach(function(el){
-    if(el&&el.offsetParent)top=Math.max(top,(parseFloat(getComputedStyle(el).top)||0)+el.offsetHeight);   // 貼り付いた時の下端
+    if(el&&el.offsetParent&&getComputedStyle(el).position==='sticky')top=Math.max(top,(parseFloat(getComputedStyle(el).top)||0)+el.offsetHeight);   // 貼り付いた時の下端（貼り付けていない操作バーは数えない）
   });
   var fit=Math.floor(_smallVh()-top-_boxBelow(box)-4);
   // 見出しと1行も入らないほど狭い時（iPhone の横・表示200% など）は縮めず従来の高さのまま（縮めても見出しは残せず、行が減るだけ）
@@ -4164,7 +4164,9 @@ function refitBoxes(){try{tlFitHeight()}catch(e){}try{bdFitHeight()}catch(e){}}
    なぜ: CSS の top は 56px（確認バー）・52px/48px（操作バー）の固定値で、ヘッダの高さ（PC 約76px・iPhone 縦は2段で約120px）
    より小さく、貼り付いた時に上の方がヘッダの裏に隠れていた（日付の欄も隠れる）。
    操作バーは、下へずらすと表の見出しと1行も収まらなくなる時（iPhone の横の時系列・表示200% など）は
-   従来の位置のまま（ずらしても表がほとんど見えなくなるだけのため）。 */
+   貼り付けず、表と一緒に流す（2026-10-07 代表決定）。従来の位置（52px/48px）に戻すとヘッダと確認バーの裏に
+   潜って日付の欄に触れなくなり（表示200% で 178〜235px）、ずらすと表がほとんど見えなくなるため。
+   確認バーは取り違え防止のため常に貼り付ける。 */
 function layoutStickyTops(){
   var hdr=document.querySelector('.hdr');if(!hdr)return;
   var h=hdr.offsetHeight,fb=$('fromMaster');
@@ -4174,7 +4176,9 @@ function layoutStickyTops(){
     if(!el.offsetParent)return;                                   // 表示中の画面だけ（隠れた画面は高さが測れない）
     var box=el.parentElement&&el.parentElement.querySelector('.tl-w,.bd-w');
     var room=box?_smallVh()-(t+el.offsetHeight)-_boxBelow(box)-4:0;   // ずらした時に表に残る高さ
-    el.style.top=(box&&room>=_boxFloor(box))?t+'px':'';           // '' で CSS の従来の位置に戻る
+    var fit=!!box&&room>=_boxFloor(box);
+    el.style.top=fit?t+'px':'';                                   // '' で CSS の従来の値に戻る
+    el.style.position=fit?'':'static';                            // 収まらない時は貼り付けない（ヘッダの裏に潜らせない）
   });
 }
 /* ヘッダの高さ・確認バーの出入り・画面の大きさが変わったら、貼り付く位置と表の高さを測り直す */
