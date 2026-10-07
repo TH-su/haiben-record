@@ -205,6 +205,8 @@ textarea{resize:vertical;min-height:76px}
 /* timeline */
 .tl-w{overflow:auto;max-height:calc(100vh - 220px);border-radius:var(--r);box-shadow:var(--sh);background:#fff;
   position:relative}   /* 現在時刻の縦線（.tl-now）の基準。表と一緒に横スクロールする */
+/* 画面の高さに合わせた上限（tlFitHeight が付ける・2026-10-07）。画面表示の時だけ効かせる＝印刷は従来どおり */
+@media screen{.tl-w.tl-fit{max-height:var(--tl-fit-h)}}
 .tl-stop{overflow-x:auto;overflow-y:hidden;height:14px;margin-bottom:4px;background:#f5f5f5;border-radius:6px;border:1px solid var(--g2)}
 .tl-stop-inner{height:1px}
 .tl-t{border-collapse:separate;border-spacing:0;width:max-content}
@@ -4101,6 +4103,46 @@ function setupTopScrollFor(topId,bottomId){
 }
 function setupTopScroll(){setupTopScrollFor('tlScrollTop','tlBox')}
 
+/* 時系列の表の高さを、ページを一番下まで送っても時刻欄（表の見出し）が上のヘッダの下に残る大きさに抑える（2026-10-07）。
+   なぜ: CSS の 100vh は iPhone/iPad の Safari では「ツールバーを畳んだ時の高さ」で、縦画面では見える高さより大きい。
+   そのため表を下まで送るとページごと上へ流れ、時刻欄がヘッダの裏へ隠れていた。
+   見える高さはツールバーを出した時の高さ（100svh）で測る＝スクロール中にツールバーが出入りしても表の高さが変わらない。
+   CSS の上限（100vh - 220px）より大きくはしない＝時刻欄が隠れない端末（PC など）の見た目は従来どおり。
+   上限は画面表示の時だけ効く（.tl-fit・@media screen）＝印刷の見た目は変えない。 */
+var _tlFitBound=false,_tlFitRaf=0,_tlSvhProbe=null;
+function _tlSmallVh(){
+  if(!_tlSvhProbe){
+    _tlSvhProbe=document.createElement('div');
+    _tlSvhProbe.setAttribute('aria-hidden','true');
+    _tlSvhProbe.style.cssText='position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:100vh;height:100svh';
+    document.body.appendChild(_tlSvhProbe);
+  }
+  var h=_tlSvhProbe.offsetHeight;
+  return Math.min(h>0?h:Infinity,window.innerHeight||Infinity);   // svh 非対応（100vh に戻る）でも見える高さを超えない
+}
+function tlFitHeight(){
+  var box=$('tlBox');if(!box||!box.offsetParent)return;           // 時系列が表示中の時だけ
+  box.classList.remove('tl-fit');
+  var cssMax=parseFloat(getComputedStyle(box).maxHeight);
+  if(!(cssMax>0))return;
+  var top=0,hdr=document.querySelector('.hdr'),fb=document.querySelector('.frombar');
+  if(hdr)top=hdr.offsetHeight;
+  if(fb&&fb.offsetParent)top=Math.max(top,(parseFloat(getComputedStyle(fb).top)||0)+fb.offsetHeight);
+  var below=document.body.getBoundingClientRect().bottom-box.getBoundingClientRect().bottom;   // 表の下の余白（下メニューぶんの余白を含む）
+  var fit=Math.floor(_tlSmallVh()-top-below-4);
+  // 最低でも見出しと1行は見せる（表示200% など極端に狭い時。ここだけは時刻欄が少し隠れうる）
+  var th=box.querySelector('thead'),tr=box.querySelector('tbody tr');
+  var floor=(th?th.offsetHeight:56)+(tr?tr.offsetHeight:40)+2;
+  if(fit<cssMax){box.style.setProperty('--tl-fit-h',Math.max(fit,floor)+'px');box.classList.add('tl-fit')}
+  if(!_tlFitBound){
+    _tlFitBound=true;
+    var again=function(){if(_tlFitRaf)return;_tlFitRaf=requestAnimationFrame(function(){_tlFitRaf=0;try{tlFitHeight()}catch(e){}})};
+    window.addEventListener('resize',again);
+    window.addEventListener('orientationchange',again);
+    if(window.ResizeObserver&&hdr)new ResizeObserver(again).observe(hdr);   // ヘッダの折り返し（接続表示の長さ）が変わった時
+  }
+}
+
 /* ═══════════ TIMELINE (30分) ═══════════ */
 /* ── 排泄予定の超過判定（2026-09-26・代表承認）──
    予定時刻 t を過ぎても実施の記録が無い予定を返す純関数（DOM・現在時刻に触れない＝テストで切り出せる）。
@@ -4428,7 +4470,7 @@ function _netEval(){
     if(m&&m.textContent!==st.text)m.textContent=st.text;   // 同じ文言なら書き換えない（読み上げを繰り返さない）
     el.setAttribute('data-kind',st.kind);
   }
-  if(el.hidden===on){el.hidden=!on;document.body.classList.toggle('net-warn-on',on)}
+  if(el.hidden===on){el.hidden=!on;document.body.classList.toggle('net-warn-on',on);try{requestAnimationFrame(function(){try{tlFitHeight()}catch(e){}})}catch(e){}}   // 帯の出入りで表の下の余白が変わる（帯の高さが決まってから測る）
   if(on)_netLayout();
 }
 /* 送信キュー・接続表示から呼ばれる。同じ瞬間の呼び出しは1回にまとめ、処理の途中ではなく後で判定する */
@@ -4662,6 +4704,7 @@ function renderTL(){const date=$('tlDate').value||today();
   $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
   setupTopScroll();
   tlOvdSummary(tlIsToday,tlOvdN);
+  tlFitHeight();
   tlNowPlace();
   // セル/名前/5日ボタンのクリックは「イベント委譲」で処理する（tlBox へ一度だけ登録）。
   // 従来は毎描画で 48×入居者数（≒1,900個）のリスナ＋クロージャを生成していた。委譲で1個に集約。
