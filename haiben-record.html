@@ -44,6 +44,19 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
   color:#fff;border-radius:6px;padding:6px 12px;font-size: 0.8125rem;cursor:pointer;white-space:nowrap}
 .hdr-btn:hover{background:rgba(255,255,255,.28)}
 .hdr-btn:focus-visible{outline:2px solid #fff;outline-offset:1px}
+/* 幅390px未満（iPhone の表示200%・小さい画面）でヘッダが横にはみ出さないようにする（2026-10-06）。
+   収まらない時だけ折り返す（1段目＝アプリ名と日付、2段目以降＝入居者マスタ・時刻・接続の表示）。
+   収まる時は従来どおり1段のまま。390px以上と印刷にはこのブロックが効かない＝見た目は従来どおり。
+   接続の表示は画面上だけ時刻の後ろへ回す（読み上げの順は HTML のまま）。 */
+@media screen and (max-width:389.98px){
+  .hdr{flex-wrap:wrap;gap:6px 8px}
+  .hdr-r{flex-wrap:wrap;min-width:0;max-width:100%}
+  .hdr-r #apiBd{order:1;white-space:normal;flex-wrap:wrap;min-width:0;max-width:100%}
+}
+/* 表示200%相当（幅260px以下）では左右の余白を詰め、入居者マスタと時刻を同じ段に収める */
+@media screen and (max-width:259.98px){
+  .hdr{padding:8px 12px}
+}
 
 /* bottom nav */
 .bnav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--g2);
@@ -88,6 +101,11 @@ textarea{resize:vertical;min-height:76px}
 .type-btn.ss{background:var(--s-bg);border-color:var(--s);color:var(--s)}
 .type-btn.sb{background:#fce4ec;border-color:#e91e63;color:#e91e63}
 .type-btn.sn{background:#eceff1;border-color:#607d8b;color:#37474f}
+/* 表示200%相当（幅260px以下）では4つ横並びが入りきらず右へはみ出すため、2×2 に並べる（2026-10-06） */
+@media screen and (max-width:259.98px){
+  .type-sel{flex-wrap:wrap}
+  .type-btn{flex:1 1 calc(50% - 5px)}
+}
 .ev-d.n{background:#607d8b}
 
 /* quick buttons */
@@ -562,7 +580,7 @@ textarea{resize:vertical;min-height:76px}
 
 <header class="hdr">
   <div><h1>🏥 排泄ケア記録</h1><div class="hdr-sub" id="hDate"></div></div>
-  <div style="display:flex;align-items:center;gap:8px">
+  <div class="hdr-r" style="display:flex;align-items:center;gap:8px">
     <!-- アプリ間ジャンプ（daycare-roster.html と同形式）。
          ★このアプリだけ /haiben-record/ 配下で配信されるため相対パスでは care-tools に届かない。
            同一オリジン（th-su.github.io）なので ../care-tools/ で参照する。
