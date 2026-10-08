@@ -53,6 +53,16 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
   .hdr-r{flex-wrap:wrap;min-width:0;max-width:100%}
   .hdr-r #apiBd{order:1;white-space:normal;flex-wrap:wrap;min-width:0;max-width:100%}
 }
+/* 幅390px以上で、接続の表示に未送信の件数が付いて右側が長くなった時に、アプリ名と日付が1文字ずつ縦に
+   並んでヘッダが304pxまで伸びていた（390〜430px・2026-10-08）。アプリ名側に最小の幅を付け、右側が
+   1段に入りきらない時だけ右側を2段目へ回して右寄せにする（1段目＝アプリ名と日付）。
+   88px は、390px で接続中・接続エラー（未送信なし）が従来どおり1段のまま収まる幅（約98〜100px）より
+   少し小さい値。1段に収まる時は左側が残りの幅いっぱいに広がるだけで、見た目は従来どおり。印刷には効かない。 */
+@media screen and (min-width:390px){
+  .hdr{flex-wrap:wrap;row-gap:6px}
+  .hdr-l{flex:1 1 88px;min-width:88px}
+  .hdr-r{margin-left:auto}
+}
 /* 表示200%相当（幅260px以下）では左右の余白を詰め、入居者マスタと時刻を同じ段に収める */
 @media screen and (max-width:259.98px){
   .hdr{padding:8px 12px}
@@ -582,7 +592,7 @@ textarea{resize:vertical;min-height:76px}
 <body>
 
 <header class="hdr">
-  <div><h1>🏥 排泄ケア記録</h1><div class="hdr-sub" id="hDate"></div></div>
+  <div class="hdr-l"><h1>🏥 排泄ケア記録</h1><div class="hdr-sub" id="hDate"></div></div>
   <div class="hdr-r" style="display:flex;align-items:center;gap:8px">
     <!-- アプリ間ジャンプ（daycare-roster.html と同形式）。
          ★このアプリだけ /haiben-record/ 配下で配信されるため相対パスでは care-tools に届かない。
