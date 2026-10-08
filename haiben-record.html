@@ -167,6 +167,14 @@ textarea{resize:vertical;min-height:76px}
   position:sticky;top:52px;background:var(--g0);z-index:50;padding:8px 0;
   border-bottom:1px solid var(--g2)}
 @media(max-height:640px){.bd-hdr{top:48px;padding:6px 0}}
+/* 時系列の上部の要約（予定を過ぎて未記録の件数・最終取得）は1行のまま出すが、幅390px未満で1行に入りきらない時だけ
+   折り返す（表示200% の 195px で最大 76px 画面の外へ出ていた・2026-10-08）。入りきる時は従来どおり1行。
+   折り返し禁止は HTML の style にあるため !important で上書きする。390px以上と印刷には効かない。 */
+@media screen and (max-width:389.98px){#tlOvdSum{white-space:normal!important}}
+/* 設定の接続の表示（「接続URL: 」の後に URL）。URL には区切りが無く折り返せないため、
+   入りきらない時だけ URL の途中で折り返す（iPhone の縦で 48〜88px・195px で 283px 画面の外へ出ていた・2026-10-08）。
+   入りきる時（768px 以上など）は従来どおり。 */
+#apiStatus{overflow-wrap:break-word}
 .bd-hdr input[type="date"]{width:auto;min-height:44px;padding:6px 10px;font-size: 0.875rem;
   border:1px solid var(--g2);border-radius:8px;touch-action:manipulation}
 .dn-grp{display:inline-flex;gap:4px;flex-wrap:wrap}
