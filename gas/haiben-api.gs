@@ -42,15 +42,14 @@ const GETDAYS_MAX = 7;               // getDays 1回で受ける日数の上限
 
 /** ============ 認証（2026-07-18 追加） ============
  * スクリプトプロパティ HAIBEN_TOKEN に合言葉を設定すると、全リクエスト（doGet/doPost）で
- * トークン検証が有効になる。未設定の間は従来通り認証なしで動作する「猶予モード」。
- * → 新コードをデプロイ（挙動不変）→ 全端末でトークン入力 → 最後に HAIBEN_TOKEN を設定した
- *   瞬間から強制、という無停止移行ができる。※設定までは無認証のままなので移行は即日完了させる。
+ * トークン検証が有効になる。★未設定なら全リクエストを断る（2026-10-08 に「猶予モード」＝未設定なら認証なしで通す、をやめた。
+ *   本番は設定済みを確かめてから配信）。HAIBEN_TOKEN を消すと全端末が止まるので消さない。
  * トークンの受け取り: GET は ?token=、POST は JSON ボディの token（master.gs と同方式）。 */
 const TOKEN_PROP = 'HAIBEN_TOKEN';
 
 function _token(e){
   var exp = PropertiesService.getScriptProperties().getProperty(TOKEN_PROP);
-  if(!exp) return true; // 猶予モード: トークン未設定なら検証しない（従来互換）
+  if(!exp) return false; // 未設定は断る（2026-10-08 までは猶予モードで true＝検証しないだった）
   var got = (e && e.parameter && e.parameter.token) || '';
   if(!got && e && e.postData){
     try{ got = JSON.parse(e.postData.contents).token || ''; }catch(err){}
