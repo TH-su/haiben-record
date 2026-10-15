@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-GKvqBmdZclgt+4v8Ddcal1fqTlwZQ5+O48928g+cgRs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-XhO2SV0P2GQBicxWHMvnRNDHrplCiFpvMjKWFNnQj5k='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -3275,7 +3275,9 @@ function showToast(m){var e=$('toast');e.textContent=m;e.classList.add('on');set
    誤操作を防ぐためのもので、認証ではない（守りの本体は合言葉 HAIBEN_TOKEN）。未設定・読めない時は事務所PC扱い（今までの動き） */
 function hbIsField(){try{return localStorage.getItem('su_device_role')==='field'}catch(e){return false}}
 function hbFieldDeny(){if(!hbIsField())return false;try{showToast('この操作は事務所PCで行ってください（この端末は現場用です）')}catch(e){}return true}
-function hbApplyField_(){try{document.documentElement.classList.toggle('hb-field',hbIsField())}catch(e){}}
+function hbApplyField_(){try{var f=hbIsField();document.documentElement.classList.toggle('hb-field',f);
+  /* 開いたままの入居者の編集・入院の画面は、現場用に変わったら閉じる（保存の入口でも止めている） */
+  if(f)['mRes','mHosp'].forEach(function(id){var m=document.getElementById(id);if(m)m.classList.remove('on')})}catch(e){}}
 /* ════════ 入院管理（hospitalization） ════════
    各入居者の hospitalizations 配列に {id, admissionAt, dischargeAt} を保持
    - admissionAt: ISO-like 文字列 'YYYY-MM-DDTHH:MM'
@@ -6502,7 +6504,7 @@ function renderHospList(r){
     }).join('');
   // 退院登録ボタン
   $$('#mHospList .hosp-discharge').forEach(function(b){
-    b.addEventListener('click',function(){
+    b.addEventListener('click',function(){if(hbFieldDeny())return;
       var hid=this.dataset.hid;
       var hsp=r.hospitalizations.find(function(x){return x.id===hid});
       if(!hsp)return;
@@ -6530,7 +6532,7 @@ function renderHospList(r){
   });
   // 削除ボタン
   $$('#mHospList .hosp-del').forEach(function(b){
-    b.addEventListener('click',function(){
+    b.addEventListener('click',function(){if(hbFieldDeny())return;
       var hid=this.dataset.hid;
       customConfirm('この入院履歴を削除しますか？\n（記録データは保持されます）').then(function(ok){
         if(!ok)return;
@@ -6556,7 +6558,7 @@ async function delRes(id){if(hbFieldDeny())return;var r=D.residents.find(functio
   D.residents=D.residents.filter(function(x){return x.id!==id});save();
   apiPush('delRes',{id:id});
   renderCfg();buildResSel();showToast('🗑️ 削除しました')}
-function saveRes(){const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$('mRG').value;
+function saveRes(){if(hbFieldDeny())return;const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$('mRG').value;
   var ym=$('mRY')?$('mRY').value.trim():'';
   var st=$('mRS')?$('mRS').value:'active';
   if(!nm||!rm){showToast('⚠️ 氏名と居室番号を入力してください');return}
@@ -7508,7 +7510,7 @@ function init(){
   $('mResSave').addEventListener('click',saveRes);
   // 入院管理モーダル
   if($('mHospClose'))$('mHospClose').addEventListener('click',function(){$('mHosp').classList.remove('on');_hospEditRid=null});
-  if($('mHospAdd'))$('mHospAdd').addEventListener('click',function(){
+  if($('mHospAdd'))$('mHospAdd').addEventListener('click',function(){if(hbFieldDeny())return;
     if(_hospEditRid==null)return;
     var r=D.residents.find(function(x){return x.id===_hospEditRid});
     if(!r)return;
