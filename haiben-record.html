@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-tXtZDPFba5vgBkJBopXmRPTUE+tILLf5eNpAqG2915I='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-9i+udl0Z7obApKk9MLmXjj78yvHaFUFZbtuM23/fg9w='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -1336,7 +1336,7 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
       <button class="bn bs" id="btnImport">📤 データ復元</button>
     </div>
     <input type="file" id="impFile" accept=".json" style="display:none">
-    <div style="margin-top:10px;font-size: 0.75rem;color:var(--g5)">※データはブラウザのlocalStorageに保存されています。<br>定期的にバックアップを取ることを推奨します。</div>
+    <div style="margin-top:10px;font-size: 0.75rem;color:var(--g5)"><span id="dataStoreNote">※記録の写しは、この端末のブラウザの中に保存されています。</span><br>定期的にバックアップを取ることを推奨します。</div>
   </div>
   <!-- Google Sheets 連携 -->
   <div class="cd">
@@ -3505,6 +3505,7 @@ function _idbMigrate(){
     ['hbcr_v2','hbcr_v2_bak',BAK_OFF_KEY,KEEP_CAP_KEY].forEach(function(k){try{localStorage.removeItem(k)}catch(e){}});
     try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
     _idbPersist();                                   // 移し替えの間に変わった分を書く
+    try{renderStoreNote()}catch(e){}                 // 設定を開いていれば注意書きをすぐ直す
     return true;
   }).catch(function(){return fail()});
 }
@@ -6342,7 +6343,17 @@ async function deleteLaxCur(){
 }
 
 /* ═══════════ SETTINGS ═══════════ */
+/* 「データ管理」の注意書きに、この端末の実際の保存先を出す（2026-10-16。以前は localStorage と固定の文だった） */
+function renderStoreNote(){
+  var el=$('dataStoreNote');if(!el)return;
+  el.textContent=_idbMode
+    ?'※記録の写しは、この端末のブラウザの中（IndexedDB）に保存されています。正本はサーバー（スプレッドシート）にあります。'
+    :(_idbMigrating
+      ?'※記録の写しを、この端末のブラウザの中で IndexedDB へ移し替えています（数秒で終わります）。'
+      :'※記録の写しは、この端末のブラウザの中（localStorage）に保存されています。正本はサーバー（スプレッドシート）にあります。');
+}
 function renderCfg(){
+  renderStoreNote();
   var showInactive=$('cfgShowInactive')&&$('cfgShowInactive').checked;
   const all=[...D.residents].filter(isValidRes).filter(isUserRes).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   const actives=all.filter(function(r){return r.active!==false});
