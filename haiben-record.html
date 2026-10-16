@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-ty0YVV4+QThb3IbM4ucoAx9Fu92WbnM+g23lV/wnfjQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-tXtZDPFba5vgBkJBopXmRPTUE+tILLf5eNpAqG2915I='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -2901,6 +2901,7 @@ function _dropBak(){
    ★送信待ちの控えはサーバーから取り直せないので、間引く前に必ずこちら（取り直せる本体の写し）を先に削る（原則5） */
 function _freeLocalSpace(){
   if(_dropBak())return 'bak';
+  if(_idbMode)return false;                                // 本体は IndexedDB＝localStorage の本体を縮めて書く手は無い
   for(var i=0;i<KEEP_CAP_STEPS.length;i++){
     var step=KEEP_CAP_STEPS[i];
     if(_localKeepDays()<=step)continue;
@@ -2916,7 +2917,7 @@ function _freeLocalSpace(){
   }
   return false;
 }
-function _keepCap(){try{var v=parseInt(localStorage.getItem(KEEP_CAP_KEY),10);return(v>=KEEP_CAP_MIN)?v:0}catch(e){return 0}}
+function _keepCap(){if(typeof _idbMode!=='undefined'&&_idbMode)return 0;try{var v=parseInt(localStorage.getItem(KEEP_CAP_KEY),10);return(v>=KEEP_CAP_MIN)?v:0}catch(e){return 0}}
 /* この端末に置く日数（設定の値に、端末だけの上限をかけたもの） */
 function _localKeepDays(){
   var d=(D&&D.cfg&&Number(D.cfg.localKeepDays))||180;
@@ -2956,7 +2957,16 @@ function renderStorageUsage(){
       '予備の写し: '+(_bakOff()?'容量不足のため、この端末では作っていません':'作っています')+'<br>'+
       'この端末に置く記録: 直近'+_localKeepDays()+'日'+(cap&&cap<cfgD?'（容量不足のため、設定の'+cfgD+'日から縮めています）':'')+
     '</div>'+
-    (cap&&cap<cfgD?'<button class="bn bs" id="btnKeepCapReset" style="margin-top:8px;width:100%;min-height:44px">保持期間を設定の値に戻す</button>':'');
+    (cap&&cap<cfgD?'<button class="bn bs" id="btnKeepCapReset" style="margin-top:8px;width:100%;min-height:44px">保持期間を設定の値に戻す</button>':'')+
+    '<div id="storageIdb" style="font-size: 0.8125rem;color:var(--g7);margin-top:6px;line-height:1.6">'+
+      '記録の置き場: '+(_idbMode?'IndexedDB（'+escapeHtmlText(String(_idbMigratedAt||'').slice(0,10))+' に移し替え済み・'+(D.records||[]).length+'件）':(_idbMigrating?'IndexedDB へ移し替え中':'この端末の localStorage（IndexedDB を使えない、または移し替え前）'))+
+    '</div>';
+  try{
+    if(_idbMode&&navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(function(e){
+      var el=$('storageIdb');if(!el||!e)return;
+      el.insertAdjacentHTML('beforeend','<br>この端末で使っている量（IndexedDB 等の合計・目安）: '+(Number(e.usage||0)/1048576).toFixed(1)+' MB／上限 '+(Number(e.quota||0)/1048576).toFixed(0)+' MB');
+    });
+  }catch(e){}
 }
 function pruneOldLocalRecords(){
   var days=_localKeepDays();
@@ -3011,11 +3021,14 @@ function nextResId(){
   var next=Math.max(mx,_resIdHw())+1;
   _bumpResIdHw(next);
   return next}
-function load(){
+function load(pre){
   var s=null;
+  var isNew=false;
+  // IndexedDB から読んだ中身（_storeLoad が渡す）。その時は localStorage を読まない
+  if(pre&&typeof pre==='object'){D=pre}
+  else{
   // Phase 1 A-2: _storageGet が圧縮/非圧縮を自動判別（旧バージョン互換）
   try{s=_storageGet('hbcr_v2')}catch(e){console.error('[hbcr] localStorage読込失敗:',e)}
-  var isNew=false;
   if(s){
     try{D=JSON.parse(s);_pzQueuedJson=s}   // 端末に書かれている中身＝これと同じなら次の保存は書かない
     catch(e){
@@ -3042,6 +3055,7 @@ function load(){
         {id:3,name:'見本 さちこ（サンプル）',room:'103',gender:'女性',active:true,_seed:true},
         {id:4,name:'見本 いちろう（サンプル）',room:'104',gender:'男性',active:true,_seed:true},
         {id:5,name:'見本 せつこ（サンプル）',room:'105',gender:'女性',active:true,_seed:true}],records:[],cfg:null};
+  }
   }
   if(!D.cfg)D.cfg={urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3};
   if(!Number(D.cfg.localKeepDays))D.cfg.localKeepDays=180; // 端末保持期間の既定（日）
@@ -3163,6 +3177,7 @@ function _pzOnBroken(){
 /* 実際の書き込み。compressed が null ならその場で圧縮（従来の _storageSet）。
    ★旧版を hbcr_v2_bak へ退避してから新版を書く順・容量不足の救済は従来どおり。 */
 function _persistWrite(json,compressed,gen){
+  if(_storeHalt)return;
   function _writeMain(){
     // Phase 1 A-2: LZString 圧縮で localStorage 容量を実効 4〜5 倍に拡張
     if(compressed!=null&&compressed.length<json.length)localStorage.setItem('hbcr_v2',COMPRESS_MAGIC+compressed);
@@ -3188,9 +3203,11 @@ function _persistNow(syncNow){
   _saveTimer=null;
   // 自動ロック後は disk へ書き戻さない。ロック直前の同期完了で走る save()（syncFromAPI 末尾）が
   // 消去済みの hbcr_v2 を個人情報ごと復活させるのを防ぐ。正本はサーバーにあり、再開時に読み直す。
-  if(_locked)return;
+  if(_locked||_storeHalt)return;
   if(!_saveDirty)return;
   _saveDirty=false;
+  // IndexedDB の端末：変わった記録だけを書く（全件の JSON 化・圧縮をしない）。離脱時は書き終わっていない分を控えへ
+  if(_idbMode){if(syncNow===true)_idbJournalWrite();_idbPersist();return}
   var json;
   try{json=JSON.stringify(D)}catch(e){_persistFail(e);return}
   if(json===_pzQueuedJson){
@@ -3264,6 +3281,334 @@ function _warnStorage(e){
     else showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'));
   }catch(e3){}
 }
+/* ════════ IndexedDB の保存層（2026-10-16） ════════
+   端末の写しの本体を localStorage（約5MB・care-tools と共用）から IndexedDB へ移す。
+   ・記録は1件＝1行（keyPath:id）。入居者・設定・職員などはまとめて meta の 'state' に1行。
+   ・保存は「最後に書いた中身」と比べて、変わった記録だけを書き、消えた記録だけを消す（全件の圧縮をしない）
+   ・移し替え（localStorage→IndexedDB）は、書いて読み戻して id が一致してから「済み」の印を付け、
+     その後で localStorage の旧い写しを消す。途中で止まったら印は付かず、次の起動でやり直す（冪等）
+   ・IndexedDB が使えない端末は従来の localStorage の方式のまま（_idbMode=false）
+   ・画面を閉じる時（pagehide 等）は、まだ書き終わっていない分だけを localStorage の控え（hbcr_idb_journal）に
+     その場で書き、次の起動で IndexedDB へ反映する。未送信の記録は送信待ちの控え（hbcr_pq）にもある
+   ・自動ロックは IndexedDB の中身も消す（消せなければデータベースごと削除） */
+var IDB_NAME='hbcr_store', IDB_VER=1, IDB_REC='records', IDB_META='meta', IDB_JOURNAL_KEY='hbcr_idb_journal';
+/* 移し替え済みの印（localStorage・数値1個）。これがあるのに IndexedDB を使えない時は、端末に写しが無い＝
+   サーバーから全件を取り直す（空のまま差分だけ取って過去の記録が欠けるのを防ぐ・2026-10-16 レビュー指摘）。
+   IDB_STALE_KEY＝IndexedDB を使えずに動いた回があった印。次に IndexedDB を読めた時も全件を取り直す */
+var IDB_MIGRATED_KEY='hbcr_idb_migrated', IDB_STALE_KEY='hbcr_idb_stale';
+/* 控えはタブごとのキー（hbcr_idb_journal:<タブの印>）。ほかのタブの控えを消さない */
+var _idbTabId=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+var _idbJournalOwnKey=IDB_JOURNAL_KEY+':'+_idbTabId;
+var _storeHalt=false;
+var IDB_JOURNAL_MAX=500;   // 離脱時の控えに載せる記録の上限（件）      // 全データ削除の途中・ほかの画面がデータベースを消した後＝もう書かない
+var IDB_OPEN_TIMEOUT_MS=3000, IDB_READ_TIMEOUT_MS=8000;
+var _idb=null, _idbMode=false, _idbMigrating=false, _idbMigratedAt=null;
+var _idbPersisted={};        // String(id) → {key:元の id, j:最後に書いた記録の JSON}
+var _idbMetaJson=null;       // 最後に書いた meta（records 以外）の JSON
+var _idbWriting=false, _idbAgain=false, _idbMetaSavedAt=0;
+/* 記録の新しさ（updatedAt があればそれ、無ければ createdAt）。控えを重ねる時の比べに使う */
+function _idbRecTs(r){var v=r&&(r.updatedAt||r.createdAt);if(!v)return 0;var t=new Date(v).getTime();return isNaN(t)?0:t}
+function _storeOnClosedByOther(){
+  // ほかの画面でデータベースが消された・作り直された：この画面からはもう書かない（消したものを戻さない）
+  _storeHalt=true;_idb=null;_idbMode=false;
+  try{showToast('⚠️ ほかの画面で端末のデータが消されました。画面を読み込み直してください')}catch(e){}
+}
+function _idbOpen(){
+  return new Promise(function(res){
+    var done=false;function fin(v){if(done){if(v)try{v.close()}catch(e){}return}done=true;res(v)}
+    try{
+      if(typeof indexedDB==='undefined'||!indexedDB)return fin(null);
+      var rq=indexedDB.open(IDB_NAME,IDB_VER);
+      rq.onupgradeneeded=function(e){var db=e.target.result;
+        if(!db.objectStoreNames.contains(IDB_REC))db.createObjectStore(IDB_REC,{keyPath:'id'});
+        if(!db.objectStoreNames.contains(IDB_META))db.createObjectStore(IDB_META)};
+      rq.onsuccess=function(){var db=rq.result;db.onversionchange=function(){try{db.close()}catch(e){}if(_idb===db)_storeOnClosedByOther()};fin(db)};
+      rq.onerror=function(){fin(null)};
+    }catch(e){fin(null)}
+    setTimeout(function(){fin(null)},IDB_OPEN_TIMEOUT_MS);
+  });
+}
+function _idbReadAll(db){
+  return new Promise(function(res,rej){
+    var to=setTimeout(function(){rej(new Error('IndexedDB の読み込みが時間内に終わりません'))},IDB_READ_TIMEOUT_MS);
+    try{
+      var tx=db.transaction([IDB_REC,IDB_META],'readonly'),out={meta:null,records:[]};
+      var r1=tx.objectStore(IDB_META).get('state');r1.onsuccess=function(){out.meta=r1.result||null};
+      var r2=tx.objectStore(IDB_REC).getAll();r2.onsuccess=function(){out.records=r2.result||[]};
+      tx.oncomplete=function(){clearTimeout(to);res(out)};
+      tx.onerror=tx.onabort=function(){clearTimeout(to);rej(tx.error||new Error('IndexedDB の読み込みに失敗'))};
+    }catch(e){clearTimeout(to);rej(e)}
+  });
+}
+/* D のうち records 以外（入居者・設定・職員など） */
+function _idbMetaOf(d){var m={};Object.keys(d||{}).forEach(function(k){if(k!=='records')m[k]=d[k]});return m}
+/* 今の D と「最後に書いた中身」の差。puts＝書く記録、dels＝消す記録の元の id、meta＝変わっていれば JSON */
+function _idbDiff(){
+  var puts=[],dels=[],seen={};
+  (D.records||[]).forEach(function(r){
+    if(!r||r.id==null||r.id==='')return;
+    var k=String(r.id);if(seen[k])return;seen[k]=1;
+    var j=JSON.stringify(r),p=_idbPersisted[k];
+    if(!p||p.j!==j)puts.push({k:k,key:r.id,j:j});
+  });
+  Object.keys(_idbPersisted).forEach(function(k){if(!seen[k])dels.push(k)});
+  var mj=JSON.stringify(_idbMetaOf(D));
+  return{puts:puts,dels:dels,meta:(mj!==_idbMetaJson)?mj:null};
+}
+/* 差分を IndexedDB へ書く。書いている間に変わった分は、書き終わってからもう一度書く */
+function _idbPersist(){
+  if(!_idb||!_idbMode||_locked||_storeHalt)return;
+  if(_idbWriting){_idbAgain=true;return}
+  var df=_idbDiff();
+  if(!df.puts.length&&!df.dels.length&&df.meta==null){
+    // 書くものが無い＝重ねた控えの中身はすべて IndexedDB に入っている（または古くて採らなかった）。控えを片付ける
+    if(_idbJournalApplied.length)_idbJournalDropApplied();
+    _idbJournalClearIfClean();return;
+  }
+  _idbWriting=true;_idbAgain=false;
+  try{
+    var tx=_idb.transaction([IDB_REC,IDB_META],'readwrite'),rs=tx.objectStore(IDB_REC);
+    df.puts.forEach(function(x){rs.put(JSON.parse(x.j))});
+    df.dels.forEach(function(k){rs.delete(_idbPersisted[k].key)});
+    var savedAt=Date.now();
+    if(df.meta!=null)tx.objectStore(IDB_META).put({v:1,migratedAt:_idbMigratedAt,savedAt:savedAt,data:JSON.parse(df.meta)},'state');
+    tx.oncomplete=function(){
+      if(df.meta!=null)_idbMetaSavedAt=savedAt;
+      df.puts.forEach(function(x){_idbPersisted[x.k]={key:x.key,j:x.j}});
+      df.dels.forEach(function(k){delete _idbPersisted[k]});
+      if(df.meta!=null)_idbMetaJson=df.meta;
+      _idbWriting=false;
+      if(_idbJournalApplied.length)_idbJournalDropApplied();
+      if(_idbAgain)_idbPersist();else _idbJournalClearIfClean();
+    };
+    tx.onerror=tx.onabort=function(){
+      _idbWriting=false;_saveDirty=true;          // 書けなかった＝次の保存で書き直す
+      _warnStorage(tx.error||new Error('IndexedDB に書けません'));
+    };
+  }catch(e){_idbWriting=false;_saveDirty=true;_warnStorage(e)}
+}
+/* 画面を閉じる時：まだ書き終わっていない分だけを localStorage の控えへその場で書く（同期処理） */
+function _idbJournalWrite(){
+  if(!_idbMode||_locked||_storeHalt)return;
+  try{
+    var df=_idbDiff();
+    // 自分の古い控えを先に消す（新しい控えを書けなかった時に、古い中身が次の起動で重ならないように）
+    localStorage.removeItem(_idbJournalOwnKey);
+    if(!df.puts.length&&!df.dels.length&&df.meta==null)return;
+    /* 差分が大きい時（全件取得の直後に書いている途中など）は控えない。同期で受け取った記録はサーバーにあり、
+       この端末で入れた未送信の記録は送信待ちの控え（hbcr_pq）にある。全件を圧縮して同期処理で書くと、
+       裏へ回すたびに長く止まり、care-tools と共用の容量も圧迫する（2026-10-16 レビュー指摘） */
+    if(df.puts.length+df.dels.length>IDB_JOURNAL_MAX)return;
+    _storageSet(_idbJournalOwnKey,JSON.stringify({t:Date.now(),puts:df.puts.map(function(x){return JSON.parse(x.j)}),
+      dels:df.dels.map(function(k){return _idbPersisted[k].key}),meta:df.meta!=null?JSON.parse(df.meta):null}));
+  }catch(e){}   // 書けなくても、未送信の記録は送信待ちの控えに、送信済みの記録はサーバーにある
+}
+function _idbJournalClearIfClean(){
+  try{
+    if(localStorage.getItem(_idbJournalOwnKey)==null)return;   // 自分の控えだけを見る（ほかのタブの控えは消さない）
+    var df=_idbDiff();
+    if(!df.puts.length&&!df.dels.length&&df.meta==null)localStorage.removeItem(_idbJournalOwnKey);
+  }catch(e){}
+}
+/* 残っている控えのキー（旧形式の1本と、タブごとの分） */
+function _idbJournalKeys(){
+  var ks=[];
+  try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k===IDB_JOURNAL_KEY||(k&&k.indexOf(IDB_JOURNAL_KEY+':')===0))ks.push(k)}}catch(e){}
+  return ks;
+}
+/* 起動時：控えが残っていれば、読んだ中身（pre）へ重ねる。重ねたら true */
+/* 起動時：残っている控え（すべてのタブ分）を古い順に、読んだ中身（pre）へ重ねる。重ねたら true。
+   ★記録は「控えの方が新しい（updatedAt/createdAt が同じか新しい）」時だけ置き換える。消す指示は、
+     控えを書いた時刻より後に直された記録には効かせない。meta は、控えが IndexedDB の meta より新しい時だけ重ねる
+     （ほかのタブが後から書いた新しい中身を、古い控えで巻き戻さない・2026-10-16 レビュー指摘） */
+var _idbJournalApplied=[];
+function _idbJournalApply(pre,metaSavedAt){
+  var keys=_idbJournalKeys(),list=[];
+  keys.forEach(function(k){
+    var stored=null,raw=null;try{stored=localStorage.getItem(k);raw=_storageGet(k)}catch(e){}
+    var jn=null;try{jn=raw?JSON.parse(raw):null}catch(e){}
+    if(jn&&typeof jn==='object')list.push(jn);
+    _idbJournalApplied.push({k:k,v:stored});            // 読んだ時の中身（消す時に、その後書き直されていないかを比べる）
+  });
+  if(!list.length)return false;
+  list.sort(function(a,b){return(Number(a.t)||0)-(Number(b.t)||0)});
+  var byId={};(pre.records||[]).forEach(function(r,i){if(r&&r.id!=null)byId[String(r.id)]=i});
+  list.forEach(function(jn){
+    var jt=Number(jn.t)||0;
+    (Array.isArray(jn.dels)?jn.dels:[]).forEach(function(id){
+      var i=byId[String(id)];if(i==null||!pre.records[i])return;
+      if(_idbRecTs(pre.records[i])>jt)return;            // 控えより後に直された記録は消さない（消失より復活）
+      pre.records[i]=null;delete byId[String(id)];
+    });
+    (Array.isArray(jn.puts)?jn.puts:[]).forEach(function(r){
+      if(!r||r.id==null)return;var k=String(r.id),i=byId[k];
+      if(i!=null&&pre.records[i]){if(_idbRecTs(r)<_idbRecTs(pre.records[i]))return;pre.records[i]=r}
+      else{byId[k]=pre.records.length;pre.records.push(r)}
+    });
+    if(jn.meta&&typeof jn.meta==='object'&&jt>(Number(metaSavedAt)||0))
+      Object.keys(jn.meta).forEach(function(k){if(k!=='records')pre[k]=jn.meta[k]});
+  });
+  pre.records=pre.records.filter(Boolean);
+  return true;
+}
+/* 重ねた控えを、IndexedDB へ書き終えてから消す */
+function _idbJournalDropApplied(){
+  var ks=_idbJournalApplied;_idbJournalApplied=[];
+  // 読んだ後に、閉じかけのほかのタブが同じキーへ新しい控えを書いていたら消さない（次の起動で重ねる）
+  ks.forEach(function(x){try{if(localStorage.getItem(x.k)===x.v)localStorage.removeItem(x.k)}catch(e){}});
+}
+/* 移し替え：今の D（localStorage から読んだもの）を IndexedDB へ書き、読み戻して一致を確かめてから印を付ける */
+function _idbMigrate(){
+  if(!_idb||_idbMode||_idbMigrating)return Promise.resolve(false);
+  _idbMigrating=true;
+  var snap={},order=[];
+  (D.records||[]).forEach(function(r){if(!r||r.id==null||r.id==='')return;var k=String(r.id);if(!snap[k])order.push(k);snap[k]={key:r.id,j:JSON.stringify(r)}});
+  var mj=JSON.stringify(_idbMetaOf(D)),db=_idb;
+  function fail(){_idbMigrating=false;return false}
+  if(_storeHalt){_idbMigrating=false;return Promise.resolve(false)}
+  return new Promise(function(res){
+    try{
+      var tx=db.transaction([IDB_REC,IDB_META],'readwrite'),rs=tx.objectStore(IDB_REC);
+      rs.clear();
+      order.forEach(function(k){rs.put(JSON.parse(snap[k].j))});
+      tx.objectStore(IDB_META).put({v:1,migratedAt:null,data:JSON.parse(mj)},'state');
+      tx.oncomplete=function(){res(true)};tx.onerror=tx.onabort=function(){res(false)};
+    }catch(e){res(false)}
+  }).then(function(ok){
+    if(!ok)return false;
+    return new Promise(function(res){
+      try{
+        var rq=db.transaction([IDB_REC],'readonly').objectStore(IDB_REC).getAllKeys();
+        rq.onsuccess=function(){
+          var ks=rq.result||[],have={};ks.forEach(function(k){have[String(k)]=1});
+          res(ks.length===order.length&&order.every(function(k){return have[k]}));
+        };
+        rq.onerror=function(){res(false)};
+      }catch(e){res(false)}
+    });
+  }).then(function(same){
+    if(!same)return false;
+    var at=new Date().toISOString();
+    return new Promise(function(res){
+      try{
+        var tx=db.transaction([IDB_META],'readwrite');
+        tx.objectStore(IDB_META).put({v:1,migratedAt:at,data:JSON.parse(mj)},'state');
+        tx.oncomplete=function(){res(at)};tx.onerror=tx.onabort=function(){res(false)};
+      }catch(e){res(false)}
+    });
+  }).then(function(at){
+    if(!at||_locked)return fail();
+    _idbMode=true;_idbMigratedAt=at;_idbMigrating=false;
+    try{localStorage.setItem(IDB_MIGRATED_KEY,'1');localStorage.removeItem(IDB_STALE_KEY)}catch(e){}
+    _idbPersisted=snap;_idbMetaJson=mj;
+    // localStorage の旧い写しと、容量対策の印（IndexedDB では要らない）を片付ける
+    ['hbcr_v2','hbcr_v2_bak',BAK_OFF_KEY,KEEP_CAP_KEY].forEach(function(k){try{localStorage.removeItem(k)}catch(e){}});
+    try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+    _idbPersist();                                   // 移し替えの間に変わった分を書く
+    return true;
+  }).catch(function(){return fail()});
+}
+/* 起動時の読み込み。IndexedDB が使えれば IndexedDB から、使えなければ従来どおり localStorage から */
+/* 移し替え済みの端末で IndexedDB を使えない：端末に写しが無いので、同期の時刻を消して全件を取り直させる。
+   次に IndexedDB を読めた時も、その間の変化を取りこぼさないよう全件を取り直す（IDB_STALE_KEY） */
+function _idbForceFullSync(){
+  try{localStorage.removeItem(LAST_SYNC_KEY);localStorage.removeItem(LAST_FULL_KEY)}catch(e){}
+}
+function _storeLoad(){
+  var loaded=false;
+  function legacy(){
+    if(loaded)return;loaded=true;
+    var wasMigrated=false;try{wasMigrated=localStorage.getItem(IDB_MIGRATED_KEY)==='1'}catch(e){}
+    var hasLs=false;try{hasLs=localStorage.getItem('hbcr_v2')!=null}catch(e){}
+    if(wasMigrated){
+      try{localStorage.setItem(IDB_STALE_KEY,'1')}catch(e){}   // 次に IndexedDB を読めた時は全件を取り直す
+      // 端末に写しが無い時（初めてこの状態になった時）だけ全件を取り直す。2回目からは localStorage の写しがある
+      // （毎回全件にすると、全件取得の26〜46秒を起動のたびに払い続けるため・2026-10-16 レビュー指摘）
+      if(!hasLs){
+        _idbForceFullSync();
+        setTimeout(function(){try{showToast('⚠️ 端末の保存場所を開けませんでした。サーバーから全件を取り直します')}catch(e){}},600);
+      }
+    }
+    load();
+  }
+  return _idbOpen().then(function(db){
+    if(!db){legacy();return}
+    _idb=db;
+    return _idbReadAll(db).then(function(out){
+      if(out.meta&&out.meta.migratedAt){
+        _idbMode=true;_idbMigratedAt=out.meta.migratedAt;
+        _idbMetaSavedAt=Number(out.meta.savedAt)||0;
+        try{localStorage.setItem(IDB_MIGRATED_KEY,'1')}catch(e){}
+        // 前回 IndexedDB を使えずに動いた端末は、その間の変化を取りこぼさないよう全件を取り直す
+        try{if(localStorage.getItem(IDB_STALE_KEY)==='1'){_idbForceFullSync();localStorage.removeItem(IDB_STALE_KEY)}}catch(e){}
+        var pre=Object.assign({},out.meta.data||{});
+        /* 同じ記録が id の型違い（123 と "123"）で2行ある時は新しい方を残し、古い行は次の書き込みで消す */
+        var seen={},recs=[],dup=false;_idbPersisted={};
+        (out.records||[]).forEach(function(r){
+          if(!r||r.id==null)return;var k=String(r.id);
+          if(seen[k]!=null){dup=true;var j=seen[k];if(_idbRecTs(r)>=_idbRecTs(recs[j])){recs[j]=r}return}
+          seen[k]=recs.length;recs.push(r);
+        });
+        pre.records=recs;
+        recs.forEach(function(r){_idbPersisted[String(r.id)]={key:r.id,j:JSON.stringify(r)}});
+        if(dup)(out.records||[]).forEach(function(r){var k=String(r.id);if(r&&_idbPersisted[k]&&_idbPersisted[k].key!==r.id)_idbDupKeys.push(r.id)});
+        _idbMetaJson=JSON.stringify(out.meta.data||{});
+        var jr=_idbJournalApply(pre,_idbMetaSavedAt);
+        loaded=true;load(pre);
+        if(_idbDupKeys.length)_idbDropDupKeys();
+        if(jr){_saveDirty=true;_persistNow()}
+        // 移し替えの後に残った旧い写し（消す前に閉じられた等）を片付ける
+        try{localStorage.removeItem('hbcr_v2');localStorage.removeItem('hbcr_v2_bak')}catch(e){}
+      }else{
+        legacy();
+        _idbMigrate();                               // 待たない（画面はすぐ使える）
+      }
+    }).catch(function(e){
+      console.warn('[hbcr] IndexedDB を読めないため従来の保存方式で動きます:',e);
+      try{db.close()}catch(_){}
+      _idb=null;_idbMode=false;legacy();
+    });
+  }).catch(function(){legacy()});
+}
+/* 端末への書き込みが終わってから cb（IndexedDB は非同期。最大5秒待つ） */
+function _storeWhenWritten(cb){
+  var t0=Date.now();
+  (function poll(){
+    if(!_idbMode||(!_idbWriting&&!_saveDirty&&_saveTimer==null)||Date.now()-t0>5000)return setTimeout(cb,50);
+    if(_saveDirty&&!_idbWriting){_persistNow()}
+    setTimeout(poll,50);
+  })();
+}
+/* id の型違いで2行あった古い方の行を消す */
+var _idbDupKeys=[];
+function _idbDropDupKeys(){
+  var ks=_idbDupKeys;_idbDupKeys=[];
+  if(!_idb||!ks.length)return;
+  try{var tx=_idb.transaction([IDB_REC],'readwrite'),rs=tx.objectStore(IDB_REC);ks.forEach(function(k){rs.delete(k)})}catch(e){}
+}
+/* 自動ロック：IndexedDB の中身を消す。消せなければデータベースごと削除する */
+function _idbWipe(){
+  _idbJournalKeys().forEach(function(k){try{localStorage.removeItem(k)}catch(e){}});
+  _idbMode=false;_idbPersisted={};_idbMetaJson=null;
+  /* データベースごと消す（原則8）。開けていない時も中身が残っているかもしれないので同じく消す。
+     中身だけ clear すると、開いたままのほかのタブが「全件を書き済み」と思い込んで差分しか書かず、
+     一部の記録だけが「移し替え済み」として残っていた（2026-10-16 レビュー指摘）。データベースを消せば、
+     ほかのタブには versionchange が届いて書き込みを止める（_storeOnClosedByOther） */
+  _idbDestroy();
+}
+/* データベースごと削除（全データ削除・消去の失敗時）。終わったら cb */
+function _idbDestroy(cb){
+  var called=false;function fin(){if(!called){called=true;if(cb)cb()}}
+  try{if(_idb)_idb.close()}catch(e){}
+  _idb=null;_idbMode=false;
+  try{
+    if(typeof indexedDB==='undefined'||!indexedDB)return fin();
+    var rq=indexedDB.deleteDatabase(IDB_NAME);
+    rq.onsuccess=rq.onerror=rq.onblocked=function(){fin()};
+  }catch(e){fin()}
+  setTimeout(fin,2000);
+}
+
 function save(){
   // インデックス／参照キャッシュを即時失効（次回描画は再構築後の最新を反映）
   _recIdx=null;
@@ -3275,6 +3620,10 @@ function save(){
    ★別スレッドの圧縮は待たない: 変更があればその場で圧縮して書き、圧縮中の世代が残っていればそれを書き切る */
 function flushSave(){
   if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}
+  // IndexedDB の端末：変わっていて、または書いている途中の時だけ控えに残す。何も無ければ何もしない
+  // （アプリの切替のたびに全件を比べ直すと、2万件で0.1〜0.2秒かかっていた・2026-10-16 実測）
+  if(_storeHalt)return;
+  if(_idbMode){if(_locked)return;if(!_saveDirty&&!_idbWriting)return;_saveDirty=false;_idbJournalWrite();_idbPersist();return}
   if(_saveDirty)_persistNow(true);
   else _pzFlushPending();
 }
@@ -6211,7 +6560,7 @@ function restoreLinkBackup(){if(hbFieldDeny())return;
     if(!ok)return;
     D=o.data;save();flushSave();
     showToast('↩️ 戻しました。画面を読み込み直します');
-    setTimeout(function(){location.reload()},600);
+    _storeWhenWritten(function(){location.reload()});   // 書き終わる前に読み込み直すと、一部だけ戻ることがある
   });
 }
 
@@ -7877,7 +8226,11 @@ function hbApplyMasterIdParam(isRetry){
 
 /* ═══════════ INIT ═══════════ */
 function init(){
-  load();
+  // 端末の写しを読み終えてから従来の初期化へ進む（IndexedDB は非同期。概ね0.5秒以内）
+  try{ldShow('読み込み中...')}catch(e){}
+  _storeLoad().then(function(){try{ldHide()}catch(e){}_initRest()},function(){try{ldHide()}catch(e){}_initRest()});
+}
+function _initRest(){
   // 旧バージョン（999999単一行・特殊record）の遺留物を起動時に掃除
   if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
   /* 入居者マスタの共通情報を起動時に自動取り込み（連携キーが無ければ無処理）
@@ -8443,7 +8796,10 @@ function init(){
         _saveDirty=false;if(_saveTimer!=null){clearTimeout(_saveTimer);_saveTimer=null;}
         localStorage.removeItem('hbcr_v2');
         try{localStorage.removeItem(LINK_BAK_KEY)}catch(e){}  // 修復前バックアップも消す（氏名・記録を含む）
-        location.reload()})})});
+        _storeHalt=true;   // 消し終わるまでの間に保存が走って写しを書き戻さないように
+        _idbJournalKeys().forEach(function(k){try{localStorage.removeItem(k)}catch(e){}});
+        try{localStorage.removeItem(IDB_MIGRATED_KEY);localStorage.removeItem(IDB_STALE_KEY)}catch(e){}
+        _idbDestroy(function(){location.reload()})})})});   // IndexedDB の写しも消してから読み込み直す
 
   // 詳細モーダル
   $('mDetDel').addEventListener('click',function(){if(!curRecId)return;
@@ -8708,6 +9064,7 @@ function autoLockSafe(){
         if(rs[i]&&Array.isArray(rs[i].schedule)&&rs[i].schedule.length)return false;
       }
     }
+    if(typeof _idbMigrating!=='undefined'&&_idbMigrating)return false;   // IndexedDB への移し替えの途中
     if(!_getLastSyncTs())return false;             // 同期実績が無い
     return true;
   }catch(e){return false}
@@ -8730,6 +9087,8 @@ function autoLockWipe(){
   ['hbcr_v2','hbcr_v2_bak','hbcr_ls',
    MASTER_ROSTER_KEY,SYS_STAFF_SNAPSHOT_LOCAL_KEY,LAST_SYNC_KEY,LAST_FULL_KEY,WQ_KEY,LINK_BAK_KEY]
     .forEach(function(k){try{if(k)localStorage.removeItem(k)}catch(e){}});
+  _idbWipe();   // IndexedDB の写し（記録・氏名を含む）と離脱時の控えも消す（2026-10-16）
+  try{localStorage.removeItem(IDB_MIGRATED_KEY);localStorage.removeItem(IDB_STALE_KEY)}catch(e){}
 }
 
 /* 画面に出ている個人情報も伏せる。#mLock を不透明にしても、開いたままの他モーダル
