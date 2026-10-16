@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-4J5jwk5Pwtp4fu01TfEk31s5wHkvMS0WoFGhBtmQWjk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-ty0YVV4+QThb3IbM4ucoAx9Fu92WbnM+g23lV/wnfjQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -445,6 +445,7 @@ textarea{resize:vertical;min-height:76px}
 .tl-t.tl-compact .tl-c{width:auto;min-width:20px;height:40px;padding:0}
 .tl-t.tl-compact th.hr-top{min-width:20px !important;padding:4px 0}
 .tl-t.tl-compact .tl-nm{min-width:84px;padding:4px 6px}
+.tl-t.tl-compact .tl-c.sched::before{width:18px;height:18px;border-width:2px}
 .tl-t.tl-compact .tl-more{font-size: 0.625rem;font-weight:700;color:var(--g7)}
 .tl-t.tl-compact .ev-m{font-size: 0.75rem}
 .hx-sec{margin:0 0 10px;border:1px solid var(--g2);border-radius:10px;padding:6px 10px;background:#fff}
@@ -678,6 +679,220 @@ textarea{resize:vertical;min-height:76px}
   body.rp-printing .rp-brk{page-break-before:always;break-before:page}
   body.rp-printing .rp-meta{white-space:nowrap}   /* 紙は幅が決まっているので折り返さない */
 }
+
+/* ═══════════ 夜間の配色（2026-10-16・代表者の依頼） ═══════════
+   html に class="night" が付いた時だけ効く暗い配色。切替は JS（hbNightApply・自動＝21:00〜翌7:00）。
+   ★全体を @media screen の中に閉じる＝印刷には一切効かない（印刷の配色・レイアウトは従来どおり）。
+     このブロックの外に html.night の規則を書かないこと（tests/night.test.js が検査する）。
+   ★昼の規則は1つも書き換えていない。上書きは次の3段:
+     1. :root の変数を html.night で暗い値に置き換える（文字用の変数は明るく、地の変数は暗く）
+     2. CSS に直書きされた白地・薄い地・濃い文字を html.night の規則で覆う
+     3. HTML／JS が組み立てるインライン style の直書きは、属性セレクタ [style*="…"] ＋ !important で覆う
+        （JS 側の色は変えていない。色見本の .cd-dot / .sc-dot は意味のある色なので除外）
+   文字用の変数（--ng 等）は白文字の塗りにも使われているため、塗りに使う選択子（.br 等）は暗い塗りを明示する。 */
+@media screen{
+html.night{
+  color-scheme:dark;   /* select の一覧・日付の入力・スクロールバーも暗くする */
+  --pri:#0b57d0;--pri-l:#17305a;--pri-d:#0842a0;
+  --ok:#81c995;--ok-l:#152b1b;
+  --warn-bg:#3a2d10;--warn-tx:#ffb74d;
+  --ng:#ff8a80;--ng-l:#331616;
+  --u:#4fc3f7;--u-bg:#0f2c3b;
+  --s:#d7b49e;--s-bg:#33251d;
+  --g0:#111418;--g1:#262b31;--g2:#3a4048;--g3:#4a515a;
+  --g5:#a9b0b8;--g6:#b8bec5;--g7:#cfd4d9;--g9:#e8eaed;
+  --sh:0 1px 6px rgba(0,0,0,.5);
+  /* 夜間だけの補助: 地（カード）・地2（カード内の部品）・入力欄・モーダル・文字用の青 */
+  --nt-sf:#1b1f24;--nt-sf2:#242930;--nt-in:#15191e;--nt-md:#1e2329;--nt-pri-tx:#9ec1fa;
+}
+/* ボタン等は親の文字色を継がないため、明示の色を持たない部品だけ明るい文字にする（:where で詳細度0＝既存の規則が勝つ） */
+:where(html.night) :where(button,input,select,textarea){color:var(--g9)}
+
+/* ヘッダ・下部ナビ・確認バー */
+html.night .hdr{background:linear-gradient(135deg,#0a2a5e,#0b3f94)}
+html.night .frombar button{background:var(--nt-sf)}
+html.night .bnav{background:#181c21;box-shadow:0 -2px 10px rgba(0,0,0,.5)}
+html.night .bnav button.on{color:var(--nt-pri-tx)}
+
+/* カード・入力欄 */
+html.night .cd{background:var(--nt-sf)}
+html.night input[type="text"],html.night input[type="datetime-local"],html.night input[type="date"],
+html.night input[type="number"],html.night input[type="time"],html.night input[type="password"],
+html.night textarea,html.night select,html.night #sc-report input[type="month"]{background:var(--nt-in);color:var(--g9)}
+
+/* 入力画面の選択ボタン */
+html.night .type-btn,html.night .qb,html.night .cb,html.night .cons-b,html.night .src-b,html.night .res-tile,
+html.night .rp-tab,html.night .water-step,html.night .water-pre,html.night .staff-pick-grid .spg-b,
+html.night .staff-clear-btn,html.night .rli,html.night .staff-grid .sg-item,html.night .hx-sec,html.night .sc-day{background:var(--nt-sf2)}
+html.night .qb.on,html.night .water-pre.on,html.night .rp-tab.on,html.night .staff-pick-grid .spg-b.is-selected{background:var(--pri);color:#fff}
+html.night .cb.on,html.night .res-tile.on{background:var(--pri-l)}
+html.night .type-btn.sb{background:#3d1a28;border-color:#e91e63;color:#f48fb1}
+html.night .type-btn.sn{background:#262b31;border-color:#78909c;color:#cfd8dc}
+html.night .cons-b[data-s="watery"].on{background:#3d3510}
+html.night .cons-b[data-s="loose"].on{background:#3d2a10}
+html.night .cons-b[data-s="soft"].on{background:#26331a}
+html.night .cons-b[data-s="normal"].on{background:#1c3a24}
+html.night .cons-b[data-s="firm"].on,html.night .cons-b[data-s="hard"].on{background:#33251d}
+html.night .cons-b[data-s="hard"]{border-color:#a1887f}
+html.night .src-b.on{background:#12304a;border-color:#64b5f6;color:#90caf9}
+html.night .src-b.on.pad{background:#0f2c3b;border-color:#4fc3f7;color:#81d4fa}
+html.night .src-b.on.stp{background:#33251d;border-color:#c8a97e;color:#e6cdb5}
+html.night .rt-s.rt-w{background:#4a3c00;color:#ffe082;border-color:#fbc02d}
+html.night .water-open-btn{background:var(--nt-sf2);color:#90caf9}
+html.night .water-display{background:linear-gradient(to bottom,#12304a 0%,#173a5a 100%);border-color:#3d6a96}
+html.night .water-display .water-value,html.night .water-display .water-unit{color:#90caf9}
+html.night .water-step:hover,html.night .water-pre:hover,html.night .staff-pick-grid .spg-b:hover{background:#12304a;color:#90caf9}
+html.night .water-pre.on:hover{background:var(--pri);color:#fff}
+html.night .water-mark,html.night .tl-info .water-mini{background:#12304a;color:#90caf9}
+html.night #recStaff:read-only,html.night #mLaxStaff:read-only{background:#3a2d10}
+html.night .btn-go:disabled,html.night .btn-go.is-disabled,html.night .btn-go:disabled:hover,html.night .btn-go.is-disabled:hover{background:#4a515a;color:#fff;opacity:1}
+html.night .hb-field-note{background:#3d2a10;color:#ffcc80;border-color:#b5772a}
+
+/* ボタン（文字用に明るくした --ng を塗りに使う .br は暗い赤を明示） */
+html.night .br{background:#a8231c;color:#fff}
+html.night .tl-nm-link{color:var(--nt-pri-tx)}
+html.night .lax-mk{background:#261a2d;color:#e1bee7;border-color:#8e5aa8}
+
+/* 一覧の表（列の色分け・偶数行・固定列） */
+html.night .bt{background:var(--nt-sf)}
+html.night .bt td{background:var(--nt-sf)}
+html.night .bt td:nth-child(3),html.night .bt td:nth-child(4),html.night .bt td:nth-child(5){background:#15242e}
+html.night .bt td:nth-child(6),html.night .bt td:nth-child(7),html.night .bt td:nth-child(8),html.night .bt td:nth-child(9){background:#261f1a}
+html.night .bt tr.ev td{background:#20252b}
+html.night .bt tr.ev td:nth-child(3),html.night .bt tr.ev td:nth-child(4),html.night .bt tr.ev td:nth-child(5){background:#182a36}
+html.night .bt tr.ev td:nth-child(6),html.night .bt tr.ev td:nth-child(7),html.night .bt tr.ev td:nth-child(8),html.night .bt tr.ev td:nth-child(9){background:#2d241c}
+html.night .bt td:nth-child(1),html.night .bt td:nth-child(2){background:var(--nt-sf)}
+html.night .bt tr.ev td:nth-child(1),html.night .bt tr.ev td:nth-child(2){background:#20252b}
+html.night .bt th:nth-child(3),html.night .bt td:nth-child(3),
+html.night .bt thead tr:nth-child(2) th.hu:first-of-type{border-left-color:#3d6a96}
+html.night .bt th:nth-child(4),html.night .bt td:nth-child(6),html.night .bt td:nth-child(10),html.night .bt th:nth-child(6),
+html.night .bt thead tr:nth-child(2) th.hs:first-of-type{border-left-color:#7a6358}
+html.night .bt tr.rd td:first-child{border-left-color:#ff5252}
+html.night .bt tr.rw td:first-child{border-left-color:#fbc02d}
+/* 入院中の行は灰色のまま（昼より暗い灰色・文字は読める明るさ） */
+html.night .bt tr.hosp-full td{background:#4f545b !important;color:#e0e0e0 !important}
+html.night .bt tr.hosp-full td .eb,html.night .bt tr.hosp-full td .tg,html.night .bt tr.hosp-full td .nr{opacity:.9}
+html.night .bt tr.hosp-full td .nr,html.night .bt tr.hosp-full td [style*="color:var(--g"]{color:#e0e0e0 !important}
+
+/* 時系列（詳しく・全体）・5日表示 */
+html.night .tl-w{background:var(--nt-sf)}
+html.night .tl-stop{background:var(--g1)}
+html.night .tl-t thead th:first-child{background:#2b3036}
+html.night .tl-t th.hr-sub .hr-h{color:#90caf9}
+html.night .tl-c{background:var(--nt-sf)}
+html.night .tl-t tbody tr:nth-child(even) td{background:#20252b}
+html.night .tl-t tbody tr:nth-child(even) .tl-nm{background:#252a30}
+html.night .tl-c.has{background:#1a2540}
+html.night .tl-t tbody tr:nth-child(even) .tl-c.has{background:#1f2c4a}
+html.night .tl-c.sched::before{border-color:#bdbdbd;background:rgba(255,255,255,.08)}
+html.night .tl-c.sched .sch-lbl{color:#e0e0e0;text-shadow:0 0 2px #000,0 0 2px #000}
+html.night .tl-c.ovd::after{border-color:#ff5252}
+html.night .tl-c.ovd > .ovd-lbl{color:#ff8a80;text-shadow:0 0 2px #000,0 0 2px #000}
+html.night .tl-now{background:#ff5252}
+html.night .ev-m.us{color:#82b1ff}
+html.night .ev-m.st{color:#d7b49e}
+
+/* モーダル */
+html.night .mo{background:rgba(0,0,0,.7)}
+html.night #mLock{background:var(--g0)}   /* 自動ロックは不透明のまま（背後を透かさない） */
+html.night .md{background:var(--nt-md);box-shadow:0 3px 12px rgba(0,0,0,.6)}
+html.night .hi.b{background:#3d1a28}
+html.night #mHist .md > div:first-child,html.night #mHist #mHistStats,html.night #mHist #mHistC{background:var(--nt-md)}
+html.night #mHist .ht thead th{background:#3a2f55 !important;color:#ece4f8 !important;border-color:#6a55a0 !important;box-shadow:0 3px 6px -1px rgba(0,0,0,.5)}
+html.night #mHist .ht td{border-color:#3e3550 !important;background:var(--nt-md)}
+html.night #mHist .ht tr:nth-child(even) td{background:#252033 !important}
+html.night .ht td{background:var(--nt-sf)}
+html.night .ht .tp-b{color:#f48fb1}
+html.night .ht .tp-l{color:#ce93d8}
+html.night .ht .tp-n{color:#b0bec5}
+/* 排便カレンダー・下剤と反応 */
+html.night .sc-day.sc-w{background:#3d3510}
+html.night .sc-dot{border-color:rgba(255,255,255,.4)}
+html.night .lx-wait{color:#ffd54f}
+
+/* 職員・設定 */
+html.night .staff-grid .sg-item .sg-del:hover,html.night .staff-clear-btn:hover{background:#3d1c1c}
+html.night .staff-grid .sg-edit:hover{background:#12304a;color:var(--nt-pri-tx)}
+html.night .staff-grid .sg-retire:hover{background:#3d2a10;color:#ffb74d}
+html.night .staff-grid .sg-restore:hover{background:#1c3a24;color:#81c995}
+html.night .staff-grid .sg-item.is-retired{background:var(--g1)}
+html.night .staff-grid .sg-item.sg-drag-over{background:#12304a}
+html.night .staff-grid .sg-item .sg-handle{color:#90caf9;background:#12304a;border-color:#3d6a96}
+html.night .staff-grid .sg-item .sg-handle:hover{background:#1a3d5e}
+html.night .net-log summary{color:var(--nt-pri-tx)}
+
+/* トースト・取り消し・通信の警告帯（暗い地に溶けないよう明るめの灰＋枠） */
+html.night .toast{background:#3a4048;border:1px solid #5f6670}
+html.night .undo-bar{background:#2f353d;border:1px solid #5f6670;box-shadow:0 4px 14px rgba(0,0,0,.6)}
+html.night .net-warn button{background:var(--nt-sf)}
+
+/* 帳票（画面表示だけ。印刷はこのブロックの外＝従来の配色） */
+html.night .rp-sheet{background:var(--nt-sf)}
+html.night .rp-hd{border-bottom-color:#8a9099}
+html.night .rp-ttl{color:var(--g9)}
+html.night .rp-t th,html.night .rp-t td{border-color:#5f6670}
+html.night .rp-t th{background:#2b3036;color:var(--g9)}
+html.night .rp-t tr.sun td{background:#3a1f22}
+html.night .rp-t tr.sat td{background:#17283b}
+html.night .rp-ft{border-top-color:#5f6670}
+html.night .rp-ng{background:#3d1c1c;color:#ff8a80}
+html.night .rp-wn{background:#3a2d10;color:#ffd54f}
+
+/* 3. インライン style の直書き（HTML と JS が組み立てる分）。色見本の丸（.cd-dot・.sc-dot）は除く */
+/* 白・薄い地 → 暗い地 */
+html.night [style*="background:#fff;"]:not(.cd-dot):not(.sc-dot),html.night [style$="background:#fff"]:not(.cd-dot):not(.sc-dot){background:var(--nt-sf2) !important}
+html.night [style*="background:#fff8e1"]{background:#3a2d10 !important}
+html.night [style*="background:#fff59d;color"]{background:#4a3c00 !important}
+html.night [style*="background:#e3f2fd"]{background:#12304a !important}
+html.night [style*="background:#eef4fb"]{background:#17283b !important}
+html.night [style*="background:#f5f5f5"],html.night [style*="background:#eceff1"]{background:#262b31 !important}
+html.night [style*="background:#fafafa"]{background:#20252b !important}
+html.night [style*="background:#f3e5f5"]{background:#261a2d !important}
+html.night [style*="background:#ffebee"]{background:#3d1c1c !important}
+html.night [style*="background:#faf7ff"]{background:#221d2b !important}
+html.night [style*="background:#efebe9"]{background:#33251d !important}
+html.night [style*="background:#e8eaed"]{background:#2b3036 !important}
+/* 入院の灰色（時系列のコマ・氏名欄）は灰色のまま暗くし、文字を読める明るさに */
+html.night [style*="background:#757575"]{background:#4f545b !important;color:#d6d6d6 !important}
+html.night [style*="background:#9e9e9e;color:#424242"]{background:#5f646b !important;color:#eeeeee !important}
+html.night [style*="background:#9e9e9e;color:#424242"] [style*="color:#424242"],
+html.night [style*="background:#9e9e9e;color:#424242"] [style*="color:#212121"]{color:#eeeeee !important;text-decoration-color:#eeeeee !important}
+/* 種別の小札（記録の詳細）: 文字用に明るくした変数を白文字の塗りに使っている所は、昼に近い濃い塗りへ */
+html.night [style*="background:var(--u);color:#fff"]{background:#01579b !important}
+html.night [style*="background:var(--s);color:#fff"]{background:#6d4c41 !important}
+html.night [style*="background:var(--g5);color:#fff"]{background:#5f6368 !important}
+/* 予定セルから記録する種別ボタン・予定の解除ボタン（明るい塗りに白文字＝暗い地で読めない）は、同じ色相の濃い塗りへ */
+html.night .sch-rec[data-t="urine"]{background:#01579b !important}
+html.night .sch-rec[data-t="stool"]{background:#6d4c41 !important}
+html.night .sch-rec[data-t="both"]{background:#7b1fa2 !important}
+html.night .sch-rm{background:#6d5300 !important}
+/* 濃い文字 → 明るい文字 */
+html.night [style*="color:#000;"],html.night [style$="color:#000"]{color:var(--g9) !important}
+html.night [style*=";color:var(--pri)"],html.night [style^="color:var(--pri)"]{color:var(--nt-pri-tx) !important}   /* 一覧の氏名リンク・5日表示の「本日」 */
+html.night [style*="color:#0d47a1"],html.night [style*="color:#1565c0"],html.night [style*="color:#0842a0"]{color:#90caf9 !important}
+html.night [style*="color:#8d6e00"],html.night [style*="color:#b8860b"]{color:#ffd54f !important}
+html.night [style*="color:#c62828"],html.night [style*="color: rgb(198, 40, 40)"]{color:#ff8a80 !important}
+html.night [style*="color:#6a1b9a"],html.night [style*="color:#4a148c"],html.night [style*="color:#7b1fa2"]{color:#ce93d8 !important}
+html.night [style*="color:#5d4037"],html.night [style*="color:#4e342e"]{color:#d7b49e !important}
+html.night [style*="color:#455a64"],html.night [style*="color:#37474f"]{color:#b0bec5 !important}
+html.night [style*="color:#1a3d63"]{color:#b9d3ee !important}
+html.night [style*="color:#1b5e20"]{color:#81c995 !important}
+html.night [style*="color:#bf360c"]{color:#ffab91 !important}
+
+/* 切替のボタン（ヘッダの時刻の左）。44×44。ヘッダの高さを変えないよう上下の余白で相殺する */
+.hb-night-btn{min-width:44px;min-height:44px;margin:-2px 0;padding:0 8px;font-size: 1.125rem;line-height:1}
+/* 夜間の切替はタブレット幅（600px以上）だけヘッダに置き、スマホ幅では下部ナビの右端（職員・設定の隣）に置く。
+   ヘッダの右側に44pxを足すと、390〜430px でヘッダが1段→2段に伸びたため（2026-10-16 レビュー指摘・実測 74→120px）。
+   スマホ幅のヘッダは従来と同じ中身＝同じ高さのまま */
+.bnav .hb-night-nav{flex:0 0 44px;font-size: 0.5625rem;color:var(--g6)}
+.bnav .hb-night-nav .nn-ic{font-size: 1rem;line-height:1.2}
+.bnav .hb-night-nav .nn-lb{white-space:nowrap}
+/* 表示200%相当（幅260px未満）では、ほかのナビの幅が詰まって「一覧表示」が折り返し、下部ナビが52→67pxに伸びるため置かない。
+   この幅では自動の切替（21:00〜翌7:00）だけが効く */
+@media screen and (max-width:259.98px){.bnav .hb-night-nav{display:none}}
+@media screen and (min-width:600px){.bnav .hb-night-nav{display:none}}
+@media screen and (max-width:599.98px){#btnNight{display:none}}
+}
 </style>
 </head>
 <body>
@@ -692,6 +907,8 @@ textarea{resize:vertical;min-height:76px}
          APIバッジ・時刻の位置が動かない。 -->
     <button class="hdr-btn" id="btnMaster" aria-label="入居者マスタを新しいタブで開く" title="入居者マスタを開く（入居者情報の源泉）">👤 入居者マスタ</button>
     <div class="api-bd api-of" id="apiBd">●</div>
+    <!-- 夜間の配色の切替（2026-10-16）。表示・ラベルは hbNightApply が今の状態に合わせて書き換える -->
+    <button type="button" class="hdr-btn hb-night-btn" id="btnNight" aria-label="夜間の配色に切り替える" title="夜間の配色に切り替える（自動：21:00〜翌7:00は夜間）">🌙</button>
     <div style="font-size: 0.75rem;opacity:.85" id="hTime"></div>
   </div>
 </header>
@@ -1250,6 +1467,7 @@ textarea{resize:vertical;min-height:76px}
   <button data-sc="staff">
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>職員
   </button>
+  <button type="button" class="hb-night-nav" id="btnNightNav" aria-label="夜間の配色に切り替える"><span class="nn-ic" aria-hidden="true">🌙</span><span class="nn-lb">夜間</span></button>
   <button data-sc="cfg">
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>設定
   </button>
@@ -4771,8 +4989,11 @@ function tlOvdRefresh(){
     var set={};
     if(isToday&&re)tlOvdForRes(re,date,nowM).forEach(function(o){set[Math.floor(o.min/30)]=1;n++});
     $$('td.tl-c',tr).forEach(function(td){
+      if(td.dataset.adm)return;   // 入院のコマには「未」を付けない（描画と同じ扱い）
       var s=parseInt(String(td.dataset.slot||'').split('-')[1]);
-      var on=!!set[s],has=td.classList.contains('ovd');
+      // 全体表示のセルは1時間分（:00 と :30 の2枠）。data-slot は代表の枠なので、時台の2枠で判定する（2026-10-16 レビュー指摘）
+      var hh=(td.dataset.hour!=null&&td.dataset.hour!=='')?parseInt(td.dataset.hour):NaN;
+      var on=isNaN(hh)?!!set[s]:!!(set[hh*2]||set[hh*2+1]),has=td.classList.contains('ovd');
       if(on===has)return;
       if(on){td.classList.add('ovd');td.insertAdjacentHTML('beforeend','<span class="ovd-lbl">未</span>')}
       else{td.classList.remove('ovd');var l=td.querySelector('.ovd-lbl');if(l)td.removeChild(l)}
@@ -4780,6 +5001,14 @@ function tlOvdRefresh(){
   });
   tlOvdSummary(isToday,n);
   tlNowPlace();
+  // 「要注意だけ」の時は、表に居ない人が新しく予定を過ぎたら描き直して加える（2026-10-16 レビュー指摘）
+  if(onlyAttn&&isToday&&tb){
+    var shown={};Array.prototype.forEach.call(tb.querySelectorAll('.tl-nm-link'),function(e){shown[e.dataset.hist]=1});
+    var miss=D.residents.some(function(re){
+      return !shown[String(re.id)]&&isUserRes(re)&&re.active!==false&&re.hidden!==true&&re.name&&(showNonTargets||isExcretionTarget(re))&&tlOvdForRes(re,date,nowM).length>0;
+    });
+    if(miss)tlRenderKeepScroll();
+  }
 }
 /* 描き直してもスクロール位置を失わない（自動取得の後に使う。renderTL は innerHTML を差し替える） */
 function tlRenderKeepScroll(){
@@ -5133,7 +5362,7 @@ function renderTL(){const date=$('tlDate').value||today();
       for(let h=0;h<24;h++){
         var a=h*2,b=a+1;
         if((hospBySlot[a]&&hospBySlot[a].type==='admission')||(hospBySlot[b]&&hospBySlot[b].type==='admission')){
-          cells+='<td class="tl-c has" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.625rem;text-align:center;padding:1px">入院</td>';continue;
+          cells+='<td class="tl-c has" data-adm="1" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.625rem;text-align:center;padding:1px">入院</td>';continue;
         }
         if(isSlotInHospPeriod(re,date,a)&&isSlotInHospPeriod(re,date,b)){
           cells+='<td class="tl-c" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" style="background:#757575;color:#bdbdbd;pointer-events:none"></td>';continue;
@@ -5141,7 +5370,9 @@ function renderTL(){const date=$('tlDate').value||today();
         var hr=(bk[a]||[]).concat(bk[b]||[]);
         var cSch=(schSet[a]||schSet[b])?' sched':'';
         var cOvd=(ovdSet[a]||ovdSet[b])?' ovd':'',cOvdL=(ovdSet[a]||ovdSet[b])?'<span class="ovd-lbl">未</span>':'';
-        if(!hr.length){cells+='<td class="tl-c'+cSch+cOvd+'" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" title="'+h+'時台">'+cOvdL+'</td>';continue}
+        // 予定が :30 だけの時はその枠で開く（印と、押して開く予定を合わせる・2026-10-16 レビュー指摘）
+        var openSlot=(!schSet[a]&&schSet[b])?b:a;
+        if(!hr.length){cells+='<td class="tl-c'+cSch+cOvd+'" data-slot="'+reIdA+'-'+openSlot+'" data-hour="'+h+'" title="'+h+'時台">'+cOvdL+'</td>';continue}
         var mk=hr.slice(0,3).map(function(r){return tlMarks(r)}).join('');
         if(hr.length>3)mk+='<span class="tl-more">+'+(hr.length-3)+'</span>';
         cells+='<td class="tl-c has'+cSch+cOvd+'" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" title="'+h+'時台 '+hr.length+'件">'+mk+cOvdL+'</td>';
@@ -5153,7 +5384,7 @@ function renderTL(){const date=$('tlDate').value||today();
       // 🏥 入院マーカーセル — 入院のみ表示（退院マーカーは表示しない仕様）
       if(hospBySlot[s]&&hospBySlot[s].type==='admission'){
         var ev=hospBySlot[s];
-        cells+='<td class="tl-c has" data-slot="'+reIdA+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size: 0.5625rem;opacity:.9">'+escapeHtmlText(ev.time)+'</span></td>';
+        cells+='<td class="tl-c has" data-adm="1" data-slot="'+reIdA+'-'+s+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;text-align:center;padding:2px 1px"><span style="display:block">入院</span><span style="display:block;font-size: 0.5625rem;opacity:.9">'+escapeHtmlText(ev.time)+'</span></td>';
         continue;
       }
       // 🏥 入院期間中のセル（入院後・退院前）はより濃いグレーアウト
@@ -6813,6 +7044,82 @@ function msUntilNextStaffMorning(){
   return next7.getTime() - now.getTime();
 }
 
+/* ═══════════ 夜間の配色（2026-10-16・代表者の依頼） ═══════════
+   自動＝記録者の自動クリアと同じ時間帯（STAFF_DAY_END_H〜翌 STAFF_DAY_START_H）は夜間の配色。
+   ヘッダの 🌙/☀️ で今の表示を反転でき、その手動の選択は次の切替時刻（7:00 か 21:00）まで続いて自動に戻る。
+   保存するのは UI 状態だけ（{mode:'on'|'off',until:切替時刻の epoch ms}）。壊れた値・期限切れは自動扱い。
+   配色そのものは CSS の @media screen{html.night …}（印刷には効かない）。 */
+var NIGHT_KEY='hbcr_night_mode';
+var _hbNightMem=null,_hbNightMemSet=false;   // 保存領域に書けない端末でも、開いている間は手動の選択を保つ
+function hbNightAuto(d){return !isStaffDayTime(d)}
+/* d より後の最初の切替時刻（STAFF_DAY_START_H:00 か STAFF_DAY_END_H:00）の epoch ms */
+function hbNightNextSwitch(d){
+  var t=new Date(d.getTime()),h=t.getHours();
+  if(h<STAFF_DAY_START_H)t.setHours(STAFF_DAY_START_H,0,0,0);
+  else if(h<STAFF_DAY_END_H)t.setHours(STAFF_DAY_END_H,0,0,0);
+  else{t.setDate(t.getDate()+1);t.setHours(STAFF_DAY_START_H,0,0,0)}
+  return t.getTime();
+}
+/* 保存値を読む。使えない値（壊れた JSON・未知の mode・期限切れ・時計の巻き戻しで遠すぎる期限）は null＝自動 */
+function hbNightParse(raw,nowMs){
+  if(typeof raw!=='string'||!raw)return null;
+  var o;try{o=JSON.parse(raw)}catch(e){return null}
+  if(!o||typeof o!=='object'||(o.mode!=='on'&&o.mode!=='off'))return null;
+  var u=Number(o.until);
+  var maxSpan=Math.max(STAFF_DAY_END_H-STAFF_DAY_START_H,24-STAFF_DAY_END_H+STAFF_DAY_START_H)*36e5+6e4;
+  if(!isFinite(u)||u<=nowMs||u-nowMs>maxSpan)return null;
+  return {mode:o.mode,until:u};
+}
+/* 今の状態 → {on:夜間か, manual:手動の選択が効いているか, until} */
+function hbNightState(now,raw){
+  var m=hbNightParse(raw,now.getTime());
+  return m?{on:m.mode==='on',manual:true,until:m.until}:{on:hbNightAuto(now),manual:false,until:0};
+}
+/* ボタンを押した後に保存する値。反転した結果が自動と同じなら null（＝消して自動に戻す） */
+function hbNightFlip(now,raw){
+  var want=!hbNightState(now,raw).on;
+  if(want===hbNightAuto(now))return null;
+  return JSON.stringify({mode:want?'on':'off',until:hbNightNextSwitch(now)});
+}
+function _hbNightRead(){
+  if(_hbNightMemSet)return _hbNightMem;
+  try{return localStorage.getItem(NIGHT_KEY)}catch(e){return null}
+}
+function hbNightApply(){
+  try{
+    var raw=_hbNightRead(),now=new Date(),s=hbNightState(now,raw);
+    if(raw!=null&&!s.manual){   // 期限切れ・壊れた値は片付けて自動に戻す
+      _hbNightMem=null;
+      try{localStorage.removeItem(NIGHT_KEY)}catch(e){}
+    }
+    document.documentElement.classList.toggle('night',s.on);
+    var lbl=s.on?'昼間の配色に切り替える':'夜間の配色に切り替える';
+    var u=s.manual?new Date(s.until):null;
+    var ttl=lbl+(u?'（手動で切り替え中・'+u.getHours()+':00 から自動に戻ります）':'（自動：'+STAFF_DAY_END_H+':00〜翌'+STAFF_DAY_START_H+':00は夜間）');
+    var b=document.getElementById('btnNight');
+    if(b){b.textContent=s.on?'☀️':'🌙';b.setAttribute('aria-label',lbl);b.title=ttl}
+    var bn=document.getElementById('btnNightNav');   // スマホ幅の下部ナビ側
+    if(bn){bn.querySelector('.nn-ic').textContent=s.on?'☀️':'🌙';bn.querySelector('.nn-lb').textContent=s.on?'昼間':'夜間';bn.setAttribute('aria-label',lbl);bn.title=ttl}
+  }catch(e){console.warn('[hbcr] night:',e)}
+}
+function hbNightToggle(){
+  var v=hbNightFlip(new Date(),_hbNightRead());
+  _hbNightMem=v;_hbNightMemSet=true;
+  try{if(v===null)localStorage.removeItem(NIGHT_KEY);else localStorage.setItem(NIGHT_KEY,v)}catch(e){/* 容量不足でも開いている間は効く */}
+  hbNightApply();
+}
+/* 最初の描画に近い所で当てる（暗い居室で白い画面を一瞬でも出さない）。以降は1分ごと＋画面に戻った時に判定し直す */
+hbNightApply();
+(function(){
+  var b=document.getElementById('btnNight');
+  if(b)b.addEventListener('click',hbNightToggle);
+  var bn=document.getElementById('btnNightNav');
+  if(bn)bn.addEventListener('click',hbNightToggle);
+  setInterval(hbNightApply,60*1000);
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')hbNightApply()});
+  window.addEventListener('storage',function(ev){if(!ev||ev.key===null||ev.key===NIGHT_KEY){_hbNightMemSet=false;hbNightApply()}});
+})();
+
 function noteStaffActivity(){
   try{ localStorage.setItem(STAFF_TS_KEY, String(Date.now())); }catch(e){}
   scheduleStaffClear();
@@ -7608,7 +7915,7 @@ function init(){
   // ── 全イベント登録（inline onclick 一切なし）──
 
   // ナビ
-  $$('.bnav button').forEach(b=>b.addEventListener('click',function(){showSc(this.dataset.sc)}));
+  $$('.bnav button[data-sc]').forEach(b=>b.addEventListener('click',function(){showSc(this.dataset.sc)}));   // 夜間の切替（data-sc なし）は除く
 
   // 「対象外も表示」トグル（一覧/時系列で共有。排泄対象外の入居者を一時表示＝履歴閲覧用）
   $$('.only-attn').forEach(function(cb){cb.checked=onlyAttn;cb.addEventListener('change',function(){
