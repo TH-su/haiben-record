@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-9i+udl0Z7obApKk9MLmXjj78yvHaFUFZbtuM23/fg9w='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-nAtIYIjjYo5Z65+Epe9krEX/tEhG5yGkMANhxfeLae8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -11,7 +11,7 @@
 <title>排泄ケア記録システム</title>
 <style>
 /* 現場端末（su_device_role==='field'）では管理用の操作を出さない（関数の入口でも止めている・hbFieldDeny） */
-html.hb-field #cdResMgmt,html.hb-field #cdCfgAlert,html.hb-field #cdData,html.hb-field #cdDanger,html.hb-field #cdLinkAudit,html.hb-field .hb-conn-edit{display:none !important}
+html.hb-field #cdResMgmt,html.hb-field #cdCfgAlert,html.hb-field #cdPadKinds,html.hb-field #cdData,html.hb-field #cdDanger,html.hb-field #cdLinkAudit,html.hb-field .hb-conn-edit{display:none !important}
 .hb-field-note{display:none}
 html.hb-field .hb-field-note{display:block;background:#fff3e0;color:#8a2c00;border:1px solid #ffb74d;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.8125rem;font-weight:700;line-height:1.5}
 :root{
@@ -499,6 +499,29 @@ textarea{resize:vertical;min-height:76px}
 .water-open-btn{display:none;width:100%;min-height:48px;border:2px dashed var(--g3,#bdbdbd);border-radius:10px;
   background:#fff;color:#0d47a1;font-size: 0.9375rem;font-weight:700;cursor:pointer;font-family:inherit}
 .cd.water-closed .water-open-btn{display:block}
+/* 成功率・失禁率の表（履歴） */
+.gs-wrap{overflow-x:auto}
+.gs-t{width:100%;border-collapse:collapse;font-size: 0.875rem;margin-top:4px}
+.gs-t th,.gs-t td{border:1px solid var(--g2);padding:6px 8px;text-align:center;white-space:nowrap}
+.gs-t th{background:var(--g1);font-weight:700}
+.gs-t td:first-child{text-align:left}
+.gs-t small{color:var(--g6)}
+.gs-na{color:var(--g6)}
+/* 交換したもの（2026-10-16 第4段） */
+.cd.pad-closed #padBody{display:none}
+.cd.pad-closed .water-open-btn{display:block}
+.cd.pad-na .water-open-btn{display:none}
+.pad-off{font-size: 0.875rem;color:var(--g7);line-height:1.6;padding:8px 10px;border:1px dashed var(--g3);border-radius:8px}
+.pad-r{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--g2)}
+.pad-r:last-child{border-bottom:none}
+.pad-n{flex:1;font-size: 1.0625rem;font-weight:600;color:var(--g9)}
+.pad-st{min-width:52px;min-height:48px;border:2px solid var(--g3);border-radius:10px;background:#fff;color:var(--g9);font-size: 1.375rem;font-weight:700;cursor:pointer;font-family:inherit}
+.pad-st:disabled{opacity:.4;cursor:default}
+.pad-c{min-width:2.4em;text-align:center;font-size: 1.25rem;color:var(--g7)}
+.pad-c.on{color:var(--pri)}
+.pad-hint{font-size: 0.8125rem;color:var(--g6);margin-top:8px;line-height:1.5}
+.pad-hi{background:#f3f6e8;border-left:4px solid #7c9a2e;padding:8px 12px;border-radius:6px}
+.pad-hi b{color:#4b6316}
 /* 通信の記録（設定画面・この端末だけ） */
 .net-log-sum{margin-top:6px;font-size: 0.8125rem;line-height:1.7;color:var(--g7)}
 .net-log details{margin-top:6px}
@@ -652,6 +675,14 @@ textarea{resize:vertical;min-height:76px}
 .rp-t td.l{text-align:start;white-space:normal;word-break:break-word}
 .rp-t tr.sun td{background:#fdeaea}
 .rp-t tr.sat td{background:#eaf1fd}
+.rp-sum{border:1px solid #777;padding:6px 10px;margin-bottom:8px;font-size: 0.8125rem;line-height:1.7;color:#000}
+.rp-sum small{color:var(--g7)}
+.rp-t-bo{min-width:640px}   /* 画面が狭い時は器（.rp-sheet）の中で横に送る。列を1文字幅に潰さない */
+.rp-t-bo td:nth-child(3){min-width:11em}
+.rp-t-bo td:nth-child(4){min-width:10em}
+.rp-t-bo td:nth-child(7){min-width:8em}
+.rp-t-bo th:nth-child(5),.rp-t-bo th:nth-child(6){white-space:nowrap}
+.rp-t tr.rp-tot td{font-weight:700;background:#f5f5f5}
 .rp-sec{font-size: 0.875rem;font-weight:700;margin:14px 0 6px;padding-left:6px;border-left:4px solid var(--pri)}
 .rp-ft{margin-top:8px;padding-top:6px;border-top:1px solid #999;font-size: 0.625rem;color:var(--g7);
   display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
@@ -673,7 +704,13 @@ textarea{resize:vertical;min-height:76px}
   body.rp-printing .rp-pg:last-child{page-break-after:auto;break-after:auto}
   body.rp-printing .rp-t{font-size:8.5pt}
   body.rp-printing .rp-t th,body.rp-printing .rp-t td{border:1px solid #000}
-  body.rp-printing .rp-t thead{display:table-header-group}  /* 複数ページに跨ったら見出しを繰り返す */
+  body.rp-printing .rp-t thead{display:table-header-group}
+  /* 排便の経過は4週間（28行）をA4縦1枚に収める（2026-10-16 実測で調整） */
+  body.rp-printing .rp-t-bo{font-size:7.5pt;line-height:1.25;min-width:0}
+  body.rp-printing .rp-t-bo th,body.rp-printing .rp-t-bo td{padding:1px 3px}
+  body.rp-printing .rp-t-bo td:nth-child(3){width:34%}
+  body.rp-printing .rp-t-bo td:nth-child(4){width:27%}
+  body.rp-printing .rp-sum{font-size:8pt;line-height:1.45;padding:4px 8px;margin-bottom:5px}  /* 複数ページに跨ったら見出しを繰り返す */
   body.rp-printing .rp-t tr{page-break-inside:avoid;break-inside:avoid}
   /* 月次の「作成・修正情報」は本表と別ページから始める（本表の途中に混ざると読みにくい） */
   body.rp-printing .rp-brk{page-break-before:always;break-before:page}
@@ -747,6 +784,10 @@ html.night .water-mark,html.night .tl-info .water-mini{background:#12304a;color:
 html.night #recStaff:read-only,html.night #mLaxStaff:read-only{background:#3a2d10}
 html.night .btn-go:disabled,html.night .btn-go.is-disabled,html.night .btn-go:disabled:hover,html.night .btn-go.is-disabled:hover{background:#4a515a;color:#fff;opacity:1}
 html.night .hb-field-note{background:#3d2a10;color:#ffcc80;border-color:#b5772a}
+html.night .pad-st{background:var(--nt-sf2);color:var(--g9)}
+html.night .pad-c.on{color:var(--nt-pri-tx)}
+html.night .pad-hi{background:#1f2614;border-left-color:#9bbf45}
+html.night .pad-hi b{color:#c5e384}
 
 /* ボタン（文字用に明るくした --ng を塗りに使う .br は暗い赤を明示） */
 html.night .br{background:#a8231c;color:#fff}
@@ -835,6 +876,8 @@ html.night .rp-t th{background:#2b3036;color:var(--g9)}
 html.night .rp-t tr.sun td{background:#3a1f22}
 html.night .rp-t tr.sat td{background:#17283b}
 html.night .rp-ft{border-top-color:#5f6670}
+html.night .rp-sum{border-color:#5f6670;color:var(--g9)}
+html.night .rp-t tr.rp-tot td{background:#2b3036}
 html.night .rp-ng{background:#3d1c1c;color:#ff8a80}
 html.night .rp-wn{background:#3a2d10;color:#ffd54f}
 
@@ -1032,6 +1075,17 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
         <button class="cb" data-v="緑色"><span class="cd-dot" style="background:#388e3c"></span>緑色</button>
         <button class="cb" data-v="血便"><span class="cd-dot" style="background:#c62828"></span>血便</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 交換したもの（おむつ・パッド）2026-10-16 第4段。パッド内を選ぶと自動で開く -->
+  <div class="cd pad-closed" id="padCard">
+    <div class="cd-t">🩲 交換したもの（おむつ・パッド）</div>
+    <div class="pad-off" id="padOff" hidden></div>
+    <button type="button" class="water-open-btn" id="padOpen">＋ 交換したものを入れる</button>
+    <div id="padBody">
+      <div class="pad-rows" id="padRows"></div>
+      <div class="pad-hint">交換だけの時は、排泄種別で「誘導・排泄なし」を選んで記録してください。</div>
     </div>
   </div>
 
@@ -1320,6 +1374,18 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
     </div>
     <button class="bn bp" style="margin-top:14px;width:100%" id="btnSaveCfg">設定を保存</button>
   </div>
+  <div class="cd" id="cdPadKinds">
+    <div class="cd-t">🩲 交換したものの品目（おむつ・パッド）</div>
+    <div class="fg" style="margin:0">
+      <label class="fl" for="cfgPadKinds">品目（1行に1つ・20文字まで）</label>
+      <textarea id="cfgPadKinds" rows="5" maxlength="400"></textarea>
+    </div>
+    <div style="font-size: 0.75rem;color:var(--g6);margin-top:4px;line-height:1.6">
+      記録には品目の名前がそのまま残ります。品目を変えても、これまでの記録は変わりません。
+    </div>
+    <div id="padSrvState" style="font-size: 0.8125rem;margin-top:8px;line-height:1.6"></div>
+    <button class="bn bp" style="margin-top:12px;width:100%" id="btnSavePadKinds">品目を保存</button>
+  </div>
   <div class="cd" id="cdStorage">
     <div class="cd-t">📦 この端末の保存領域</div>
     <div style="font-size: 0.8125rem;color:var(--g7);line-height:1.6">
@@ -1391,6 +1457,8 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
       <button class="rp-tab on" data-rp="monthly" role="tab" aria-selected="true">入居者別 月次</button>
       <button class="rp-tab"    data-rp="floor"   role="tab" aria-selected="false">フロア別 日次</button>
       <button class="rp-tab"    data-rp="bowel"   role="tab" aria-selected="false">未排便・下剤</button>
+      <button class="rp-tab"    data-rp="bowelone" role="tab" aria-selected="false">排便の経過（主治医・訪看へ）</button>
+      <button class="rp-tab"    data-rp="padmonth" role="tab" aria-selected="false">交換・トイレ 月次</button>
     </div>
 
     <div class="rp-cond">
@@ -1399,8 +1467,15 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
         <input type="month" id="rpMonth">
       </div>
       <div id="rpDateWrap" style="display:none">
-        <label class="fl" for="rpDate">対象の日</label>
+        <label class="fl" for="rpDate" id="rpDateLbl">対象の日</label>
         <input type="date" id="rpDate">
+      </div>
+      <div id="rpSpanWrap" style="display:none">
+        <label class="fl" for="rpSpan">期間</label>
+        <select id="rpSpan">
+          <option value="14">2週間（終わりの日まで14日）</option>
+          <option value="28" selected>4週間（終わりの日まで28日）</option>
+        </select>
       </div>
       <div id="rpResWrap">
         <label class="fl" for="rpRes">対象の入居者</label>
@@ -1700,7 +1775,7 @@ var _virtScrollCfg={chunkSize:50,renderBuffer:30};
 
 /* ═══════════ DATA ═══════════ */
 let D={residents:[],records:[],cfg:{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3}};
-let ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0};
+let ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0,pads:{}};
 /* 排泄元マーカー（タイムライン／5日表示共通） */
 function tlMarks(r){
   if(r.type==='none')return'<span style="font-size: 0.8125rem;color:#455a64;font-weight:700">✖️</span>';
@@ -1723,6 +1798,104 @@ function tlMarks(r){
 /* ci の bool を文字列へ */
 function uSrcStr(){return ci.uSelf&&ci.uPad?'both':ci.uSelf?'self':ci.uPad?'pad':null}
 function sSrcStr(){return ci.sToilet&&ci.sPad?'both':ci.sToilet?'toilet':ci.sPad?'pad':null}
+
+/* ═══════════ おむつ・パッドの交換（2026-10-16 第4段） ═══════════
+   記録の pads 列に {品目名:枚数} の JSON 文字列で持つ。品目名そのものを残すので、設定で品目を変えても過去の記録は変わらない。
+   ★サーバーは記録シートの1行目にある列しか書かない（upsertRow_）。pads の列が無いサーバーに送ると黙って落ち、
+     次の同期でサーバーの行（pads なし）がこの端末の記録を上書きする。そこで、受け取った記録に pads の列があるのを
+     観測できた時だけ入力欄を出す（multi-device-sync 原則7・能力宣言の代わり）。接続先が無い端末はそのまま使える。 */
+var PAD_KINDS_DEF=['テープ式おむつ','パンツ式おむつ','尿取りパッド','夜用パッド'];
+var PAD_COL_KEY='hbcr_srv_pads';   // UI の状態だけ（サーバーに pads の列があるか '1'/'0'）
+function padKinds(){
+  var v=D&&D.cfg?D.cfg.padKinds:null;
+  if(typeof v==='string')v=v.split('|');
+  var out=[];
+  if(Array.isArray(v))v.forEach(function(x){x=String(x==null?'':x).replace(/[|]/g,'').trim().slice(0,20);if(x&&out.indexOf(x)<0)out.push(x)});
+  return out.length?out:PAD_KINDS_DEF.slice();
+}
+/* 受け取った値を信じない（原則10）: 文字列は JSON として読み、読めない・形が違う時は空にする */
+function parsePads(v){
+  var o={};
+  if(v==null||v==='')return o;
+  if(typeof v==='string'){try{v=JSON.parse(v)}catch(e){return o}}
+  if(!v||typeof v!=='object'||Array.isArray(v))return o;
+  Object.keys(v).forEach(function(k){var n=parseInt(v[k],10),kk=String(k).trim().slice(0,20);if(kk&&n>0&&n<100)o[kk]=n});
+  return o;
+}
+function padsStr(v){var o=parsePads(v);return Object.keys(o).length?JSON.stringify(o):''}
+function padsTotal(v){var o=parsePads(v),n=0;for(var k in o)n+=o[k];return n}
+function padsText(v){var o=parsePads(v);return Object.keys(o).map(function(k){return k+' '+o[k]+'枚'}).join('・')}
+function padsAvail(){
+  if(!apiUrl)return true;
+  try{return localStorage.getItem(PAD_COL_KEY)==='1'}catch(e){return false}
+}
+/* 同期で受け取った記録から、サーバーに pads の列があるかを覚える（記録が1件も来ない差分では前の値のまま） */
+function padsNoteSrv(apiRec){
+  if(!Array.isArray(apiRec)||!apiRec.length)return;
+  var has=apiRec.some(function(r){return r&&Object.prototype.hasOwnProperty.call(r,'pads')});
+  var was=null;try{was=localStorage.getItem(PAD_COL_KEY);localStorage.setItem(PAD_COL_KEY,has?'1':'0')}catch(e){}
+  if(was!==(has?'1':'0')){try{renderPadCard();renderPadCfg()}catch(e){}}
+}
+var _padOpen=false,_padList=[];
+function renderPadCard(){
+  var card=$('padCard');if(!card)return;
+  var off=$('padOff'),ok=padsAvail();
+  if(!ok){
+    card.classList.add('pad-closed');card.classList.add('pad-na');
+    if(off){off.hidden=false;off.textContent='スプレッドシートの記録シートに「pads」の列が無いため、交換したものはまだ記録できません。事務所の設定画面の「交換したものの品目」をご覧ください。'}
+    return;
+  }
+  card.classList.remove('pad-na');if(off)off.hidden=true;
+  var cur=parsePads(ci&&ci.pads);
+  var list=padKinds();Object.keys(cur).forEach(function(k){if(list.indexOf(k)<0)list.push(k)});
+  _padList=list;
+  var open=_padOpen||!!(ci&&(ci.uPad||ci.sPad))||padsTotal(cur)>0;
+  card.classList.toggle('pad-closed',!open);
+  var box=$('padRows');if(!box)return;
+  box.innerHTML=list.map(function(k,i){
+    var n=cur[k]||0,nm=escapeHtmlText(k);
+    return '<div class="pad-r"><span class="pad-n">'+nm+'</span>'+
+      '<button type="button" class="pad-st" data-i="'+i+'" data-d="-1" aria-label="'+nm+'を1枚減らす"'+(n?'':' disabled')+'>−</button>'+
+      '<b class="pad-c'+(n?' on':'')+'" aria-live="polite">'+n+'</b>'+
+      '<button type="button" class="pad-st" data-i="'+i+'" data-d="1" aria-label="'+nm+'を1枚増やす">＋</button></div>';
+  }).join('');
+}
+function padStep(i,d){
+  var k=_padList[i];if(!k)return;
+  var o=parsePads(ci.pads),n=(o[k]||0)+d;
+  if(n>0&&n<100)o[k]=n;else if(n<=0)delete o[k];
+  ci.pads=o;_padOpen=true;
+  renderPadCard();
+  if(typeof updateSubmitGate==='function')updateSubmitGate();
+}
+/* 設定画面の品目の欄と、サーバーの列の有無 */
+function renderPadCfg(){
+  var ta=$('cfgPadKinds');if(ta&&document.activeElement!==ta)ta.value=padKinds().join('\n');
+  var st=$('padSrvState');if(!st)return;
+  if(!apiUrl){st.textContent='接続先が無いため、この端末の中だけで記録します。';return}
+  st.innerHTML=padsAvail()
+    ?'<b style="color:var(--ok)">✓ 使えます</b>（スプレッドシートの記録シートに pads の列があります）'
+    :'<b style="color:var(--ng)">⚠️ まだ使えません</b>：スプレッドシートの「Records」シートの1行目の空いている右端のセルに <b>pads</b> と入れてください。次の同期で使えるようになります。';
+}
+/* Config シートは保存のたびに全行を書き直す（writeConfig_）。品目だけ送ると他の設定が消えるので、いつもの項目もそろえて送る */
+function cfgSendPayload(){
+  var c=D.cfg||{},o={};
+  ['urineWarnH','urineDangerH','stoolWarnD','stoolDangerD','localKeepDays'].forEach(function(k){if(c[k]!=null&&c[k]!=='')o[k]=c[k]});
+  if(typeof c.autoLockMin==='number'&&isFinite(c.autoLockMin))o.autoLockMin=c.autoLockMin;
+  if(c.padKinds!=null&&c.padKinds!=='')o.padKinds=Array.isArray(c.padKinds)?c.padKinds.join('|'):String(c.padKinds);
+  return o;
+}
+function savePadKinds(){
+  if(hbFieldDeny())return;
+  var ta=$('cfgPadKinds');if(!ta)return;
+  var out=[];ta.value.split(/\r?\n/).forEach(function(x){x=x.replace(/[|]/g,'').trim().slice(0,20);if(x&&out.indexOf(x)<0)out.push(x)});
+  if(!out.length){showToast('⚠️ 品目を1つ以上入れてください','err');return}
+  if(out.length>12){showToast('⚠️ 品目は12個までにしてください','err');return}
+  D.cfg=Object.assign({},D.cfg||{},{padKinds:out.join('|')});
+  save();apiPush('saveCfg',{cfg:cfgSendPayload()});
+  renderPadCfg();renderPadCard();
+  showToast('✅ 交換したものの品目を保存しました');
+}
 let editResId=null,curRecId=null,curHistRid=null,editRecId=null,editLaxId=null,curDetRid=null,curDetSlot=null,curDetDate=null;
 const BL={1:'硬球状',2:'硬塊状',3:'ひび割れ',4:'普通便',5:'軟便',6:'泥状便',7:'水様便'};
 
@@ -2183,6 +2356,7 @@ async function syncFromAPI(showLoader,opts){
     if(json.residents===undefined)throw new Error('レスポンス形式が不正です');
     var apiRes=Array.isArray(json.residents)?json.residents:[];
     var apiRec=Array.isArray(json.records)?json.records:[];
+    if(typeof padsNoteSrv==='function')padsNoteSrv(apiRec);   // サーバーに pads の列があるか（交換の入力欄を出してよいか）
     /* サーバーの schedule 対応版（能力宣言）。旧GASは返さないため 0 になる。
        移行完了フラグはこれが 1 以上のときだけ立てる（下のヒール節）。 */
     var _srvSchedVer=(json.schedVer|0);
@@ -2358,6 +2532,7 @@ async function syncFromAPI(showLoader,opts){
     D.residents=mergedRes;
     D.records=mergedRec;
     D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
+    try{renderPadCard()}catch(e){}   // 品目がほかの端末で変わっていれば入力欄に映す
     // 旧バージョンの遺留物（id=999999 の単一行など）をサーバー側からも消す
     if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
     // 職員リストを「room=_staff_ の隠し入居者」から復元（ローカル限定の未送信職員はマージで保持）
@@ -4661,6 +4836,7 @@ function syncInputUI(){
   var v=$('resSel')?$('resSel').value:'',r=v?D.residents.find(function(x){return String(x.id)===String(v)}):null;
   var tl={urine:'排尿',stool:'排便',both:'排尿＋排便',none:'誘導（排泄なし）',water:'水分のみ'}[ci&&ci.type]||'';
   var w=Number(ci&&ci.waterCC)>0?'水分 '+Number(ci.waterCC)+'cc':'';
+  var pn=padsTotal(ci&&ci.pads);if(pn)w=[w,'交換 '+pn+'枚'].filter(Boolean).join('・');
   var st=($('recStaff')&&$('recStaff').value||'').trim();
   sum.innerHTML=
     (r?'<b>'+escapeHtmlText(r.name)+'</b> さん':'入居者 未選択')+'　／　'+
@@ -4741,7 +4917,7 @@ function _editReturnGo(){
 /* 入力画面に、保存していない入力があるか（入居者を選んだだけは含めない） */
 function _inputDirty(forId){
   if(editRecId)return String(editRecId)!==String(forId);
-  return !!(ci&&(ci.type||Number(ci.waterCC)>0))||!!(($('recNote')&&$('recNote').value)||'').trim();
+  return !!(ci&&(ci.type||Number(ci.waterCC)>0||padsTotal(ci.pads)>0))||!!(($('recNote')&&$('recNote').value)||'').trim();
 }
 
 /* ═══════════ INPUT ═══════════ */
@@ -4816,6 +4992,7 @@ function submitRec(){
     existing.stoolAmt=ci.stoolAmt;existing.consistency=ci.consistency;existing.stoolColor=ci.stoolColor;
     existing.notes=$('recNote').value.trim();existing.staff=$('recStaff').value.trim();
     existing.waterCC = (Number(ci.waterCC)>0 ? Math.round(Number(ci.waterCC)/10)*10 : 0);
+    existing.pads=padsStr(ci.pads);
     existing.updatedAt=new Date().toISOString();
     save();apiPush('saveRecord',{record:existing});
     if(existing.staff)localStorage.setItem('hbcr_ls',existing.staff);
@@ -4835,6 +5012,7 @@ function submitRec(){
     urineAmt:ua,urineColor:ci.urineColor,urineSrc:uSrcStr(),
     stoolAmt:ci.stoolAmt,consistency:ci.consistency,stoolColor:ci.stoolColor,stoolSrc:sSrcStr(),
     waterCC: (Number(ci.waterCC)>0 ? Math.round(Number(ci.waterCC)/10)*10 : 0),
+    pads:padsStr(ci.pads),
     notes:$('recNote').value.trim(),staff:$('recStaff').value.trim(),createdAt:new Date().toISOString()};
   D.records.push(rec);save();
   apiPush('addRecord',{record:rec});
@@ -4881,6 +5059,7 @@ function editRec(id,force){
   ci.stoolAmt=r.stoolAmt;
   ci.consistency=r.consistency;
   ci.stoolColor=r.stoolColor;
+  ci.pads=parsePads(r.pads);_padOpen=false;
   var _us=r.urineSrc||(r.type==='urine'||r.type==='both'?'self':null);
   var _ss=r.stoolSrc||(r.type==='stool'||r.type==='both'?'toilet':null);
   ci.uSelf=(_us==='self'||_us==='both');ci.uPad=(_us==='pad'||_us==='both');
@@ -4921,6 +5100,7 @@ function editRec(id,force){
   $('recStaff').value=r.staff||'';
   // 水分摂取
   if(typeof setWaterCC === 'function') setWaterCC(r.waterCC||0);
+  renderPadCard();
   // 送信ボタンのラベルとゲート状態を更新
   updateSubmitBtnLabel();
   if(typeof updateSubmitGate==='function') updateSubmitGate();
@@ -4948,8 +5128,8 @@ function updateSubmitBtnLabel(){
   }
 }
 
-function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0};
-  _waterOpen=false;_resPickOpen=false;
+function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0,pads:{}};
+  _waterOpen=false;_resPickOpen=false;_padOpen=false;
   if(typeof setWaterCC==='function') setWaterCC(0);
   editRecId=null;
   setNow();$('recNote').value='';$('resSel').value='';
@@ -4960,6 +5140,7 @@ function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolA
   $$('.src-b').forEach(b=>b.classList.remove('on'));
   $('secU').style.display='none';$('secS').style.display='none';
   $('cusU').style.display='none';$('cusUV').value='';
+  renderPadCard();
   updateSubmitBtnLabel();
   // 記録者は ci.rid と紐づかないので reset では消さない（直前入力した人を再利用しやすい）
   // ただしゲート状態は再評価する
@@ -5943,6 +6124,7 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
     if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);h+='<div class="hi s" style="margin-bottom:8px"><b style="color:var(--s)">🟤 排便</b>'+(c?'<div>性状: '+escapeHtmlText(c)+'</div>':'')+(r.stoolAmt?'<div>量: '+escapeHtmlText(r.stoolAmt)+'</div>':'')+(r.stoolColor?'<div>色: '+escapeHtmlText(r.stoolColor)+'</div>':'')+'</div>'}
   }
   if(Number(r.waterCC)>0)h+='<div class="hi" style="margin-bottom:8px;background:#e3f2fd;border-left:4px solid #1976d2;padding:8px 12px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:6px">'+waterSvg('1.3em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
+  if(padsTotal(r.pads))h+='<div class="hi pad-hi" style="margin-bottom:8px"><b>🩲 交換したもの</b><div>'+escapeHtmlText(padsText(r.pads))+'</div></div>';
   if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size: 0.8125rem;margin-top:6px">📝 '+escapeHtmlText(r.notes)+'</div>';
   if(r.staff)h+='<div style="margin-top:8px;font-size: 0.75rem;color:var(--g5)">記録者: '+escapeHtmlText(r.staff)+'</div>';
   $('mDetC').innerHTML=h;$('mDet').classList.add('on')}
@@ -6147,9 +6329,73 @@ function laxHistHtml(rid){
   return'<details class="hx-sec" open><summary>💊 下剤と反応（直近'+lx.length+'回・'+LAX_REACT_H+'時間以内の排便を反応とする）</summary>'+
     (sum?'<div style="font-size: 0.8125rem;font-weight:700;margin:4px 0">'+sum+'</div>':'')+rows+'</details>';
 }
+/* ═══════════ トイレの成功率・失禁率（2026-10-16 第4段） ═══════════
+   記録だけから数える（新しい入力は要らない）。数え方（代表者の承認済み）:
+   ・成功率＝トイレで出た記録 ÷（トイレで出た記録＋誘導・排泄なし）。尿・便のどちらかがトイレなら「トイレで出た」1件。
+     自発のトイレも成功に数える（今の記録では誘導か自発かを区別できないため）。
+     「誘導・排泄なし」は尿か便かを持たないので、成功率は尿と便を合わせて1つで出す。
+     「誘導・排泄なし」に交換を付けた記録は、交換だけの記録として空振りに数えない。
+   ・失禁率は尿と便に分ける。排尿の記録のうち、パッド内を含むもの（パッド内、または自尿＋パッド内）の割合。便も同じ。
+   ・排尿元・排便元が空の古い記録は、画面と同じく自尿・トイレとして読む（urineSrc||'self'・stoolSrc||'toilet'）。 */
+function guideStats(recs){
+  var o={toilet:0,miss:0,uN:0,uPad:0,sN:0,sPad:0,pads:0};
+  (recs||[]).forEach(function(r){
+    if(!r)return;
+    o.pads+=padsTotal(r.pads);
+    var t=r.type;
+    if(t==='none'){if(!padsTotal(r.pads))o.miss++;return}
+    var isU=(t==='urine'||t==='both'),isS=(t==='stool'||t==='both');
+    if(!isU&&!isS)return;
+    var us=isU?(r.urineSrc||'self'):'',ss=isS?(r.stoolSrc||'toilet'):'';
+    if(us==='self'||us==='both'||ss==='toilet'||ss==='both')o.toilet++;
+    if(isU){o.uN++;if(us==='pad'||us==='both')o.uPad++}
+    if(isS){o.sN++;if(ss==='pad'||ss==='both')o.sPad++}
+  });
+  o.succ=(o.toilet+o.miss)?o.toilet/(o.toilet+o.miss):null;
+  o.uInc=o.uN?o.uPad/o.uN:null;
+  o.sInc=o.sN?o.sPad/o.sN:null;
+  return o;
+}
+function gsPct(v,a,b){return v==null?'—':Math.round(v*100)+'%（'+a+'/'+b+'）'}
+function _ymdL(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+/* 履歴: 週ごと（月曜始まり・直近8週）。端末に置いていない週は出さない */
+function guideRateHtml(rid){
+  var pool=recsByRes(rid);
+  var kd=_localKeepDays(),keepFrom=(kd>0&&kd<3650)?_hbKeepFrom():'';
+  var d=new Date(today()+'T00:00:00');d.setDate(d.getDate()-((d.getDay()+6)%7));
+  var rows='',any=false;
+  for(var w=0;w<8;w++){
+    var a=_ymdL(d),e=new Date(d);e.setDate(e.getDate()+6);var b=_ymdL(e);
+    d.setDate(d.getDate()-7);
+    if(keepFrom&&b<keepFrom)continue;
+    var g=guideStats(pool.filter(function(r){var k=String(r.date||'').slice(0,10);return k>=a&&k<=b}));
+    if(g.toilet+g.miss+g.uN+g.sN===0&&!g.pads){rows+='<tr><td>'+escapeHtmlText(fmtMD(a)+'〜'+fmtMD(b))+'</td><td colspan="4" class="gs-na">記録なし</td></tr>';continue}
+    any=true;
+    rows+='<tr><td>'+escapeHtmlText(fmtMD(a)+'〜'+fmtMD(b))+(w===0?'<br><small>今週</small>':'')+'</td>'+
+      '<td>'+escapeHtmlText(gsPct(g.succ,g.toilet,g.toilet+g.miss))+'</td>'+
+      '<td>'+escapeHtmlText(gsPct(g.uInc,g.uPad,g.uN))+'</td>'+
+      '<td>'+escapeHtmlText(gsPct(g.sInc,g.sPad,g.sN))+'</td>'+
+      '<td>'+(g.pads?g.pads+'枚':'—')+'</td></tr>';
+  }
+  if(!any)return'';
+  return'<details class="hx-sec"><summary>🚽 トイレの成功率・失禁率（週ごと・直近8週）</summary>'+
+    '<div class="gs-wrap"><table class="gs-t"><thead><tr><th>週</th><th>トイレ成功率</th><th>排尿の失禁率</th><th>排便の失禁率</th><th>交換</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="sc-leg">成功率＝トイレで出た記録 ÷（トイレで出た記録＋誘導・排泄なし）。自発のトイレも含みます。'+
+    '失禁率＝パッド内を含む記録の割合。交換を付けた「誘導・排泄なし」は空振りに数えません。</div></details>';
+}
+/* 履歴: 交換したものの枚数（今月・先月） */
+function padUseHtml(rid){
+  var pool=recsByRes(rid),t=today(),ym=t.slice(0,7);
+  var pd=new Date(t.slice(0,7)+'-01T00:00:00');pd.setMonth(pd.getMonth()-1);var pm=_ymdL(pd).slice(0,7);
+  function sum(m){var o={},n=0;pool.forEach(function(r){if(String(r.date||'').slice(0,7)!==m)return;var p=parsePads(r.pads);for(var k in p){o[k]=(o[k]||0)+p[k];n+=p[k]}});return{o:o,n:n}}
+  var a=sum(ym),b=sum(pm);
+  if(!a.n&&!b.n)return'';
+  function line(lbl,x){return'<div class="lx-row"><span><b>'+escapeHtmlText(lbl)+'</b></span><span>'+(x.n?escapeHtmlText(Object.keys(x.o).map(function(k){return k+' '+x.o[k]+'枚'}).join('・'))+'　計 '+x.n+'枚':'記録なし')+'</span></div>'}
+  return'<details class="hx-sec"><summary>🩲 交換したもの（今月・先月の枚数）</summary>'+line('今月（'+ym.replace('-','年')+'月）',a)+line('先月（'+pm.replace('-','年')+'月）',b)+'</details>';
+}
 function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   curHistRid=rid;
-  if($('mHistExtra')){try{$('mHistExtra').innerHTML=stoolCalHtml(rid)+laxHistHtml(rid)}catch(e){console.error('[hbcr] 排便カレンダーの作成に失敗:',e);$('mHistExtra').innerHTML=''}}
+  if($('mHistExtra')){try{$('mHistExtra').innerHTML=stoolCalHtml(rid)+laxHistHtml(rid)+guideRateHtml(rid)+padUseHtml(rid)}catch(e){console.error('[hbcr] 排便カレンダーの作成に失敗:',e);$('mHistExtra').innerHTML=''}}
   if($('mHistInput'))$('mHistInput').style.display=(res.active===false)?'none':'';
   if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
   $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
@@ -6354,6 +6600,7 @@ function renderStoreNote(){
 }
 function renderCfg(){
   renderStoreNote();
+  try{renderPadCfg()}catch(e){}
   var showInactive=$('cfgShowInactive')&&$('cfgShowInactive').checked;
   const all=[...D.residents].filter(isValidRes).filter(isUserRes).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   const actives=all.filter(function(r){return r.active!==false});
@@ -7751,11 +7998,11 @@ function saveRes(){if(hbFieldDeny())return;const nm=$('mRN').value.trim(),rm=$('
 
 /* ═══════════ EXPORT / IMPORT ═══════════ */
 function expCSV(){if(hbFieldDeny())return;const BOM='\uFEFF';
-  const hdr=['日付','時刻','居室','氏名','種別','排尿量','尿の色','便の性状','排便量','便の色','水分(cc)','備考','記録者'];
+  const hdr=['日付','時刻','居室','氏名','種別','排尿量','尿の色','便の性状','排便量','便の色','水分(cc)','備考','記録者','交換したもの'];
   const rows=D.records.filter(isUserRec).map(r=>{const res=D.residents.find(x=>x.id===r.residentId);
     const tl={urine:'排尿',stool:'排便',both:'両方',laxative:'下剤',none:'誘導',water:'水分のみ'}[r.type]||r.type;
     return[r.date,r.time,res?res.room:'',res?res.name:'',tl,
-      r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',Number(r.waterCC)>0?Number(r.waterCC):'',r.notes||'',r.staff||'']
+      r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',Number(r.waterCC)>0?Number(r.waterCC):'',r.notes||'',r.staff||'',padsText(r.pads)]
       .map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')});
   dl(BOM+[hdr.join(','),...rows].join('\n'),'haiben_'+today()+'.csv','text/csv;charset=utf-8;');
   var _kd=_localKeepDays();
@@ -7794,11 +8041,11 @@ function roomToFloor(room){
 }
 function floorLabel(f){return f===1?'1階':f===2?'2階':'階未設定'}
 
-var RP_VIEW='monthly';                       /* monthly | floor | bowel */
+var RP_VIEW='monthly';                       /* monthly | floor | bowel | bowelone | padmonth */
 /* 用紙は「折り返さずに全列が入るか」を実測して決めた（2026-08-13）。
    未排便・下剤は10列あり A4縦(718px)では自然幅916pxで約198px分が折り返す。
    A4横(1047px)なら折り返しゼロで収まるため横にする。 */
-var RP_PAPER={monthly:'A4 portrait',floor:'A4 landscape',bowel:'A4 landscape'};
+var RP_PAPER={monthly:'A4 portrait',floor:'A4 landscape',bowel:'A4 landscape',bowelone:'A4 portrait',padmonth:'A4 landscape'};
 
 /* 帳票の対象にする入居者（画面の一覧と同じ絞り込み＝紙と画面で母集団を揃える） */
 function rpResidents(){
@@ -8037,12 +8284,135 @@ function rpBowel(){
     rpFoot('')+'</div>';
 }
 
+/* ── 様式(4) 排便の経過（主治医・訪問看護への情報提供・A4縦）2026-10-16 第4段 ─────────
+   1人1枚。終わりの日から2週間か4週間をさかのぼる。判定は画面と同じ関数を呼ぶ
+   （少量の決まり＝stoolResetSeries、下剤の反応＝laxReaction、平均間隔＝intervalStats）。
+   備考は排便と下剤の記録に書かれたものだけを載せる（代表者の承認済み）。 */
+var CONS_BS={'水様便':'7','下痢便':'6','柔らかめ':'5','普通':'4','硬め':'3','硬便':'1〜2'};
+function rpSpanDates(){
+  var end=($('rpDate')&&$('rpDate').value)||today();
+  var span=parseInt(($('rpSpan')&&$('rpSpan').value)||'28',10);if(span!==14)span=28;
+  var d=new Date(end+'T00:00:00');if(isNaN(d.getTime()))return[];
+  d.setDate(d.getDate()-(span-1));
+  var out=[];for(var i=0;i<span;i++){out.push(rpYMD(d));d.setDate(d.getDate()+1)}
+  return out;
+}
+function rpConsTxt(r){var c=fmtCons(r);if(!c)return'';var b=CONS_BS[r.consistency];return b?c+'（ブリストル'+b+'）':c}
+function rpBowelOne(){
+  var dates=rpSpanDates();
+  if(!dates.length)return '<div class="rp-empty">終わりの日を選んでください。</div>';
+  var from=dates[0],to=dates[dates.length-1];
+  var sel=$('rpRes')?$('rpRes').value:'all';
+  var list=rpResidents().filter(function(r){return sel==='all'||String(r.id)===String(sel)});
+  if(!list.length)return '<div class="rp-empty">対象の入居者がいません。</div>';
+  return list.map(function(re){
+    var pool=recsByRes(re.id);
+    var st=pool.filter(function(r){return r.type==='stool'||r.type==='both'});
+    var ser=stoolResetSeries(st),resetDays={},resetSet=new Set(ser);
+    ser.forEach(function(r){resetDays[String(r.date).slice(0,10)]=1});
+    function inP(r){var k=String(r.date||'').slice(0,10);return k>=from&&k<=to}
+    var sP=st.filter(inP),lP=pool.filter(function(r){return r.type==='laxative'&&inP(r)});
+    var nSmall=sP.filter(function(r){return r.stoolAmt==='少量'}).length;
+    var nReset=sP.filter(function(r){return resetSet.has(r)}).length;
+    /* 最長の「排便1回分なし」（日数）。入院の日をまたぐ所は数えない（その間は分からない） */
+    var lastReset=null;
+    Object.keys(resetDays).forEach(function(k){if(k<from&&(!lastReset||k>lastReset))lastReset=k});
+    var maxG=0,maxAfter=null;
+    dates.forEach(function(k){
+      if(isFullHospDay(re,k)){lastReset=null;return}
+      if(resetDays[k]){lastReset=k;return}
+      if(lastReset&&k<=today()){var g=dayDiff(k,lastReset);if(g>maxG){maxG=g;maxAfter=lastReset}}
+    });
+    var lxOk=0,lxNone=0,lxWait=0,lxSum=0;
+    lP.forEach(function(r){var x=laxReaction(r);if(!x)return;if(x.st==='ok'){lxOk++;lxSum+=x.h}else if(x.st==='none')lxNone++;else lxWait++});
+    var iv=intervalStats(re.id);
+    var rows='';
+    dates.forEach(function(k){
+      var dd=new Date(k+'T00:00:00');
+      var recs=recsByResDate(re.id,k).filter(isUserRec).slice().sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
+      var hosp=isFullHospDay(re,k);
+      var ss=recs.filter(function(r){return r.type==='stool'||r.type==='both'});
+      var ls=recs.filter(function(r){return r.type==='laxative'});
+      var water=recs.reduce(function(a,r){return a+(Number(r.waterCC)>0?Number(r.waterCC):0)},0);
+      var un=recs.filter(function(r){return r.type==='urine'||r.type==='both'}).length;
+      var sTxt=ss.map(function(r){
+        var src=(r.stoolSrc==='pad'||r.stoolSrc==='both')?'パッド内':'';
+        return [r.time||'',rpConsTxt(r),r.stoolAmt||'',src].filter(Boolean).join(' ');
+      }).join('<br>');
+      var lTxt=ls.map(function(r){
+        var x=laxReaction(r),rx=!x?'':x.st==='ok'?'→ '+fmtDur(x.h)+'後に排便':x.st==='none'?'→ 反応なし（'+LAX_REACT_H+'時間）':'→ 判定待ち';
+        return escapeHtmlText([r.time||'',r.medicine||'下剤',r.tablets?r.tablets+'錠':''].filter(Boolean).join(' ')+' '+rx);
+      }).join('<br>');
+      var notes=ss.concat(ls).map(function(r){return(r.notes||'').trim()}).filter(Boolean).join(' / ');
+      rows+='<tr class="'+rpWdCls(k)+'">'+
+        '<td>'+(dd.getMonth()+1)+'/'+dd.getDate()+'</td><td>'+RP_WD[dd.getDay()]+'</td>'+
+        '<td class="l">'+(hosp?'入院':sTxt.split('<br>').map(escapeHtmlText).join('<br>'))+'</td>'+
+        '<td class="l">'+lTxt+'</td>'+
+        '<td>'+(water>0?water:'')+'</td>'+
+        '<td>'+(un||'')+'</td>'+
+        '<td class="l">'+escapeHtmlText(notes)+'</td></tr>';
+    });
+    var sum=
+      '<div>期間中の排便 <b>'+sP.length+'回</b>（うち少量 '+nSmall+'回）　排便1回分として数えた回数 <b>'+nReset+'回</b>'+
+        '<small>（少量は、最初の少量から'+STOOL_SMALL_WIN_H+'時間以内の'+STOOL_SMALL_N+'回目で1回分）</small></div>'+
+      '<div>排便1回分の無かった最長の日数 <b>'+(maxAfter?maxG+'日':'—')+'</b>'+(maxAfter?'（'+escapeHtmlText(fmtMD(maxAfter))+' の排便のあと）':'')+'</div>'+
+      '<div>下剤 <b>'+lP.length+'回</b>'+(lP.length?'（'+LAX_REACT_H+'時間以内に排便あり '+lxOk+'回'+(lxOk?'・平均 '+escapeHtmlText(fmtDur(lxSum/lxOk))+'後':'')+'／なし '+lxNone+'回'+(lxWait?'／判定待ち '+lxWait+'回':'')+'）':'')+'</div>'+
+      '<div>平均の排便間隔（直近3か月・画面の履歴と同じ算出） <b>'+escapeHtmlText(fmtDur(iv.stool.avgH))+'</b></div>'+
+      (re.laxNote?'<div>下剤メモ: '+escapeHtmlText(String(re.laxNote).replace(/\n/g,' '))+'</div>':'');
+    return '<div class="rp-pg">'+
+      rpHead('排便の経過（主治医・訪問看護への情報提供）',
+             re.room+'号室　'+re.name,
+             '対象期間: '+from+' 〜 '+to+'（'+dates.length+'日）')+
+      '<div class="rp-sum">'+sum+'</div>'+
+      '<table class="rp-t rp-t-bo"><thead><tr>'+
+        '<th>日</th><th>曜</th><th>排便（時刻・性状・量）</th><th>下剤と反応</th><th>水分<br>(cc)</th><th>排尿<br>(回)</th><th>備考（排便・下剤）</th>'+
+      '</tr></thead><tbody>'+rows+'</tbody></table>'+
+      rpFoot('')+'</div>';
+  }).join('');
+}
+
+/* ── 様式(5) 交換したもの・トイレ 月次（全員・A4横）2026-10-16 第4段 ──────────── */
+function rpPadMonth(){
+  var ym=$('rpMonth')?$('rpMonth').value:'';
+  var dates=rpMonthDates(ym);
+  if(!dates.length)return '<div class="rp-empty">対象の月を選んでください。</div>';
+  var list=rpResidents();
+  if(!list.length)return '<div class="rp-empty">対象の入居者がいません。</div>';
+  var per=list.map(function(re){
+    var recs=recsByRes(re.id).filter(function(r){return String(r.date||'').slice(0,7)===ym});
+    var o={},n=0;recs.forEach(function(r){var p=parsePads(r.pads);for(var k in p){o[k]=(o[k]||0)+p[k];n+=p[k]}});
+    return{re:re,o:o,n:n,g:guideStats(recs)};
+  });
+  var kinds=padKinds();per.forEach(function(x){Object.keys(x.o).forEach(function(k){if(kinds.indexOf(k)<0)kinds.push(k)})});
+  var tot={},all=0;
+  var rows=per.map(function(x){
+    kinds.forEach(function(k){tot[k]=(tot[k]||0)+(x.o[k]||0)});all+=x.n;
+    return '<tr><td>'+escapeHtmlText(x.re.room||'')+'</td><td class="l">'+escapeHtmlText(x.re.name)+'</td>'+
+      kinds.map(function(k){return '<td>'+(x.o[k]||'')+'</td>'}).join('')+
+      '<td><b>'+(x.n||'')+'</b></td>'+
+      '<td>'+escapeHtmlText(gsPct(x.g.succ,x.g.toilet,x.g.toilet+x.g.miss))+'</td>'+
+      '<td>'+escapeHtmlText(gsPct(x.g.uInc,x.g.uPad,x.g.uN))+'</td>'+
+      '<td>'+escapeHtmlText(gsPct(x.g.sInc,x.g.sPad,x.g.sN))+'</td></tr>';
+  }).join('');
+  rows+='<tr class="rp-tot"><td colspan="2">合計</td>'+kinds.map(function(k){return '<td>'+(tot[k]||'')+'</td>'}).join('')+'<td><b>'+(all||'')+'</b></td><td colspan="3"></td></tr>';
+  return '<div class="rp-pg">'+
+    rpHead('交換したもの（おむつ・パッド）とトイレの状況（月次）','全入居者','対象期間: '+ym)+
+    '<table class="rp-t"><thead><tr><th>居室</th><th>氏名</th>'+
+      kinds.map(function(k){return '<th>'+escapeHtmlText(k)+'<br>(枚)</th>'}).join('')+
+      '<th>交換<br>合計</th><th>トイレ<br>成功率</th><th>排尿の<br>失禁率</th><th>排便の<br>失禁率</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div class="rp-note" style="margin-top:6px">成功率＝トイレで出た記録 ÷（トイレで出た記録＋誘導・排泄なし）。自発のトイレも含みます（記録では誘導と自発を区別していないため）。'+
+    '失禁率＝排尿（排便）の記録のうち、パッド内を含む記録の割合。交換を付けた「誘導・排泄なし」は空振りに数えません。'+
+    '枚数は「交換したもの」を記録した分だけです。</div>'+
+    rpFoot('')+'</div>';
+}
+
 /* ── 描画・印刷・CSV ─────────────────────────────────────────── */
 function rpBuildSheet(){
   var box=$('rpSheet');if(!box)return;
   var html='';
   try{
-    html=(RP_VIEW==='monthly')?rpMonthly():(RP_VIEW==='floor')?rpFloorDaily():rpBowel();
+    html=(RP_VIEW==='monthly')?rpMonthly():(RP_VIEW==='floor')?rpFloorDaily():(RP_VIEW==='bowelone')?rpBowelOne():(RP_VIEW==='padmonth')?rpPadMonth():rpBowel();
   }catch(e){
     console.error('[hbcr] 帳票の作成に失敗:',e);
     box.innerHTML='<div class="rp-empty">帳票を作れませんでした。<br>'+
@@ -8052,7 +8422,7 @@ function rpBuildSheet(){
   }
   /* 端末に置く期間より前の日を含む帳票は、その日が空欄になる。「排泄なし」と読み違えないよう理由を出す（2026-10-16） */
   try{
-    var _kd2=_localKeepDays(), _rpFrom=(RP_VIEW==='floor')?(($('rpDate')&&$('rpDate').value)||''):((($('rpMonth')&&$('rpMonth').value)||'')?$('rpMonth').value+'-01':'');
+    var _kd2=_localKeepDays(), _rpFrom=(RP_VIEW==='floor')?(($('rpDate')&&$('rpDate').value)||''):(RP_VIEW==='bowelone')?(rpSpanDates()[0]||''):((($('rpMonth')&&$('rpMonth').value)||'')?$('rpMonth').value+'-01':'');
     if(_kd2>0&&_kd2<3650&&_rpFrom&&_rpFrom<_hbKeepFrom()){
       html='<div class="rp-keep-note" style="margin:0 0 8px;padding:8px 12px;border:2px solid var(--ng);border-radius:8px;color:var(--ng);font-weight:700;font-size: 0.875rem;line-height:1.5">'+
         '⚠️ この端末には '+escapeHtmlText(fmtMD(_hbKeepFrom()))+' 以降の記録しかありません。それより前の日は空欄になります（記録が無いという意味ではありません。全期間の記録はスプレッドシートにあります）</div>'+html;
@@ -8063,10 +8433,12 @@ function rpBuildSheet(){
 }
 function rpSyncCond(){
   /* 様式ごとに要る条件だけを見せる（迷わせない） */
-  var isMonthly=(RP_VIEW==='monthly'),isFloor=(RP_VIEW==='floor');
-  if($('rpMonthWrap'))$('rpMonthWrap').style.display=(isMonthly||RP_VIEW==='bowel')?'':'none';
-  if($('rpDateWrap')) $('rpDateWrap').style.display =(isFloor||RP_VIEW==='bowel')?'':'none';
-  if($('rpResWrap'))  $('rpResWrap').style.display  = isMonthly?'':'none';
+  var isMonthly=(RP_VIEW==='monthly'),isFloor=(RP_VIEW==='floor'),isOne=(RP_VIEW==='bowelone');
+  if($('rpMonthWrap'))$('rpMonthWrap').style.display=(isMonthly||RP_VIEW==='bowel'||RP_VIEW==='padmonth')?'':'none';
+  if($('rpDateWrap')) $('rpDateWrap').style.display =(isFloor||RP_VIEW==='bowel'||isOne)?'':'none';
+  if($('rpDateLbl'))  $('rpDateLbl').textContent    = isOne?'終わりの日':'対象の日';
+  if($('rpSpanWrap')) $('rpSpanWrap').style.display = isOne?'':'none';
+  if($('rpResWrap'))  $('rpResWrap').style.display  =(isMonthly||isOne)?'':'none';
   if($('rpFloorWrap'))$('rpFloorWrap').style.display= isFloor?'':'none';
 }
 function rpFillRes(){
@@ -8122,17 +8494,18 @@ function rpCsv(){
   const BOM='\uFEFF';   /* Excel が UTF-8 と判別できるよう先頭に付ける（既存 expCSV と同じ） */
   var dates=null,label='';
   if(RP_VIEW==='floor'){var d=$('rpDate').value;dates=d?[d]:null;label=d||''}
+  else if(RP_VIEW==='bowelone'){dates=rpSpanDates();label=dates.length?dates[0]+'_'+dates[dates.length-1]:''}
   else{var ym=$('rpMonth').value;dates=rpMonthDates(ym);label=ym||''}
   if(!dates||!dates.length){showToast('⚠️ 対象の期間を選んでください','err');return}
-  var selId=(RP_VIEW==='monthly'&&$('rpRes'))?$('rpRes').value:'all';
+  var selId=((RP_VIEW==='monthly'||RP_VIEW==='bowelone')&&$('rpRes'))?$('rpRes').value:'all';
   var wantFloor=(RP_VIEW==='floor'&&$('rpFloor'))?$('rpFloor').value:'all';
   var targets=rpResidents().filter(function(r){
-    if(RP_VIEW==='monthly'&&selId!=='all')return String(r.id)===String(selId);
+    if((RP_VIEW==='monthly'||RP_VIEW==='bowelone')&&selId!=='all')return String(r.id)===String(selId);
     if(RP_VIEW==='floor'&&wantFloor!=='all')return String(roomToFloor(r.room))===String(wantFloor);
     return true;
   });
   var hdr=['日付','時刻','階','居室','氏名','種別','排尿量','尿の色','便の性状','排便量','便の色',
-           '水分(cc)','薬剤','錠数','備考','記録者','作成日時','最終修正日時','修正の有無'];
+           '水分(cc)','薬剤','錠数','備考','記録者','作成日時','最終修正日時','修正の有無','交換したもの'];
   var rows=[];
   targets.forEach(function(re){
     dates.forEach(function(d){
@@ -8143,7 +8516,7 @@ function rpCsv(){
           rows.push([d,r.time||'',floorLabel(roomToFloor(re.room)),re.room||'',re.name||'',
             rpTypeLabel(r.type),r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',
             Number(r.waterCC)>0?Number(r.waterCC):'',r.medicine||'',r.tablets||'',r.notes||'',r.staff||'',
-            st.created,st.updated,st.edited?'修正あり':'']
+            st.created,st.updated,st.edited?'修正あり':'',padsText(r.pads)]
             .map(function(v){return '"'+String(v).replace(/"/g,'""')+'"'}).join(','));
         });
     });
@@ -8267,7 +8640,7 @@ function _initRest(){
   window.addEventListener('pagehide',flushSave);
   window.addEventListener('beforeunload',flushSave);
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flushSave()});
-  setNow();buildResSel();
+  setNow();buildResSel();try{renderPadCard()}catch(e){}
   // 入力日時欄: フォーカス時に max を現在時刻に更新（未来入力防止）
   if($('recDT'))$('recDT').addEventListener('focus',function(){var v=nowLocalDTStr();this.max=v;this.setAttribute('max',v)});
   if($('mLaxDT'))$('mLaxDT').addEventListener('focus',function(){var v=nowLocalDTStr();this.max=v;this.setAttribute('max',v)});
@@ -8341,6 +8714,7 @@ function _initRest(){
       $$('.cons-b').forEach(x=>x.classList.remove('on'));
       $$('.sa').forEach(x=>x.classList.remove('on'));
       $$('#scRow .cb').forEach(x=>x.classList.remove('on'));
+      renderPadCard();
       if(typeof updateSubmitGate==='function') updateSubmitGate();
       return;
     }
@@ -8352,6 +8726,7 @@ function _initRest(){
     // 非表示側のソース選択はクリア（残留防止）
     if(t==='urine'||t==='none'){ci.sToilet=false;ci.sPad=false;$$('#sSrcRow .src-b').forEach(x=>x.classList.remove('on'))}
     if(t==='stool'||t==='none'){ci.uSelf=false;ci.uPad=false;$$('#uSrcRow .src-b').forEach(x=>x.classList.remove('on'))}
+    renderPadCard();
     if(typeof updateSubmitGate==='function') updateSubmitGate();
   }));
 
@@ -8361,13 +8736,20 @@ function _initRest(){
     var v=this.dataset.v;
     if(v==='self')ci.uSelf=this.classList.contains('on');
     if(v==='pad')ci.uPad=this.classList.contains('on');
+    renderPadCard();
   }));
   $$('#sSrcRow .src-b').forEach(b=>b.addEventListener('click',function(){
     this.classList.toggle('on');
     var v=this.dataset.v;
     if(v==='toilet')ci.sToilet=this.classList.contains('on');
     if(v==='pad')ci.sPad=this.classList.contains('on');
+    renderPadCard();
   }));
+  if($('padOpen'))$('padOpen').addEventListener('click',function(){_padOpen=true;renderPadCard()});
+  if($('padRows'))$('padRows').addEventListener('click',function(e){
+    var b=e.target&&e.target.closest?e.target.closest('.pad-st'):null;if(!b||b.disabled)return;
+    padStep(parseInt(b.dataset.i,10),parseInt(b.dataset.d,10));
+  });
 
   // 排尿量
   $$('.ua').forEach(b=>b.addEventListener('click',function(){
@@ -8766,10 +9148,12 @@ function _initRest(){
        書き直すため、送らない項目はサーバーからも消える。_staffs 等の端末側だけのキーは従来どおり送らない。 */
     var _send=Object.assign({},_cf);
     if(typeof D.cfg.autoLockMin==='number'&&isFinite(D.cfg.autoLockMin))_send.autoLockMin=D.cfg.autoLockMin;
+    if(D.cfg.padKinds!=null&&D.cfg.padKinds!=='')_send.padKinds=Array.isArray(D.cfg.padKinds)?D.cfg.padKinds.join('|'):String(D.cfg.padKinds);
     apiPush('saveCfg',{cfg:_send});
     if(typeof renderBoard==='function')renderBoard();
     if(typeof renderTL==='function')renderTL();
     showToast(_pruned>0?('✅ 設定を保存しました（古い記録 '+_pruned+'件を端末から整理）'):'✅ 設定を保存しました')});
+  if($('btnSavePadKinds'))$('btnSavePadKinds').addEventListener('click',savePadKinds);
   $('btnCSV').addEventListener('click',expCSV);
   $('btnJSON').addEventListener('click',expJSON);
 
