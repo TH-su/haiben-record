@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-nAtIYIjjYo5Z65+Epe9krEX/tEhG5yGkMANhxfeLae8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-gXG2Ttg2XzjB68eP9lxzzjYa6mQTF6ky6tnN0rPLiSc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -1825,16 +1825,18 @@ function parsePads(v){
 function padsStr(v){var o=parsePads(v);return Object.keys(o).length?JSON.stringify(o):''}
 function padsTotal(v){var o=parsePads(v),n=0;for(var k in o)n+=o[k];return n}
 function padsText(v){var o=parsePads(v);return Object.keys(o).map(function(k){return k+' '+o[k]+'枚'}).join('・')}
+/* 印は接続先ごとに持つ（列の無い別のシートへ切り替えた直後に、前の接続先の「使える」を引き継がない） */
+function padsSrvTag(){var h=0x811c9dc5,u=String(apiUrl||'');for(var i=0;i<u.length;i++){h^=u.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return '1:'+h.toString(36)}
 function padsAvail(){
   if(!apiUrl)return true;
-  try{return localStorage.getItem(PAD_COL_KEY)==='1'}catch(e){return false}
+  try{return localStorage.getItem(PAD_COL_KEY)===padsSrvTag()}catch(e){return false}
 }
 /* 同期で受け取った記録から、サーバーに pads の列があるかを覚える（記録が1件も来ない差分では前の値のまま） */
 function padsNoteSrv(apiRec){
   if(!Array.isArray(apiRec)||!apiRec.length)return;
   var has=apiRec.some(function(r){return r&&Object.prototype.hasOwnProperty.call(r,'pads')});
-  var was=null;try{was=localStorage.getItem(PAD_COL_KEY);localStorage.setItem(PAD_COL_KEY,has?'1':'0')}catch(e){}
-  if(was!==(has?'1':'0')){try{renderPadCard();renderPadCfg()}catch(e){}}
+  var v=has?padsSrvTag():'0',was=null;try{was=localStorage.getItem(PAD_COL_KEY);localStorage.setItem(PAD_COL_KEY,v)}catch(e){}
+  if(was!==v){try{renderPadCard();renderPadCfg()}catch(e){}}
 }
 var _padOpen=false,_padList=[];
 function renderPadCard(){
@@ -2533,6 +2535,15 @@ async function syncFromAPI(showLoader,opts){
     D.records=mergedRec;
     D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
     try{renderPadCard()}catch(e){}   // 品目がほかの端末で変わっていれば入力欄に映す
+    /* 旧版の端末が「設定を保存」すると Config が書き直され、品目（padKinds）がサーバーから消える（旧版は品目を送らない）。
+       サーバーの設定に品目が無く、この端末が品目を持っていれば、サーバーの値（いま重ねた後の D.cfg）＋手元の品目で書き戻す。
+       ほかの項目はサーバーの値をそのまま送るので、ほかの端末の変更を巻き戻さない。 */
+    try{
+      if(json.cfg&&typeof json.cfg==='object'&&(json.cfg.padKinds==null||json.cfg.padKinds==='')&&D.cfg&&D.cfg.padKinds!=null&&D.cfg.padKinds!==''&&Object.keys(json.cfg).length&&Date.now()-(window._padHealAt||0)>6e5){
+        window._padHealAt=Date.now();   // 書き戻しが届くまでの同期のたびに積み増さない（10分に1回）
+        apiPush('saveCfg',{cfg:cfgSendPayload()});
+      }
+    }catch(e){}
     // 旧バージョンの遺留物（id=999999 の単一行など）をサーバー側からも消す
     if(typeof cleanupLegacyStaffsRec==='function')cleanupLegacyStaffsRec();
     // 職員リストを「room=_staff_ の隠し入居者」から復元（ローカル限定の未送信職員はマージで保持）
@@ -8317,6 +8328,11 @@ function rpBowelOne(){
     /* 最長の「排便1回分なし」（日数）。入院の日をまたぐ所は数えない（その間は分からない） */
     var lastReset=null;
     Object.keys(resetDays).forEach(function(k){if(k<from&&(!lastReset||k>lastReset))lastReset=k});
+    /* 期間の前の1回分から期間の始まりまでに入院の日があれば、その間は分からないので数えない */
+    if(lastReset){
+      var cd=new Date(lastReset+'T00:00:00');cd.setDate(cd.getDate()+1);
+      for(var gi=0;gi<400;gi++){var ck=rpYMD(cd);if(ck>=from)break;if(isFullHospDay(re,ck)){lastReset=null;break}cd.setDate(cd.getDate()+1)}
+    }
     var maxG=0,maxAfter=null;
     dates.forEach(function(k){
       if(isFullHospDay(re,k)){lastReset=null;return}
