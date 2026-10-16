@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-gXG2Ttg2XzjB68eP9lxzzjYa6mQTF6ky6tnN0rPLiSc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-ToqW5RGS3E+Sxy9nwOLIP+c260YKCTgAiE2EI6SRQqo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -6318,7 +6318,7 @@ function stoolCalHtml(rid){
     d.setDate(d.getDate()+1);
   }
   var wd=['日','月','火','水','木','金','土'].map(function(w){return'<div class="sc-wd">'+w+'</div>'}).join('');
-  return'<details class="hx-sec" open><summary>📅 排便カレンダー（直近5週）</summary><div class="sc-grid">'+wd+cells+'</div>'+
+  return'<details class="hx-sec"><summary>📅 排便カレンダー（直近5週）</summary><div class="sc-grid">'+wd+cells+'</div>'+
     '<div class="sc-leg">点の色＝便の性状（'+Object.keys(SC_COLOR).map(function(n){return'<span class="sc-dot" style="background:'+SC_COLOR[n]+'"></span>'+n}).join('　')+'）／少＝少量／💊＝下剤<br>'+
     '黄の地＝排便1回分が'+cfg.stoolWarnD+'日以上なし・赤の地＝'+cfg.stoolDangerD+'日以上なし（少量は48時間以内の3回目で1回分）</div></details>';
 }
@@ -6337,7 +6337,7 @@ function laxHistHtml(rid){
   var sum=Object.keys(by).filter(function(m){return by[m].n>0}).map(function(m){var b=by[m];
     return escapeHtmlText(m)+'：'+b.n+'回中'+b.ok+'回反応'+(b.ok?'（平均 '+escapeHtmlText(fmtDur(b.sumH/b.ok))+'後）':'');
   }).join('　／　');
-  return'<details class="hx-sec" open><summary>💊 下剤と反応（直近'+lx.length+'回・'+LAX_REACT_H+'時間以内の排便を反応とする）</summary>'+
+  return'<details class="hx-sec"><summary>💊 下剤と反応（直近'+lx.length+'回・'+LAX_REACT_H+'時間以内の排便を反応とする）</summary>'+
     (sum?'<div style="font-size: 0.8125rem;font-weight:700;margin:4px 0">'+sum+'</div>':'')+rows+'</details>';
 }
 /* ═══════════ トイレの成功率・失禁率（2026-10-16 第4段） ═══════════
