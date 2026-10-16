@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-7ArEXUtNn/OtKuBxuDO9lPoV+uhShwjib0ovVw68dQc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-XUgQ5AMSGsazYIs4iWBagYID5kXkR+dLQC2kxgOE6w0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -403,7 +403,8 @@ textarea{resize:vertical;min-height:76px}
 /* toast */
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(16px);
   background:rgba(0,0,0,.82);color:#fff;padding:9px 20px;border-radius:20px;font-size: 0.8125rem;
-  opacity:0;transition:all .28s;z-index:400;pointer-events:none;white-space:nowrap}
+  opacity:0;transition:all .28s;z-index:400;pointer-events:none;
+  max-width:calc(100vw - 32px);width:max-content;text-align:center;overflow-wrap:anywhere}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* 通信の警告帯（2026-10-06）。送れていない・取れていない時だけ、下部ナビのすぐ上に出す。
@@ -1071,6 +1072,14 @@ textarea{resize:vertical;min-height:76px}
       </div>
     </div>
     <button class="bn bp" style="margin-top:14px;width:100%" id="btnSaveCfg">設定を保存</button>
+  </div>
+  <div class="cd" id="cdStorage">
+    <div class="cd-t">📦 この端末の保存領域</div>
+    <div style="font-size: 0.8125rem;color:var(--g7);line-height:1.6">
+      この端末のブラウザには、記録の写しを置く場所（約5MB・端末により異なる）があります。同じサイト（th-su.github.io）のほかのアプリと分け合っています。いっぱいになると「保存領域が不足」と出ます。記録の正本はサーバーにあります。
+    </div>
+    <button class="bn bs" id="btnStorageScan" style="margin-top:10px;width:100%;min-height:44px">保存領域の使い方を調べる</button>
+    <div id="storageOut" style="margin-top:10px"></div>
   </div>
   <div class="cd" id="cdData">
     <div class="cd-t">💾 データ管理</div>
@@ -1782,7 +1791,7 @@ function _hbIdHash32(s){
 }
 /* 照合の始まりの日＝端末に残す日数の始まり（pruneOldLocalRecords と同じ計算） */
 function _hbKeepFrom(){
-  var days=(D.cfg&&Number(D.cfg.localKeepDays))||180;
+  var days=_localKeepDays();
   if(!(days>0)||days>=3650)days=180;
   var d=new Date();d.setDate(d.getDate()-days);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -2377,6 +2386,13 @@ function savePendingQueue(q){
   try{
     _storageSet(PQ_KEY,JSON.stringify(q));
   }catch(e){
+    // 2026-10-16: 容量不足なら、まず本体の予備の写し→本体の保持日数の順に空けて丸ごと書き直す（未送信を間引くのは最後の手）
+    if(_isQuotaErr(e)){
+      for(var _t=0;_t<=KEEP_CAP_STEPS.length;_t++){
+        if(!_freeLocalSpace())break;
+        try{_storageSet(PQ_KEY,JSON.stringify(q));return}catch(e1){}
+      }
+    }
     try{
       if(Array.isArray(q)&&q.length>1){
         // 古い分を落として最新の未送信を優先保持（本体はサーバー正本があるが、キューは最後の砦）
@@ -2611,8 +2627,90 @@ function normalizeData(){
    ・snapshot 等のシステムレコードは isUserRec 判定で除外し決して削除しない
    ・日付が読めない記録は安全側で保持する
    呼び出しは cleanData() 末尾＝起動時とサーバー同期後の2箇所を1点でカバー。 */
+/* ════════ 端末の保存領域が満杯の時の逃げ道（2026-10-16） ════════
+   保存領域（localStorage）はサイト th-su.github.io 単位で約5MB。care-tools のアプリと共用で、
+   本体（hbcr_v2）と予備の写し（hbcr_v2_bak）の2部持ちが圧迫して「保存エラー」が繰り返し出ていた。
+   書けない時は ①予備の写しを消して以後この端末では作らない ②保持期間より古い記録を整理
+   ③この端末だけ保持日数を 120→92 日へ段階的に縮める（過去3か月の平均に要るので92日より短くしない）。
+   設定の値（D.cfg.localKeepDays）とサーバーの記録には手を付けない。上限は端末ごとに hbcr_keep_cap に数値1個で持つ。
+   ★日別の照合（_hbKeepFrom）も同じ日数を使う。照合だけ長いと、縮めた分を取り込み直して満杯を繰り返すため。 */
+var BAK_OFF_KEY='hbcr_bak_off', KEEP_CAP_KEY='hbcr_keep_cap', KEEP_CAP_MIN=92, KEEP_CAP_STEPS=[120,92];
+function _isQuotaErr(e){
+  if(!e)return false;
+  return e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'||e.code===22||e.code===1014||/quota/i.test(String(e.message||e));
+}
+function _bakOff(){try{return localStorage.getItem(BAK_OFF_KEY)==='1'}catch(e){return false}}
+/* 予備の写しを消し、以後この端末では作らない。消した分があれば true（もう一度書く意味がある） */
+function _dropBak(){
+  var had=false;
+  try{had=localStorage.getItem('hbcr_v2_bak')!=null;localStorage.removeItem('hbcr_v2_bak')}catch(e){}
+  try{localStorage.setItem(BAK_OFF_KEY,'1')}catch(e){}
+  return had;
+}
+/* 容量を空ける（本体の保存・送信待ちの控えで共用）。一度に一段だけ進める。
+   'bak'＝予備の写しを消した／'shrunk'＝この端末の保持日数を一段縮め、小さくなった本体を書き直せた／false＝もう空けられない。
+   ★送信待ちの控えはサーバーから取り直せないので、間引く前に必ずこちら（取り直せる本体の写し）を先に削る（原則5） */
+function _freeLocalSpace(){
+  if(_dropBak())return 'bak';
+  for(var i=0;i<KEEP_CAP_STEPS.length;i++){
+    var step=KEEP_CAP_STEPS[i];
+    if(_localKeepDays()<=step)continue;
+    try{localStorage.setItem(KEEP_CAP_KEY,String(step))}catch(e){}
+    if(_keepCap()!==step)return false;                    // 上限すら書けない＝これ以上は打つ手がない
+    if(!(pruneOldLocalRecords()>0))continue;              // 縮めても消える記録が無い＝次の段へ
+    try{
+      var j=JSON.stringify(D);
+      _storageSet('hbcr_v2',j);
+      _pzQueuedJson=j;_pzWrittenGen=_pzGen;_pzSettle();  // これが最新＝圧縮中の古い世代は書かせない
+      return 'shrunk';
+    }catch(e){}                                           // まだ入らない＝次の段へ
+  }
+  return false;
+}
+function _keepCap(){try{var v=parseInt(localStorage.getItem(KEEP_CAP_KEY),10);return(v>=KEEP_CAP_MIN)?v:0}catch(e){return 0}}
+/* この端末に置く日数（設定の値に、端末だけの上限をかけたもの） */
+function _localKeepDays(){
+  var d=(D&&D.cfg&&Number(D.cfg.localKeepDays))||180;
+  var c=_keepCap();
+  if(c&&(!(d>0)||d>=3650||d>c))d=c;
+  return d;
+}
+/* 設定の「保存領域の使い方」。キー名と文字数だけを数える（中身は読まない・出さない）。
+   1文字はおよそ2バイトとして KB に直す（ブラウザの上限の数え方は文字単位のため目安） */
+function renderStorageUsage(){
+  var out=$('storageOut');if(!out)return;
+  var mine={},other={},total=0,n=0;
+  try{n=localStorage.length}catch(e){out.textContent='⚠️ この端末では保存領域を読めません';return}
+  for(var i=0;i<n;i++){
+    var k=null,len=0;
+    try{k=localStorage.key(i);var v=localStorage.getItem(k);len=(k?k.length:0)+(v?v.length:0)}catch(e){continue}
+    if(k==null)continue;
+    total+=len;
+    if(/^hbcr_/.test(k))mine[k]=len;
+    else{var g=String(k).split(/[_\-:.]/)[0]||k;other[g]=(other[g]||0)+len}
+  }
+  var label={hbcr_v2:'排泄記録の写し（本体）',hbcr_v2_bak:'排泄記録の写し（予備）',hbcr_pq:'送信待ちの控え',hbcr_link_bak:'修復前のバックアップ'};
+  function kb(c){return(c*2/1024).toFixed(c*2<10240?1:0)+' KB'}
+  var mineSum=0;Object.keys(mine).forEach(function(k){mineSum+=mine[k]});
+  var big=Object.keys(mine).filter(function(k){return label[k]}).sort(function(a,b){return mine[b]-mine[a]});
+  var restMine=mineSum-big.reduce(function(s,k){return s+mine[k]},0);
+  var otherKeys=Object.keys(other).sort(function(a,b){return other[b]-other[a]});
+  var rows=big.map(function(k){return['排泄記録','　'+label[k],mine[k]]});
+  if(restMine>0)rows.push(['排泄記録','　設定・控えなど',restMine]);
+  otherKeys.forEach(function(g){rows.push(['ほかのアプリ','　'+g,other[g]])});
+  var cap=_keepCap(),cfgD=(D.cfg&&Number(D.cfg.localKeepDays))||180;
+  out.innerHTML=
+    '<table class="ht" style="width:100%"><thead><tr><th style="text-align:left">区分</th><th style="text-align:left">中身</th><th>大きさ（目安）</th></tr></thead><tbody>'+
+    rows.map(function(r){return'<tr><td style="text-align:left">'+escapeHtmlText(r[0])+'</td><td style="text-align:left">'+escapeHtmlText(r[1])+'</td><td style="text-align:right">'+kb(r[2])+'</td></tr>'}).join('')+
+    '<tr><td colspan="2"><b>合計</b></td><td style="text-align:right"><b>'+kb(total)+'</b></td></tr></tbody></table>'+
+    '<div style="font-size: 0.8125rem;color:var(--g7);margin-top:8px;line-height:1.6">'+
+      '予備の写し: '+(_bakOff()?'容量不足のため、この端末では作っていません':'作っています')+'<br>'+
+      'この端末に置く記録: 直近'+_localKeepDays()+'日'+(cap&&cap<cfgD?'（容量不足のため、設定の'+cfgD+'日から縮めています）':'')+
+    '</div>'+
+    (cap&&cap<cfgD?'<button class="bn bs" id="btnKeepCapReset" style="margin-top:8px;width:100%;min-height:44px">保持期間を設定の値に戻す</button>':'');
+}
 function pruneOldLocalRecords(){
-  var days=(D.cfg&&Number(D.cfg.localKeepDays))||180;
+  var days=_localKeepDays();
   if(!(days>0)||days>=3650)return 0; // 不正値・10年以上は全保持扱い
   if(!Array.isArray(D.records)||!D.records.length)return 0;
   var d=new Date();d.setDate(d.getDate()-days);
@@ -2816,15 +2914,24 @@ function _pzOnBroken(){
 /* 実際の書き込み。compressed が null ならその場で圧縮（従来の _storageSet）。
    ★旧版を hbcr_v2_bak へ退避してから新版を書く順・容量不足の救済は従来どおり。 */
 function _persistWrite(json,compressed,gen){
-  try{
-    // 現状のデータを上書き前にバックアップとして保持（圧縮形式そのままコピー）
-    try{var prevRaw=localStorage.getItem('hbcr_v2');if(prevRaw)localStorage.setItem('hbcr_v2_bak',prevRaw)}catch(e){}
+  function _writeMain(){
     // Phase 1 A-2: LZString 圧縮で localStorage 容量を実効 4〜5 倍に拡張
     if(compressed!=null&&compressed.length<json.length)localStorage.setItem('hbcr_v2',COMPRESS_MAGIC+compressed);
     else _storageSet('hbcr_v2',json);
     if(gen>_pzWrittenGen)_pzWrittenGen=gen;
     _pzSettle();
+  }
+  try{
+    // 現状のデータを上書き前にバックアップとして保持（圧縮形式そのままコピー）。
+    // 容量不足で一度消した端末では作らない（2026-10-16・本体と2部持ちで満杯になっていた）
+    // 予備を写すこと自体が容量で失敗した時は、古い予備が場所を取ったまま残るので消して、以後作らない
+    if(!_bakOff()){try{var prevRaw=localStorage.getItem('hbcr_v2');if(prevRaw)localStorage.setItem('hbcr_v2_bak',prevRaw)}catch(e){if(_isQuotaErr(e))_dropBak()}}
+    _writeMain();
   }catch(e){
+    // 容量不足：予備の写しを消して、その場でもう一度だけ書く（正本はサーバー・予備は端末内の保険にすぎない）
+    if(_isQuotaErr(e)&&_dropBak()){
+      try{_writeMain();return}catch(e2){e=e2}
+    }
     _persistFail(e);
   }
 }
@@ -2871,20 +2978,42 @@ function _persistFail(e){
   // 離脱時(flushSave→_persistNow)は後続の save() が無く再試行機会が無いため、ここで救済しないと
   // 直前の記録が失われうる。サーバーは全期間を保持しているためローカルの古い記録削除は安全。
   var _saved2=false;
+  function _retry(){
+    var _j2=JSON.stringify(D);
+    _storageSet('hbcr_v2',_j2);
+    _pzQueuedJson=_j2;_pzWrittenGen=_pzGen;_pzSettle();   // これが最新＝圧縮中の古い世代は書かせない
+    _saved2=true;
+  }
   try{
-    if(typeof pruneOldLocalRecords==='function'&&pruneOldLocalRecords()>0){
-      var _j2=JSON.stringify(D);
-      _storageSet('hbcr_v2',_j2);
-      _pzQueuedJson=_j2;_pzWrittenGen=_pzGen;_pzSettle();   // これが最新＝圧縮中の古い世代は書かせない
-      _saved2=true;
-    }
+    if(typeof pruneOldLocalRecords==='function'&&pruneOldLocalRecords()>0)_retry();
   }catch(e2){}
+  // 2026-10-16: それでも容量が足りない時は、予備の写しを消し、この端末だけ保持日数を段階的に縮めて書き直す
+  if(!_saved2&&_isQuotaErr(e)){
+    for(var _t=0;!_saved2&&_t<=KEEP_CAP_STEPS.length;_t++){
+      var _fr=_freeLocalSpace();
+      if(!_fr)break;
+      if(_fr==='shrunk'){_saved2=true;break}
+      try{_retry()}catch(e2){}
+    }
+    if(_saved2)console.warn('[hbcr] 保存領域が不足したため、この端末の保持を直近'+_localKeepDays()+'日に縮めました');
+  }
   if(!_saved2){
     console.error('[hbcr] 保存失敗:',e);
     // 書き込み失敗時は dirty を戻し、次回フラッシュで再試行
     _saveDirty=true;
-    try{showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'))}catch(e3){}
+    _warnStorage(e);
   }
+}
+/* 保存できなかった知らせ。毎回の同期のたびには出さず30分に1回まで。容量不足は日本語で何が起きたかと次の手を示す */
+var _storageWarnAt=0, STORAGE_WARN_MS=30*60*1000;
+function _warnStorage(e){
+  var now=Date.now();
+  if(_storageWarnAt&&now-_storageWarnAt<STORAGE_WARN_MS)return;
+  _storageWarnAt=now;
+  try{
+    if(_isQuotaErr(e))showToast('⚠️ この端末の保存領域が不足しています。記録はサーバーへ送ります（設定の「保存領域」で確認）');
+    else showToast('⚠️ 保存エラー: '+(e&&e.message||'localStorageに書き込めません'));
+  }catch(e3){}
 }
 function save(){
   // インデックス／参照キャッシュを即時失効（次回描画は再構築後の最新を反映）
@@ -3577,7 +3706,7 @@ function intervalStats(rid){
   }
   var sAll=stoolResetSeries(sSrc);
   // ③ 窓：setMonth の月末繰り上がり事故を避けて日数で固定する（端末保持期間を超えては遡れない）
-  var keep=Number(D.cfg&&D.cfg.localKeepDays)||180;
+  var keep=_localKeepDays();
   var span=Math.min(92,keep>0?keep:180);
   var from=dateOff(-span),to=today();
   function inWin(r){var d=r.date||String(r.datetime||'').slice(0,10);return d>=from&&d<=to}
@@ -5349,7 +5478,7 @@ function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
       '<th>日付</th><th>時刻</th><th>種別</th><th>排尿量</th><th>尿の色</th><th>便の性状</th><th>排便量</th><th>便の色</th><th><span style="display:inline-flex;align-items:center;gap:2px">'+_wsvgSm+'水分</span></th><th>備考</th><th>記録者</th>'+
       '</tr></thead><tbody>'+initialRows+'</tbody></table>'+moreInd+'</div>';
     // 保持期間の注記（古い記録はサーバーに全量保管されている旨を明示）
-    var _keepD=Number(D.cfg&&D.cfg.localKeepDays)||180;
+    var _keepD=_localKeepDays();
     var keepNote=(_keepD>0&&_keepD<3650)
       ?'<div style="text-align:center;padding:7px;font-size: 0.6875rem;color:var(--g6)">📦 端末には直近'+_keepD+'日分を保持・表示しています（全期間の記録はスプレッドシートに保管）</div>'
       :'';
@@ -6803,7 +6932,7 @@ function expCSV(){if(hbFieldDeny())return;const BOM='\uFEFF';
       r.urineAmt||'',r.urineColor||'',fmtCons(r),r.stoolAmt||'',r.stoolColor||'',Number(r.waterCC)>0?Number(r.waterCC):'',r.notes||'',r.staff||'']
       .map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')});
   dl(BOM+[hdr.join(','),...rows].join('\n'),'haiben_'+today()+'.csv','text/csv;charset=utf-8;');
-  var _kd=Number(D.cfg&&D.cfg.localKeepDays)||180;
+  var _kd=_localKeepDays();
   if(_kd>0&&_kd<3650)showToast('📥 CSV出力しました（端末保持分：直近'+_kd+'日。全期間はスプレッドシート）')}
 function expJSON(){if(hbFieldDeny())return;dl(JSON.stringify(D,null,2),'haiben_backup_'+today()+'.json','application/json')}
 function impJSON(e){if(hbFieldDeny()){try{e.target.value=''}catch(_){}return}var f=e.target.files[0];if(!f)return;var rd=new FileReader();
@@ -7095,6 +7224,14 @@ function rpBuildSheet(){
     showToast('⚠️ 帳票を作れませんでした','err');
     return;
   }
+  /* 端末に置く期間より前の日を含む帳票は、その日が空欄になる。「排泄なし」と読み違えないよう理由を出す（2026-10-16） */
+  try{
+    var _kd2=_localKeepDays(), _rpFrom=(RP_VIEW==='floor')?(($('rpDate')&&$('rpDate').value)||''):((($('rpMonth')&&$('rpMonth').value)||'')?$('rpMonth').value+'-01':'');
+    if(_kd2>0&&_kd2<3650&&_rpFrom&&_rpFrom<_hbKeepFrom()){
+      html='<div class="rp-keep-note" style="margin:0 0 8px;padding:8px 12px;border:2px solid var(--ng);border-radius:8px;color:var(--ng);font-weight:700;font-size: 0.875rem;line-height:1.5">'+
+        '⚠️ この端末には '+escapeHtmlText(fmtMD(_hbKeepFrom()))+' 以降の記録しかありません。それより前の日は空欄になります（記録が無いという意味ではありません。全期間の記録はスプレッドシートにあります）</div>'+html;
+    }
+  }catch(e){}
   box.innerHTML=html;
   box.scrollIntoView({block:'start',behavior:'smooth'});
 }
@@ -7187,7 +7324,7 @@ function rpCsv(){
   });
   if(!rows.length){showToast('⚠️ 対象の記録がありません','err');return}
   dl(BOM+[hdr.join(','),...rows].join('\n'),'haiben_report_'+(label||today())+'.csv','text/csv;charset=utf-8;');
-  var _kd=Number(D.cfg&&D.cfg.localKeepDays)||180;
+  var _kd=_localKeepDays();
   showToast('📥 '+rows.length+'件を出力しました'+((_kd>0&&_kd<3650)?'（端末保持分：直近'+_kd+'日）':''));
 }
 
@@ -7332,6 +7469,12 @@ function init(){
     sel.dispatchEvent(new Event('change',{bubbles:true}));
   });
   $('resPickChange').addEventListener('click',function(){_resPickOpen=true;syncResPick()});
+  $('btnStorageScan').addEventListener('click',renderStorageUsage);
+  $('storageOut').addEventListener('click',function(e){
+    if(!e.target.closest('#btnKeepCapReset'))return;
+    try{localStorage.removeItem(KEEP_CAP_KEY)}catch(_){}
+    showToast('この端末の保持期間を設定の値（'+_localKeepDays()+'日）に戻しました');renderStorageUsage();
+  });
   $('waterOpen').addEventListener('click',function(){_waterOpen=true;syncInputUI();var wr=$('waterRow');if(wr&&wr.scrollIntoView)wr.scrollIntoView({behavior:'smooth',block:'center'})});
   $('undoBtn').addEventListener('click',function(){var fn=_undoFn;hideUndo();if(fn)fn()});
 
