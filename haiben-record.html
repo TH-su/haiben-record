@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-HaMjG4iYd/VxOzyEyjNCzS+pE+mwrdosUifMivJ2Nso='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-7ArEXUtNn/OtKuBxuDO9lPoV+uhShwjib0ovVw68dQc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -423,6 +423,53 @@ textarea{resize:vertical;min-height:76px}
   body.net-warn-on .toast{bottom:calc(80px + var(--netwarn-h,64px))}
 }
 @media print{#netWarn{display:none !important}}
+
+/* 保存直後の「取り消す」（2026-10-16）。トーストと同じ位置に出し、押せるボタンを持つ（8秒で消える） */
+.undo-bar{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:410;
+  display:flex;align-items:center;gap:12px;max-width:calc(100vw - 24px);
+  background:rgba(0,0,0,.88);color:#fff;padding:6px 6px 6px 18px;border-radius:26px;
+  font-size: 0.9375rem;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.undo-bar[hidden]{display:none}
+.undo-bar .ub-msg{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.undo-bar button{flex-shrink:0;min-height:44px;padding:6px 18px;border:2px solid #fff;border-radius:22px;
+  background:transparent;color:#fff;font-size: 0.9375rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.undo-bar button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+@media screen{body.net-warn-on .undo-bar{bottom:calc(80px + var(--netwarn-h,64px))}}
+@media print{.undo-bar{display:none !important}}
+
+/* 入居者のタイル選択（2026-10-16）。値は従来の #resSel が持ち、タイルはその表示役 */
+.res-sel-src{display:none}
+.rt-fl{font-size: 0.8125rem;font-weight:700;color:var(--g7);margin:12px 0 6px}
+.rt-fl:first-child{margin-top:0}
+.rt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px}
+.res-tile{min-height:64px;padding:8px 10px;border:2px solid var(--g2);border-radius:10px;background:#fff;
+  text-align:left;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;gap:3px;color:var(--g9)}
+.res-tile.on{border-color:var(--pri);background:var(--pri-l)}
+.res-tile:focus-visible{outline:3px solid var(--pri);outline-offset:2px}
+.res-tile .rt-room{font-size: 0.8125rem;font-weight:700;color:var(--g6)}
+.res-tile .rt-name{font-size: 1rem;font-weight:700;line-height:1.3}
+.res-tile .rt-s{align-self:flex-start;font-size: 0.75rem;font-weight:700;border-radius:8px;padding:1px 7px;border:1px solid transparent}
+.rt-s.rt-ok{background:var(--s-bg);color:var(--s)}
+.rt-s.rt-w{background:#fff59d;color:#6d5300;border-color:#fbc02d}
+.rt-s.rt-ng{background:var(--ng-l);color:var(--ng);border-color:var(--ng)}
+.res-picked{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.res-picked[hidden]{display:none}
+.res-picked .rp-txt{font-size: 1.125rem;font-weight:700;color:var(--g9)}
+.res-picked button{min-height:44px}
+.res-tiles[hidden]{display:none}
+
+/* 記録するボタンを画面下に貼り付け、誰に・何を・記録者を添える（2026-10-16） */
+.submit-bar{position:sticky;bottom:62px;z-index:20;background:var(--g0);padding:8px 0 4px;margin-top:4px}
+@media screen{body.net-warn-on .submit-bar{bottom:calc(62px + var(--netwarn-h,64px))}}
+@media (max-height:640px){.submit-bar{position:static}}
+.submit-sum{font-size: 0.875rem;color:var(--g7);margin-bottom:6px;line-height:1.5}
+.submit-sum b{color:var(--g9)}
+
+/* 水分の欄は畳んでおき、使う時だけ開く（値が入っている時は開いたまま） */
+.cd.water-closed #waterRow{display:none}
+.water-open-btn{display:none;width:100%;min-height:48px;border:2px dashed var(--g3,#bdbdbd);border-radius:10px;
+  background:#fff;color:#0d47a1;font-size: 0.9375rem;font-weight:700;cursor:pointer;font-family:inherit}
+.cd.water-closed .water-open-btn{display:block}
 /* 通信の記録（設定画面・この端末だけ） */
 .net-log-sum{margin-top:6px;font-size: 0.8125rem;line-height:1.7;color:var(--g7)}
 .net-log details{margin-top:6px}
@@ -631,7 +678,12 @@ textarea{resize:vertical;min-height:76px}
 <div id="sc-input" class="scr on">
   <div class="cd">
     <div class="cd-t">👤 入居者を選択</div>
-    <select id="resSel">
+    <div class="res-picked" id="resPicked" hidden>
+      <span class="rp-txt" id="resPickedTxt"></span>
+      <button type="button" class="bn bs bsm" id="resPickChange">変更</button>
+    </div>
+    <div class="res-tiles" id="resTiles"></div>
+    <select id="resSel" class="res-sel-src" aria-hidden="true" tabindex="-1">
       <option value="">― 入居者を選んでください ―</option>
     </select>
   </div>
@@ -751,8 +803,9 @@ textarea{resize:vertical;min-height:76px}
   </div>
 
   <!-- 水分摂取（水分のみの記録もOK：排泄なしでも保存可能） -->
-  <div class="cd">
+  <div class="cd water-closed" id="waterCard">
     <div class="cd-t"><span id="waterTitleIc" style="vertical-align:-0.2em;display:inline-block;line-height:1"></span> 水分摂取（水分のみの記録もOK・最大500cc）</div>
+    <button type="button" class="water-open-btn" id="waterOpen">＋ 水分を入れる</button>
     <div id="waterRow">
       <div class="water-display">
         <span class="water-ic" id="waterDispIc"></span>
@@ -777,8 +830,11 @@ textarea{resize:vertical;min-height:76px}
     </div>
   </div>
 
-  <button class="btn-go" id="btnSubmit" disabled>💾 記　録　す　る</button>
-  <div id="btnSubmitHint" class="on">⚠️ 記録者を選択してください</div>
+  <div class="submit-bar" id="submitBar">
+    <div class="submit-sum" id="submitSum" aria-live="polite"></div>
+    <button class="btn-go" id="btnSubmit" disabled>💾 記　録　す　る</button>
+    <div id="btnSubmitHint" class="on">⚠️ 記録者を選択してください</div>
+  </div>
   <button class="bn bs" id="btnSched" style="margin-top:10px;width:100%;background:#fff8e1;color:#8d6e00;border:1px solid #fbc02d;font-weight:700">⏰ 予定入力（排泄確認時間を設定）</button>
 </div>
 
@@ -1339,6 +1395,7 @@ textarea{resize:vertical;min-height:76px}
 </div></div>
 
 <div class="toast" id="toast"></div>
+<div class="undo-bar" id="undoBar" role="status" aria-live="polite" hidden><span class="ub-msg" id="undoMsg"></span><button type="button" id="undoBtn">↩️ 取り消す</button></div>
 
 <script>
 /* ═══════════ Phase 1 A-2: LZString 圧縮（localStorage 容量を実効 4〜5 倍に拡張） ═══════════
@@ -3701,6 +3758,7 @@ function jumpToInputForRecord(rid,dateStr,hm,type){
   resetForm();
   ci.rid=rid;
   if($('resSel'))$('resSel').value=String(rid);
+  updateSubmitGate();
   if($('recDT'))$('recDT').value=dateStr+'T'+(hm||'00:00');
   if(type === 'water'){
     // 水分摂取モード：排泄種別ボタンは何も選択せず、水分入力欄にフォーカスを誘導
@@ -3745,7 +3803,7 @@ var VIEW_KEY='hbcr_view';
 var VIEW_NAMES=['input','board','tl','staff','cfg','report'];
 function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav button').forEach(b=>b.classList.remove('on'));
   $('sc-'+name).classList.add('on');const nb=document.querySelector('.bnav button[data-sc="'+name+'"]');if(nb)nb.classList.add('on');
-  if(name==='input')setNow();
+  if(name==='input'){setNow();buildResSel()}
   if(name==='board'){if($('bdDate')&&!$('bdDate').value)$('bdDate').value=today();updateDayNavHi('bdDayNav',$('bdDate').value);renderBoard()}
   if(name==='tl'){if($('tlDate')&&!$('tlDate').value)$('tlDate').value=today();updateDayNavHi('tlDayNav',$('tlDate').value);renderTL()}
   if(name==='cfg')renderCfg();
@@ -3787,7 +3845,137 @@ function buildResSel(){const sel=$('resSel');const a=D.residents.filter(function
   .sort(resSortAiu);const cv=ci.rid;
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
     a.map(r=>'<option value="'+escapeHtmlText(r.id)+'"'+(cv===r.id?' selected':'')+'>'+escapeHtmlText(r.name)+'　'+escapeHtmlText(r.room)+'号室</option>').join('');
-  if(ci.rid)sel.value=ci.rid}
+  if(ci.rid)sel.value=ci.rid;
+  renderResTiles(a)}
+
+/* ═══════════ 入居者のタイル選択（2026-10-16） ═══════════
+   値の持ち主は従来どおり #resSel（ほかの機能が value を直接読み書きするため）。タイルはその表示役で、
+   押すと #resSel に値を入れて change を起こす。選んだ後はタイルを畳み「選択中」の1行にする。
+   並びは階ごと・居室順。排便の経過日数を一覧と同じしきい値で添える（色だけに頼らず日数の文字も出す）。 */
+var _resPickOpen=false;
+function _roomNum(r){var m=String(r&&r.room||'').replace(/[０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-0xFEE0)}).match(/\d+/);return m?parseInt(m[0],10):1e9}
+function renderResTiles(list){
+  var box=$('resTiles');if(!box)return;
+  var a=(list||[]).slice().sort(function(x,y){var d=_roomNum(x)-_roomNum(y);return d||String(x.room||'').localeCompare(String(y.room||''),'ja')});
+  if(!a.length){box.innerHTML='<div class="rt-fl">記録の対象の入居者がいません（設定の入居者管理で確認してください）</div>';syncResPick();return}
+  var groups={},order=[];
+  a.forEach(function(r){var f=roomToFloor(r.room);if(!groups[f]){groups[f]=[];order.push(f)}groups[f].push(r)});
+  order.sort(function(x,y){return(x===0?9:x)-(y===0?9:y)});
+  box.innerHTML=order.map(function(f){
+    return '<div class="rt-fl">'+escapeHtmlText(floorLabel(f))+'</div><div class="rt-grid">'+groups[f].map(function(r){
+      var ls=lastR(r.id,'s'),sh=elH(ls||null,r.id),bc=badgeCls(sh,'s',r.id);
+      var cls=bc==='eb-ng'?'rt-ng':bc==='eb-w'?'rt-w':'rt-ok';
+      var lbl=(sh===null)?'便 未記録':'便'+Math.floor(sh/24)+'日';
+      if(bc==='eb-ng')lbl='⚠ '+lbl;
+      return '<button type="button" class="res-tile" data-rid="'+escapeHtmlText(r.id)+'">'+
+        '<span class="rt-room">'+escapeHtmlText(r.room||'')+'号室</span>'+
+        '<span class="rt-name">'+escapeHtmlText(r.name)+'</span>'+
+        '<span class="rt-s '+cls+'">'+escapeHtmlText(lbl)+'</span></button>';
+    }).join('')+'</div>';
+  }).join('');
+  syncResPick();
+}
+/* #resSel の今の値に合わせて、タイルの選択印・畳み・「選択中」の1行をそろえる */
+function syncResPick(){
+  var sel=$('resSel'),box=$('resTiles'),pk=$('resPicked');if(!sel||!box||!pk)return;
+  var v=sel.value,r=v?D.residents.find(function(x){return String(x.id)===String(v)}):null;
+  $$('.res-tile',box).forEach(function(b){b.classList.toggle('on',!!r&&b.dataset.rid===String(v))});
+  if(r){$('resPickedTxt').textContent=(r.room?r.room+'号室　':'')+r.name+' さん';pk.hidden=false;box.hidden=!_resPickOpen}
+  else{pk.hidden=true;box.hidden=false;_resPickOpen=false}
+}
+
+/* 入力画面の付帯表示（選択中の入居者・水分の欄の開閉・記録するボタンの要約）をまとめてそろえる。
+   updateSubmitGate から毎回呼ぶ（種別・水分・記録者・入居者のどれが変わっても通る経路のため） */
+var _waterOpen=false;
+function syncInputUI(){
+  syncResPick();
+  var wc=$('waterCard');if(wc)wc.classList.toggle('water-closed',!(_waterOpen||Number(ci&&ci.waterCC)>0));
+  var sum=$('submitSum');if(!sum)return;
+  var v=$('resSel')?$('resSel').value:'',r=v?D.residents.find(function(x){return String(x.id)===String(v)}):null;
+  var tl={urine:'排尿',stool:'排便',both:'排尿＋排便',none:'誘導（排泄なし）',water:'水分のみ'}[ci&&ci.type]||'';
+  var w=Number(ci&&ci.waterCC)>0?'水分 '+Number(ci.waterCC)+'cc':'';
+  var st=($('recStaff')&&$('recStaff').value||'').trim();
+  sum.innerHTML=
+    (r?'<b>'+escapeHtmlText(r.name)+'</b> さん':'入居者 未選択')+'　／　'+
+    ((tl||w)?'<b>'+escapeHtmlText([tl,w].filter(Boolean).join('・'))+'</b>':'種別 未選択')+'　／　'+
+    (st?'記録者 <b>'+escapeHtmlText(st)+'</b>':'記録者 未選択');
+}
+
+/* ═══════════ 保存直後の「取り消す」（2026-10-16） ═══════════
+   取り消しは今ある送信（addRecord／saveRecord／delRecord）だけで行い、同期の仕組みには手を入れない。
+   ★削除の取り消しは新しい id で作り直す。同じ id で書き戻すと、他の端末へ届いた削除の印（hbcr_delrec 等）と
+     ぶつかって片方の端末にだけ残らない恐れがあるため（消失より復活・multi-device-sync 原則5）。 */
+var UNDO_MS=8000,_undoFn=null,_undoTimer=null;
+function showUndo(msg,fn){
+  var bar=$('undoBar');if(!bar){showToast(msg);return}
+  $('toast').classList.remove('on');
+  $('undoMsg').textContent=msg;_undoFn=fn;
+  // 入力画面では「記録する」の帯の上に出す（帯に重ねない）
+  var sb=$('submitBar'),onInput=$('sc-input')&&$('sc-input').classList.contains('on');
+  bar.style.bottom='';
+  bar.hidden=false;
+  if(onInput&&sb&&getComputedStyle(sb).position==='sticky'){
+    var top=sb.getBoundingClientRect().top;
+    if(top>0&&top<window.innerHeight)bar.style.bottom=Math.round(window.innerHeight-top+8)+'px';
+  }
+  if(_undoTimer)clearTimeout(_undoTimer);
+  _undoTimer=setTimeout(hideUndo,UNDO_MS);
+}
+function hideUndo(){
+  _undoFn=null;if(_undoTimer){clearTimeout(_undoTimer);_undoTimer=null}
+  var bar=$('undoBar');if(bar)bar.hidden=true;
+}
+function _undoRerender(){
+  if(typeof renderBoard==='function')renderBoard();
+  if(typeof renderTL==='function')renderTL();
+  if($('mHist')&&$('mHist').classList.contains('on')&&curHistRid)showHist(curHistRid);
+  if($('m5Day')&&$('m5Day').classList.contains('on')&&cur5DayRid!=null)showFiveDay(cur5DayRid,cur5DayEnd);
+  buildResSel();
+}
+/* 新しく記録した直後の取り消し＝その記録を削除する */
+function undoAdd(id){
+  var r=D.records.find(function(x){return String(x.id)===String(id)});
+  if(!r){showToast('⚠️ 記録が見つからないため取り消せませんでした');return}
+  if(editRecId&&String(editRecId)===String(id))resetForm();
+  D.records=D.records.filter(function(x){return String(x.id)!==String(id)});
+  save();apiPush('delRecord',{id:id});
+  _undoRerender();showToast('↩️ 記録を取り消しました');
+}
+/* 修正した直後の取り消し＝修正前の中身に戻す（updatedAt は今にして、他の端末でもこちらが新しい扱いになるように） */
+function undoEdit(id,snap){
+  var r=D.records.find(function(x){return String(x.id)===String(id)});
+  if(!r){showToast('⚠️ 記録が見つからないため取り消せませんでした');return}
+  Object.keys(r).forEach(function(k){if(!(k in snap))delete r[k]});
+  Object.keys(snap).forEach(function(k){r[k]=snap[k]});
+  r.updatedAt=new Date().toISOString();
+  save();apiPush('saveRecord',{record:r});
+  _undoRerender();showToast('↩️ 修正前の内容に戻しました');
+}
+/* 削除した直後の取り消し＝同じ中身を新しい id で作り直す */
+function undoDel(rec){
+  var c=JSON.parse(JSON.stringify(rec));
+  c.id=uid();c.updatedAt=new Date().toISOString();
+  D.records.push(c);save();apiPush('addRecord',{record:c});
+  if($('mDet')&&$('mDet').classList.contains('on')){$('mDet').classList.remove('on');curRecId=null}
+  _undoRerender();showToast('↩️ 削除を取り消しました');
+}
+
+/* ═══════════ 修正の行き来（2026-10-16） ═══════════
+   修正は従来どおり入力画面で行い、保存・キャンセルの後は修正を押した画面（一覧・時系列・履歴・5日表示）へ戻す。 */
+var _editReturn=null;
+function _curScName(){var e=document.querySelector('.scr.on');return e?e.id.replace(/^sc-/,''):'input'}
+function _editReturnGo(){
+  var e=_editReturn;_editReturn=null;
+  if(!e)return;
+  if(e.sc!=='input')showSc(e.sc);
+  if(e.hist!=null)showHist(e.hist);
+  if(e.five&&e.five.rid!=null)showFiveDay(e.five.rid,e.five.end);
+}
+/* 入力画面に、保存していない入力があるか（入居者を選んだだけは含めない） */
+function _inputDirty(forId){
+  if(editRecId)return String(editRecId)!==String(forId);
+  return !!(ci&&(ci.type||Number(ci.waterCC)>0))||!!(($('recNote')&&$('recNote').value)||'').trim();
+}
 
 /* ═══════════ INPUT ═══════════ */
 function nowLocalDTStr(){const n=new Date(),o=n.getTimezoneOffset()*6e4;return new Date(n-o).toISOString().slice(0,16)}
@@ -3852,6 +4040,7 @@ function submitRec(){
     // 修正モード: 既存レコードを更新
     var existing=D.records.find(function(r){return r.id===editRecId});
     if(!existing){showToast('⚠️ 記録が見つかりません');editRecId=null;resetForm();return}
+    var _snap=JSON.parse(JSON.stringify(existing));   // 取り消し用の修正前の中身
     existing.residentId=ci.rid;existing.date=d;existing.time=t;existing.datetime=dt;
     // TZに依存しない絶対時刻(UTC ms)。経過時間計算や表示後の再取得でズレても復旧できる
     existing.tsUTC=new Date(dt).getTime();
@@ -3865,10 +4054,12 @@ function submitRec(){
     if(existing.staff)localStorage.setItem('hbcr_ls',existing.staff);
     const res=D.residents.find(r=>r.id===ci.rid);
     const tl={urine:'排尿',stool:'排便',both:'排尿＋排便',none:'誘導・排泄なし',water:'水分摂取のみ'}[ci.type];
-    showToast('✅ '+(res?res.name:'')+' — '+tl+'を修正しました');
-    editRecId=null;resetForm();
+    var _eid=existing.id;
+    editRecId=null;resetForm();buildResSel();   // タイルの排便日数を今の記録で描き直す
     if(typeof renderBoard==='function')renderBoard();
     if(typeof renderTL==='function')renderTL();
+    _editReturnGo();
+    showUndo('✅ '+(res?res.name:'')+' — '+tl+'を修正しました',function(){undoEdit(_eid,_snap)});
     return;
   }
   const rec={id:uid(),residentId:ci.rid,date:d,time:t,datetime:dt,
@@ -3883,12 +4074,18 @@ function submitRec(){
   if(rec.staff)localStorage.setItem('hbcr_ls',rec.staff);
   const res=D.residents.find(r=>r.id===ci.rid);
   const tl={urine:'排尿',stool:'排便',both:'排尿＋排便',none:'誘導',water:'水分摂取のみ'}[ci.type];
-  showToast('✅ '+(res?res.name:'')+' — '+tl+'を記録しました');resetForm()}
+  resetForm();buildResSel();   // タイルの排便日数を今の記録で描き直す（古い「便◯日」のまま二重記録させない）
+  showUndo('✅ '+(res?res.name:'')+' — '+tl+'を記録しました',function(){undoAdd(rec.id)})}
 
 // 記録の修正モードを開始
-function editRec(id){
+function editRec(id,force){
   var r=D.records.find(function(x){return x.id===id});
   if(!r){showToast('⚠️ 記録が見つかりません');return}
+  // 入力画面に保存していない入力があれば、黙って上書きせず確かめる（下剤は専用画面なので対象外）
+  if(!force&&r.type!=='laxative'&&_inputDirty(id)){
+    customConfirm('入力画面に保存していない入力があります。\n破棄して、この記録の修正を開きますか？').then(function(ok){if(ok)editRec(id,true)});
+    return;
+  }
   // 背後に重なっているモーダルも閉じる（5日表示・履歴・詳細）
   function _closeStackedModals(){
     $('mDet').classList.remove('on');
@@ -3902,6 +4099,10 @@ function editRec(id){
     return;
   }
   editRecId=id;
+  // 保存・キャンセルの後に戻る先（閉じる前に、開いていた履歴・5日表示を控える）
+  _editReturn={sc:_curScName(),
+    hist:($('mHist')&&$('mHist').classList.contains('on'))?curHistRid:null,
+    five:($('m5Day')&&$('m5Day').classList.contains('on'))?{rid:cur5DayRid,end:cur5DayEnd}:null};
   _closeStackedModals();
   // 入力画面に移動
   showSc('input');
@@ -3970,7 +4171,7 @@ function updateSubmitBtnLabel(){
       var cancel=document.createElement('button');
       cancel.id='btnCancelEdit';cancel.className='bn bs';cancel.style.marginTop='8px';cancel.style.width='100%';
       cancel.textContent='✕ 修正をキャンセル';
-      cancel.addEventListener('click',function(){editRecId=null;resetForm();showToast('修正をキャンセルしました')});
+      cancel.addEventListener('click',function(){editRecId=null;resetForm();_editReturnGo();showToast('修正をキャンセルしました')});
       btn.parentNode.insertBefore(cancel,btn.nextSibling);
     }else{$('btnCancelEdit').style.display=''}
   }else{
@@ -3981,6 +4182,7 @@ function updateSubmitBtnLabel(){
 }
 
 function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0};
+  _waterOpen=false;_resPickOpen=false;
   if(typeof setWaterCC==='function') setWaterCC(0);
   editRecId=null;
   setNow();$('recNote').value='';$('resSel').value='';
@@ -5011,8 +5213,10 @@ function showDetMulti(recs){
       var delId=this.dataset.id;
       customConfirm('この記録を削除しますか？').then(function(ok){
         if(!ok)return;
+        var _gone=D.records.find(function(r){return String(r.id)===String(delId)});
         D.records=D.records.filter(function(r){return String(r.id)!==String(delId)});
-        save();apiPush('delRecord',{id:delId});
+        save();apiPush('delRecord',{id:delId});buildResSel();
+        if(_gone)showUndo('🗑️ 削除しました',function(){undoDel(_gone)});
         // 残りの記録を再描画（0件になったら閉じる）
         var remaining=recs.filter(function(r){return String(r.id)!==String(delId)});
         if(remaining.length===0){$('mDet').classList.remove('on');}
@@ -6287,6 +6491,7 @@ function updateSubmitGate(){
       hint.classList.remove('on');
     }
   }
+  syncInputUI();
 }
 
 /* ========================================================
@@ -7118,7 +7323,17 @@ function init(){
   })});
 
   // 入居者プルダウン
-  $('resSel').addEventListener('change',function(){hbDropMasterPending();var v=this.value;ci.rid=v?parseInt(v):null;if(isNaN(ci.rid))ci.rid=null});
+  $('resSel').addEventListener('change',function(){hbDropMasterPending();var v=this.value;ci.rid=v?parseInt(v):null;if(isNaN(ci.rid))ci.rid=null;_resPickOpen=false;updateSubmitGate()});
+  // 入居者タイル：押したら #resSel に値を入れて change を起こす（従来の選択と同じ経路を通す）
+  $('resTiles').addEventListener('click',function(e){
+    var b=e.target.closest('.res-tile');if(!b)return;
+    var sel=$('resSel');sel.value=b.dataset.rid;
+    if(String(sel.value)!==String(b.dataset.rid)){showToast('⚠️ この入居者は選べません');return}
+    sel.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  $('resPickChange').addEventListener('click',function(){_resPickOpen=true;syncResPick()});
+  $('waterOpen').addEventListener('click',function(){_waterOpen=true;syncInputUI();var wr=$('waterRow');if(wr&&wr.scrollIntoView)wr.scrollIntoView({behavior:'smooth',block:'center'})});
+  $('undoBtn').addEventListener('click',function(){var fn=_undoFn;hideUndo();if(fn)fn()});
 
   // 排泄種別（同じボタンを再クリックすると選択解除）
   $$('.type-btn').forEach(b=>b.addEventListener('click',function(){
@@ -7612,9 +7827,11 @@ function init(){
   $('mDetDel').addEventListener('click',function(){if(!curRecId)return;
     customConfirm('この記録を削除しますか？').then(function(ok){
       if(!ok)return;var delId=curRecId;
+      var _gone=D.records.find(function(r){return String(r.id)===String(delId)});
       D.records=D.records.filter(function(r){return String(r.id)!==String(delId)});save();
       apiPush('delRecord',{id:delId});
-      $('mDet').classList.remove('on');curRecId=null;renderBoard();renderTL();showToast('🗑️ 削除しました')})});
+      $('mDet').classList.remove('on');curRecId=null;renderBoard();renderTL();buildResSel();
+      if(_gone)showUndo('🗑️ 削除しました',function(){undoDel(_gone)});else showToast('🗑️ 削除しました')})});
   $('mDetClose').addEventListener('click',function(){$('mDet').classList.remove('on');curRecId=null;curDetRid=null});
   if($('mDetHist'))$('mDetHist').addEventListener('click',function(){
     if(!curDetRid)return;
@@ -7650,6 +7867,7 @@ function init(){
     showSc('input');
     buildResSel();
     $('resSel').value=String(curHistRid);
+    updateSubmitGate();
     showToast('✏️ '+res.name+' で入力を開始')});
 
   // 確認モーダル
