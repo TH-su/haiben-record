@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-XUgQ5AMSGsazYIs4iWBagYID5kXkR+dLQC2kxgOE6w0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-4J5jwk5Pwtp4fu01TfEk31s5wHkvMS0WoFGhBtmQWjk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -437,6 +437,33 @@ textarea{resize:vertical;min-height:76px}
 .undo-bar button:focus-visible{outline:3px solid #fff;outline-offset:2px}
 @media screen{body.net-warn-on .undo-bar{bottom:calc(80px + var(--netwarn-h,64px))}}
 @media print{.undo-bar{display:none !important}}
+
+/* 第3段（2026-10-16）: 一覧・時系列の切替、時系列の全体表示、排便カレンダー、下剤の反応 */
+.tgl-l{font-size: 0.8125rem;font-weight:700;color:var(--g7);display:inline-flex;align-items:center;gap:6px;cursor:pointer;min-height:44px;padding:0 6px}
+.tgl-l input{width:20px;height:20px}
+.attn-empty{padding:18px;text-align:center;color:var(--g7);font-size: 0.9375rem;font-weight:700}
+.tl-t.tl-compact .tl-c{width:auto;min-width:20px;height:40px;padding:0}
+.tl-t.tl-compact th.hr-top{min-width:20px !important;padding:4px 0}
+.tl-t.tl-compact .tl-nm{min-width:84px;padding:4px 6px}
+.tl-t.tl-compact .tl-more{font-size: 0.625rem;font-weight:700;color:var(--g7)}
+.tl-t.tl-compact .ev-m{font-size: 0.75rem}
+.hx-sec{margin:0 0 10px;border:1px solid var(--g2);border-radius:10px;padding:6px 10px;background:#fff}
+.hx-sec>summary{cursor:pointer;font-weight:700;font-size: 0.875rem;color:var(--g9);min-height:36px;display:flex;align-items:center}
+.sc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:6px}
+.sc-wd{font-size: 0.75rem;font-weight:700;text-align:center;color:var(--g7)}
+.sc-day{min-height:58px;border:1px solid var(--g2);border-radius:8px;padding:3px 4px;background:#fff;display:flex;flex-direction:column;gap:2px}
+.sc-day .sc-dn{font-size: 0.75rem;font-weight:700;color:var(--g7)}
+.sc-day.sc-today{border:2px solid var(--pri)}
+.sc-day.sc-w{background:#fff8d6}
+.sc-day.sc-ng{background:var(--ng-l)}
+.sc-day.sc-out,.sc-day.sc-hosp{background:var(--g1);color:var(--g6)}
+.sc-day.sc-blank{border:none;background:none}
+.sc-dots{display:flex;flex-wrap:wrap;gap:2px;align-items:center;font-size: 0.6875rem;line-height:1}
+.sc-dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid rgba(0,0,0,.25)}
+.sc-leg{font-size: 0.75rem;color:var(--g7);margin-top:6px;line-height:1.6}
+.lx-row{display:flex;flex-wrap:wrap;gap:4px 10px;font-size: 0.8125rem;padding:5px 0;border-bottom:1px dashed var(--g2)}
+.lx-ok{color:var(--ok);font-weight:700}.lx-none{color:var(--ng);font-weight:700}.lx-wait{color:#8d6e00;font-weight:700}
+@media print{#tlCompactBtn,.tgl-l{display:none !important}}
 
 /* 入居者のタイル選択（2026-10-16）。値は従来の #resSel が持ち、タイルはその表示役 */
 .res-sel-src{display:none}
@@ -914,6 +941,7 @@ textarea{resize:vertical;min-height:76px}
       <span style="display:inline-block;width:10px;height:10px;background:#f9a825;border-radius:50%;margin-right:3px;margin-left:8px"></span>注意
     </span>
     <label style="font-size: 0.6875rem;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
+    <label class="tgl-l"><input type="checkbox" class="only-attn">⚠ 要注意だけ</label>
   </div>
   <div class="tl-stop" id="bdScrollTop"><div class="tl-stop-inner"></div></div>
   <div class="bd-w" id="bdBox">
@@ -948,9 +976,11 @@ textarea{resize:vertical;min-height:76px}
     </div>
     <button class="bn bs bsm rf-sp" id="tlRefresh">🔄 更新</button>
     <!-- 今日の表示中だけ出す（renderTL が切り替える）: 現在時刻の位置へ横スクロール／予定の未記録の件数 -->
+    <button class="bn bs bsm" id="tlCompactBtn" aria-pressed="false" title="0時〜23時を1画面で見る／30分ごとに詳しく見る">🗺 全体</button>
     <button class="bn bs bsm" id="tlNowBtn" style="display:none" title="現在時刻の位置へ移動" aria-label="現在時刻の位置へ移動">今</button>
     <span id="tlOvdSum" role="status" style="display:none;font-size: 0.75rem;font-weight:700;white-space:nowrap"></span>
     <label style="font-size: 0.6875rem;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
+    <label class="tgl-l"><input type="checkbox" class="only-attn">⚠ 要注意だけ</label>
     <button class="bn blax bsm" id="tlLax" style="margin-left:auto">💊 下剤</button>
   </div>
   <div class="cd">
@@ -1320,6 +1350,7 @@ textarea{resize:vertical;min-height:76px}
     <button class="bn bs bsm" id="mHistClose" style="margin-left:auto" title="閉じる">✕ 閉じる</button>
   </div>
   <div id="mHistStats"></div>
+  <div id="mHistExtra"></div>
   <div id="mHistC"></div>
 </div></div>
 
@@ -3390,6 +3421,45 @@ function setupMasterRosterPoll(){
 /* 排泄記録の対象者か（targetExcretion===false の人のみ対象外。未設定/true は対象＝no-op安全） */
 function isExcretionTarget(r){return !r||r.targetExcretion!==false}
 var showNonTargets=false; // 「対象外も表示」トグル（一覧/時系列の履歴閲覧用）
+/* 下剤の反応（2026-10-16）。下剤の記録から24時間以内の最初の排便（少量も含む）を「反応」とみなす。
+   {st:'ok',h,rec}＝反応あり（h 時間後）／{st:'wait',h}＝まだ24時間たっていない（h 時間経過）／{st:'none'}＝24時間たっても排便なし */
+var LAX_REACT_H=24;
+function _evMs(r){
+  if(!r)return NaN;
+  if(typeof r.tsUTC==='number'&&!isNaN(r.tsUTC))return r.tsUTC;
+  return new Date(r.datetime||((r.date||'')+'T'+(r.time||'00:00'))).getTime();
+}
+function laxReaction(lx){
+  var t0=_evMs(lx);if(isNaN(t0))return null;
+  var t1=t0+LAX_REACT_H*36e5;
+  var pool=recsByRes(toNum(lx.residentId));
+  for(var i=0;i<pool.length;i++){
+    var r=pool[i];if(!r||(r.type!=='stool'&&r.type!=='both'))continue;
+    var t=_evMs(r);
+    if(t>t0&&t<=t1)return{st:'ok',h:(t-t0)/36e5,rec:r};
+  }
+  var now=Date.now();
+  if(now<t1)return{st:'wait',h:Math.max(0,(now-t0)/36e5)};
+  return{st:'none'};
+}
+function laxReactHtml(lx){
+  var x=laxReaction(lx);if(!x)return'';
+  if(x.st==='ok')return'<span class="lx-ok">→ '+escapeHtmlText(fmtDur(x.h))+'後に排便</span>';
+  if(x.st==='wait')return'<span class="lx-wait">（待機中 '+escapeHtmlText(fmtDur(x.h))+'）</span>';
+  return'<span class="lx-none">→ '+LAX_REACT_H+'時間 反応なし</span>';
+}
+/* 「要注意だけ」（2026-10-16）。排尿・排便のどちらかが赤か黄の人と、今日の予定を過ぎて未記録の人を残す。
+   入院中（完全入院日）の人は外す。切替の状態だけを端末に覚える（UI状態・個人情報は持たない） */
+var ONLY_ATTN_KEY='hbcr_only_attn';
+var onlyAttn=(function(){try{return localStorage.getItem(ONLY_ATTN_KEY)==='1'}catch(e){return false}})();
+function isAttnRes(re,date){
+  if(isFullHospDay(re,date))return false;
+  var lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
+  if(badgeCls(elH(lu||null,re.id),'u',re.id)!=='eb-ok')return true;
+  if(badgeCls(elH(ls||null,re.id),'s',re.id)!=='eb-ok')return true;
+  if(date===today()&&tlOvdForRes(re,date,_tlNowMin()).length)return true;
+  return false;
+}
 
 /* ════════ 記録のインデックス（A: パフォーマンス最適化） ════════
    D.records をスキャンするコスト（filter/sort）を削減するため、入居者別 / 入居者×日別の
@@ -4352,7 +4422,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
   var cntLbl=isTodayView?'本日回数':'当日回数';
   if($('bdHdrUCnt'))$('bdHdrUCnt').textContent=cntLbl;
   if($('bdHdrSCnt'))$('bdHdrSCnt').textContent=cntLbl;
-  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))&&(!onlyAttn||isAttnRes(r,date))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   tb.innerHTML=res.map((re,i)=>{
     const lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
     const uh=elH(lu||null,re.id),sh=elH(ls||null,re.id);
@@ -4394,7 +4464,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       .sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
     var laxHtml=dLax.length?'<div style="margin-top:4px">'+dLax.map(function(r){
       /* 職員名・薬剤名は自由入力。属性・本文とも必ずエスケープする（引用符を含むと属性が壊れる） */
-      return'<span class="lax-mk" title="'+escapeHtmlText(r.staff||'')+'">💊 '+escapeHtmlText(r.time||'')+' '+escapeHtmlText(r.medicine||'')+(r.tablets?' '+escapeHtmlText(r.tablets)+'錠':'')+'</span>'
+      return'<span class="lax-mk" title="'+escapeHtmlText(r.staff||'')+'">💊 '+escapeHtmlText(r.time||'')+' '+escapeHtmlText(r.medicine||'')+(r.tablets?' '+escapeHtmlText(r.tablets)+'錠':'')+'</span> '+laxReactHtml(r)
     }).join(' ')+'</div>':'';
     // 経過時間下の日付差ラベル (例: -1, -2) ― 表示中日付と最終記録日の差
     // プラス値（未来の記録）は表示しない
@@ -4446,6 +4516,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
         ?'<button class="bn bs bsm bd-ops" data-rid="'+escapeHtmlText(re.id)+'" style="padding:6px 10px;min-height:36px;font-size: 0.6875rem">✏️ 修正・削除<div style="font-size: 0.625rem;color:var(--g5);margin-top:2px">('+dAll.length+'件)</div></button>'
         :'<span style="font-size: 0.6875rem;color:var(--g5)">—</span>')+'</td>'+
       '</tr>'}).join('');
+  if(!res.length&&onlyAttn)tb.innerHTML='<tr><td colspan="99" class="attn-empty">✅ いま要注意の方はいません（「要注意だけ」を外すと全員を表示します）</td></tr>';
   // 履歴リンク
   $$('[data-hist]',tb).forEach(el=>el.addEventListener('click',function(){showHist(parseInt(this.dataset.hist))}));
   // 操作ボタン（その日の全記録を表示 → 各記録を修正・削除）
@@ -5020,14 +5091,20 @@ function renderNetLog(){
   list.innerHTML=rows.length?rows.join(''):'<li>記録はまだありません（通信に失敗しなければ増えません）</li>';
   var sm=$('netLogSummary');if(sm)sm.textContent='新しい順に最大'+NET_LOG_SHOW+'件を見る（いま'+log.length+'件）';
 }
+/* 時系列の「全体」表示（2026-10-16）。1時間ごとの24列で記号だけを出し、0時〜23時を横スクロールなしで見渡す。
+   セルは30分の2枠をまとめたもの。押すと従来どおり詳細（記録あり）か予定の入力（記録なし・その時の :00 枠）を開く */
+var TL_COMPACT_KEY='hbcr_tl_compact';
+var tlCompact=(function(){try{return localStorage.getItem(TL_COMPACT_KEY)==='1'}catch(e){return false}})();
 function renderTL(){const date=$('tlDate').value||today();
-  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
+  const res=D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))&&(!onlyAttn||isAttnRes(r,date))}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
   // 予定の超過表示は「今日」を見ているときだけ（過去日・未来日には出さない）
   var tlIsToday=(date===today()),tlNowM=_tlNowMin(),tlOvdN=0;
   // ヘッダー行: 時刻（0〜23）を各2列（:00, :30）
-  let h1='<th rowspan="2" style="min-width:96px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
+  let h1='<th rowspan="2" style="min-width:'+(tlCompact?84:96)+'px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
   let h2='';
+  if($('tlCompactBtn')){$('tlCompactBtn').textContent=tlCompact?'🔍 詳しく':'🗺 全体';$('tlCompactBtn').setAttribute('aria-pressed',tlCompact?'true':'false')}
   for(let h=0;h<24;h++){
+    if(tlCompact){h1+='<th rowspan="2" class="hr-top">'+h+'</th>';continue}
     h1+='<th colspan="2" class="hr-top" style="min-width:64px">'+h+'時</th>';
     h2+='<th class="hr-sub">:00</th><th class="hr-sub">:30</th>'}
   // データ行
@@ -5052,6 +5129,24 @@ function renderTL(){const date=$('tlDate').value||today();
        属性境界を破られないよう出力時にエスケープする（1行あたり1回だけ算出）。 */
     var reIdA=escapeHtmlText(re.id);
     let cells='';
+    if(tlCompact){
+      for(let h=0;h<24;h++){
+        var a=h*2,b=a+1;
+        if((hospBySlot[a]&&hospBySlot[a].type==='admission')||(hospBySlot[b]&&hospBySlot[b].type==='admission')){
+          cells+='<td class="tl-c has" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.625rem;text-align:center;padding:1px">入院</td>';continue;
+        }
+        if(isSlotInHospPeriod(re,date,a)&&isSlotInHospPeriod(re,date,b)){
+          cells+='<td class="tl-c" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" style="background:#757575;color:#bdbdbd;pointer-events:none"></td>';continue;
+        }
+        var hr=(bk[a]||[]).concat(bk[b]||[]);
+        var cSch=(schSet[a]||schSet[b])?' sched':'';
+        var cOvd=(ovdSet[a]||ovdSet[b])?' ovd':'',cOvdL=(ovdSet[a]||ovdSet[b])?'<span class="ovd-lbl">未</span>':'';
+        if(!hr.length){cells+='<td class="tl-c'+cSch+cOvd+'" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" title="'+h+'時台">'+cOvdL+'</td>';continue}
+        var mk=hr.slice(0,3).map(function(r){return tlMarks(r)}).join('');
+        if(hr.length>3)mk+='<span class="tl-more">+'+(hr.length-3)+'</span>';
+        cells+='<td class="tl-c has'+cSch+cOvd+'" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" title="'+h+'時台 '+hr.length+'件">'+mk+cOvdL+'</td>';
+      }
+    }else
     for(let s=0;s<48;s++){const recs=bk[s]||[];
       var schCls=schSet[s]?' sched':'';
       var schLbl=schSet[s]?'<span class="sch-lbl">'+escapeHtmlText(schSet[s])+'</span>':'';
@@ -5114,7 +5209,8 @@ function renderTL(){const date=$('tlDate').value||today();
         // 入居者マスタ側だけで入院中の人にもバッジを出す（今日の表示のみ。灰色化・入力可否は従来どおり履歴が根拠）
         ((re.masterHosp===true&&date===today())?'<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>':'')+offHtml;
     return'<tr><td class="tl-nm"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
-  $('tlBox').innerHTML='<table class="tl-t"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+'</tbody></table>';
+  var tlEmpty=(!res.length&&onlyAttn)?'<tr><td colspan="99" class="attn-empty">✅ いま要注意の方はいません（「要注意だけ」を外すと全員を表示します）</td></tr>':'';
+  $('tlBox').innerHTML='<table class="tl-t'+(tlCompact?' tl-compact':'')+'"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+tlEmpty+'</tbody></table>';
   setupTopScroll();
   tlOvdSummary(tlIsToday,tlOvdN);
   tlFitHeight();
@@ -5135,9 +5231,11 @@ function renderTL(){const date=$('tlDate').value||today();
       if(!td||!_tlBox.contains(td)||!td.dataset.slot)return;
       var parts=td.dataset.slot.split('-');var rid=parseInt(parts[0]);var slot=parseInt(parts[1]);
       var d=$('tlDate').value||today();
+      var hourMode=td.dataset.hour!=null&&td.dataset.hour!=='';   // 全体表示のセル＝1時間分（30分の2枠）
       if(td.classList.contains('has')){
         var dr=recsByResDate(rid,d);
-        var matching=dr.filter(function(r){var p=String(r.time||'').split(':');var h=parseInt(p[0]);var m=parseInt(p[1]||0);return h*2+(m>=30?1:0)===slot});
+        var matching=dr.filter(function(r){var p=String(r.time||'').split(':');var h=parseInt(p[0]);var m=parseInt(p[1]||0);
+          return hourMode?(h===parseInt(td.dataset.hour)):(h*2+(m>=30?1:0)===slot)});
         if(matching.length===1)showDet(matching[0].id);
         else if(matching.length>1)showDetMulti(matching);
       }else{
@@ -5408,8 +5506,69 @@ function _histAppendChunk(chunkSize){
     else{ind.textContent='⬇ あと '+(s.recs.length-s.rendered)+' 件 — スクロールで自動表示';ind.style.display='block'}
   }
 }
+/* 排便カレンダー（2026-10-16）。直近5週を日曜始まりで並べる。点の色＝便の性状、「少」＝少量、💊＝下剤。
+   排便1回分（第1段の少量の決まり＝stoolResetSeries）の無い日が続くと、その方のしきい値で黄・赤の地にする。
+   端末に置いていない古い日と入院の日は灰色。読むだけで保存しない */
+var SC_COLOR={'水様便':'#f9a825','下痢便':'#ff8f00','柔らかめ':'#8bc34a','普通':'#4caf50','硬め':'#8d6e63','硬便':'#5d4037'};
+function stoolCalHtml(rid){
+  var re=D.residents.find(function(x){return x.id===rid});if(!re)return'';
+  var cfg=resCfg(rid),tdy=today();
+  var pool=recsByRes(rid);
+  var st=pool.filter(function(r){return r.type==='stool'||r.type==='both'});
+  var resetDays={};stoolResetSeries(st).forEach(function(r){resetDays[String(r.date).slice(0,10)]=1});
+  var byDay={};pool.forEach(function(r){if(r.type==='stool'||r.type==='both'||r.type==='laxative'){var k=String(r.date).slice(0,10);(byDay[k]=byDay[k]||[]).push(r)}});
+  var kd=_localKeepDays(),keepFrom=(kd>0&&kd<3650)?_hbKeepFrom():'';
+  var end=new Date(tdy+'T00:00:00'),start=new Date(end);start.setDate(start.getDate()-34);start.setDate(start.getDate()-start.getDay());
+  function ymdOf(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+  var startS=ymdOf(start),lastReset=null;
+  Object.keys(resetDays).forEach(function(k){if(k<startS&&(!lastReset||k>lastReset))lastReset=k});
+  var cells='',d=new Date(start);
+  for(var i=0;i<42;i++){
+    var k=ymdOf(d);
+    if(k>tdy){if(d.getDay()===0)break;cells+='<div class="sc-day sc-blank"></div>';d.setDate(d.getDate()+1);continue}
+    var cls='',inner='';
+    if(keepFrom&&k<keepFrom){cls=' sc-out';inner='<span style="font-size: 0.625rem">—</span>'}
+    else if(isFullHospDay(re,k)){cls=' sc-hosp';inner='<span style="font-size: 0.625rem">入院</span>'}
+    else{
+      var rs=(byDay[k]||[]).slice().sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});
+      inner='<span class="sc-dots">'+rs.map(function(r){
+        if(r.type==='laxative')return'<span title="下剤 '+escapeHtmlText(r.time||'')+' '+escapeHtmlText(r.medicine||'')+'">💊</span>';
+        var c=SC_COLOR[r.consistency]||'#9e9e9e';
+        return'<span class="sc-dot" style="background:'+c+'" title="'+escapeHtmlText((r.time||'')+' '+(fmtCons(r)||'性状未記入')+' '+(r.stoolAmt||''))+'"></span>'+(r.stoolAmt==='少量'?'少':'');
+      }).join('')+'</span>';
+      if(resetDays[k])lastReset=k;
+      else if(lastReset){var gap=dayDiff(k,lastReset);if(gap>=cfg.stoolDangerD)cls=' sc-ng';else if(gap>=cfg.stoolWarnD)cls=' sc-w'}
+    }
+    if(k===tdy)cls+=' sc-today';
+    cells+='<div class="sc-day'+cls+'"><span class="sc-dn">'+(d.getDate()===1||i===0?(d.getMonth()+1)+'/':'')+d.getDate()+'</span>'+inner+'</div>';
+    d.setDate(d.getDate()+1);
+  }
+  var wd=['日','月','火','水','木','金','土'].map(function(w){return'<div class="sc-wd">'+w+'</div>'}).join('');
+  return'<details class="hx-sec" open><summary>📅 排便カレンダー（直近5週）</summary><div class="sc-grid">'+wd+cells+'</div>'+
+    '<div class="sc-leg">点の色＝便の性状（'+Object.keys(SC_COLOR).map(function(n){return'<span class="sc-dot" style="background:'+SC_COLOR[n]+'"></span>'+n}).join('　')+'）／少＝少量／💊＝下剤<br>'+
+    '黄の地＝排便1回分が'+cfg.stoolWarnD+'日以上なし・赤の地＝'+cfg.stoolDangerD+'日以上なし（少量は48時間以内の3回目で1回分）</div></details>';
+}
+/* 下剤と反応（直近10回）と、薬ごとの効き方のまとめ */
+function laxHistHtml(rid){
+  var lx=recsByRes(rid).filter(function(r){return r.type==='laxative'}).slice(-10).reverse();
+  if(!lx.length)return'';
+  var by={};
+  var rows=lx.map(function(r){
+    var x=laxReaction(r),m=r.medicine||'（薬名なし）';
+    var b=by[m]=by[m]||{n:0,ok:0,sumH:0,none:0};
+    if(x&&x.st!=='wait'){b.n++;if(x.st==='ok'){b.ok++;b.sumH+=x.h}else b.none++}
+    var detail=(x&&x.st==='ok'&&x.rec)?'（'+escapeHtmlText([fmtCons(x.rec),x.rec.stoolAmt].filter(Boolean).join('・')||'性状未記入')+'）':'';
+    return'<div class="lx-row"><span>'+escapeHtmlText(fmtMD(r.date)+' '+(r.time||''))+'</span><span>💊 '+escapeHtmlText(m)+(r.tablets?' '+escapeHtmlText(r.tablets)+'錠':'')+'</span>'+laxReactHtml(r)+detail+'</div>';
+  }).join('');
+  var sum=Object.keys(by).filter(function(m){return by[m].n>0}).map(function(m){var b=by[m];
+    return escapeHtmlText(m)+'：'+b.n+'回中'+b.ok+'回反応'+(b.ok?'（平均 '+escapeHtmlText(fmtDur(b.sumH/b.ok))+'後）':'');
+  }).join('　／　');
+  return'<details class="hx-sec" open><summary>💊 下剤と反応（直近'+lx.length+'回・'+LAX_REACT_H+'時間以内の排便を反応とする）</summary>'+
+    (sum?'<div style="font-size: 0.8125rem;font-weight:700;margin:4px 0">'+sum+'</div>':'')+rows+'</details>';
+}
 function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   curHistRid=rid;
+  if($('mHistExtra')){try{$('mHistExtra').innerHTML=stoolCalHtml(rid)+laxHistHtml(rid)}catch(e){console.error('[hbcr] 排便カレンダーの作成に失敗:',e);$('mHistExtra').innerHTML=''}}
   if($('mHistInput'))$('mHistInput').style.display=(res.active===false)?'none':'';
   if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
   $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
@@ -7452,6 +7611,19 @@ function init(){
   $$('.bnav button').forEach(b=>b.addEventListener('click',function(){showSc(this.dataset.sc)}));
 
   // 「対象外も表示」トグル（一覧/時系列で共有。排泄対象外の入居者を一時表示＝履歴閲覧用）
+  $$('.only-attn').forEach(function(cb){cb.checked=onlyAttn;cb.addEventListener('change',function(){
+    onlyAttn=this.checked;
+    try{localStorage.setItem(ONLY_ATTN_KEY,onlyAttn?'1':'0')}catch(e){}
+    $$('.only-attn').forEach(function(o){o.checked=onlyAttn});
+    if(typeof renderBoard==='function')renderBoard();
+    if(typeof renderTL==='function')renderTL();
+  })});
+  $('tlCompactBtn').addEventListener('click',function(){
+    tlCompact=!tlCompact;
+    try{localStorage.setItem(TL_COMPACT_KEY,tlCompact?'1':'0')}catch(e){}
+    renderTL();
+    if(!tlCompact&&$('tlDate')&&$('tlDate').value===today())tlScrollToNow();
+  });
   $$('.show-nontarget').forEach(function(cb){cb.addEventListener('change',function(){
     showNonTargets=this.checked;
     $$('.show-nontarget').forEach(function(o){o.checked=showNonTargets});
