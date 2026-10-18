@@ -46,6 +46,9 @@ const GETDAYS_MAX = 7;               // getDays 1回で受ける日数の上限
  *   本番は設定済みを確かめてから配信）。HAIBEN_TOKEN を消すと全端末が止まるので消さない。
  * トークンの受け取り: GET は ?token=、POST は JSON ボディの token（master.gs と同方式）。 */
 const TOKEN_PROP = 'HAIBEN_TOKEN';
+/* 例外の時に画面へ返す定型文（2026-10-18 改善プロンプト第2弾の14）。例外の中身（シート名・列名・内部の文言）は応答に出さず、
+   GAS の実行ログ（console.error）にだけ残す。画面は ok:false を見て未送信として送り直す（文言の中身は見ていない） */
+const SERVER_ERR_MSG = 'サーバーで処理できませんでした。時間をおいてもう一度お試しください';
 
 function _token(e){
   var exp = PropertiesService.getScriptProperties().getProperty(TOKEN_PROP);
@@ -249,7 +252,7 @@ function setMasterState_(body){
   }catch(err){
     // 個人情報保護：body（masterId 以外の中身）はログに出さない
     console.error('setMasterState error: ' + err);
-    return {ok:false, error:String(err)};
+    return {ok:false, error:SERVER_ERR_MSG};
   }
 }
 
@@ -394,7 +397,7 @@ function getAllResponse_(params){
     });
   }catch(err){
     console.error('doGet error:', err);
-    return json({ok:false, error:String(err)});
+    return json({ok:false, error:SERVER_ERR_MSG});
   }
 }
 
@@ -489,7 +492,7 @@ function doPost(e){
   }catch(err){
     console.error('doPost error:', err);
     // 途中で落ちても、書けた分は外す前に確定させる（外した後に確定すると、次の実行の書き込みと前後が入れ替わり得る）
-    return json(flushBeforeRelease_({ok:false, error:String(err)}));
+    return json(flushBeforeRelease_({ok:false, error:SERVER_ERR_MSG}));
   }finally{
     try{ lock.releaseLock(); }catch(_){}
   }
@@ -768,7 +771,7 @@ function digestResponse_(rb){
     return json({ok:true, from: from, days: days, readMs: Date.now() - t0, serverTime: Date.now()});
   }catch(err){
     console.error('digest error:', err);
-    return json({ok:false, error:String(err)});
+    return json({ok:false, error:SERVER_ERR_MSG});
   }
 }
 function getDaysResponse_(rb){
@@ -822,7 +825,7 @@ function getDaysResponse_(rb){
     });
   }catch(err){
     console.error('getDays error:', err);
-    return json({ok:false, error:String(err)});
+    return json({ok:false, error:SERVER_ERR_MSG});
   }
 }
 

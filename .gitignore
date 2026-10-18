@@ -4,7 +4,8 @@
 # ローカル運用ファイル（公開しない）
 CLAUDE.md
 .claude/
-tests/
+# 試験は公開する（2026-10-18・GitHub Actions で回すため）。手元の Chrome を使う試験だけ公開しない
+tests/idb-browser.test.mjs
 
 # 配信時に退避する「本番のコードそのまま」の控え（gas-deploy.sh が作る唯一の巻き戻し手段）。
 # ローカルにだけ置く。公開リポジトリへ載せない。

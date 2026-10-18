@@ -1,0 +1,58 @@
+# 試験（自動）— main へ送るたび・PR ごとに、試験（tests/）と CSP の照合を回す（2026-10-18 改善プロンプト第2弾の14）
+#
+# ・試験: tests/*.test.js（架空データだけ・接続先は設定しない＝サーバーへは何も送らない）
+#   tests/idb-browser.test.mjs は手元の Chrome を使うので公開しない（.gitignore）。毎朝の点検（fleet-check）で回す
+# ・CSP の照合: tools/csp.mjs --check（画面の中のスクリプトの指紋が CSP と合っているか）。決まりは care-tools の check/csp.mjs なので、
+#   公開の care-tools を隣に取り出して使う（CARE_TOOLS）
+# ★このリポジトリは main へ送った瞬間が公開なので、ここで赤くなっても公開は止まらない。赤くなったらすぐ直す
+name: 試験
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: 試験と CSP の照合
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CARE_TOOLS: ${{ github.workspace }}/_care-tools   # tools/csp.mjs と試験の CSP の項目が使う
+    steps:
+      - name: リポジトリを取り出す
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 試験の一部は直す前の版（git show）と比べる
+
+      - name: CSP の決まり（care-tools）を隣に取り出す
+        uses: actions/checkout@v4
+        with:
+          repository: TH-su/care-tools
+          path: _care-tools
+
+      - name: Node を用意する
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 試験（tests/*.test.js）
+        run: |
+          fail=0
+          for f in tests/*.test.js; do
+            echo "::group::$f"
+            if node "$f"; then echo "合格: $f"; else echo "::error::不合格: $f"; fail=1; fi
+            echo "::endgroup::"
+          done
+          exit $fail
+
+      - name: CSP の照合（tools/csp.mjs --check）
+        run: node tools/csp.mjs --check
