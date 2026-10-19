@@ -48,8 +48,8 @@ head('1. 旧版の端末には従来と同じ応答');
   for(const s of [0,since]){
     const a=post(ctxOf(OLD,sh.map(r=>r.slice())),{action:'getAll',since:s||undefined});
     const b=post(ctxOf(GAS,sh.map(r=>r.slice())),{action:'getAll',since:s||undefined});
-    const strip=o=>{const c=Object.assign({},o);delete c.syncCursor;delete c.serverTime;delete c.heal;delete c.deleted;return JSON.stringify(c)};
-    ok(strip(a)===strip(b),(s?'差分':'全件')+': 追加した heal・deleted の他は旧版と1文字も同じ',{a:a.records&&a.records.length,b:b.records&&b.records.length});
+    const strip=o=>{const c=Object.assign({},o);delete c.syncCursor;delete c.serverTime;delete c.heal;delete c.deleted;delete c.padSetVer;return JSON.stringify(c)};
+    ok(strip(a)===strip(b),(s?'差分':'全件')+': 追加した heal・deleted・padSetVer の他は旧版と1文字も同じ',{a:a.records&&a.records.length,b:b.records&&b.records.length});
     ok(b.heal===true&&Array.isArray(b.deleted),(s?'差分':'全件')+': heal=true・deleted=[] を添える（旧版の端末は見ない）');
   }
 })();

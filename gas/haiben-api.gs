@@ -5,7 +5,7 @@ const SS = SpreadsheetApp.getActiveSpreadsheet();
 
 // schedule（入居者ごとの排泄予定時刻 ["09:00", ...]）は 2026-07-25 追加。
 // それまで端末の localStorage にしか存在せず、自動ロックの消去で永久に失われる状態だった。
-const RES_DEFAULT_HEADERS = ['id','name','yomi','room','gender','active','hidden','laxNote','cfg','schedule'];
+const RES_DEFAULT_HEADERS = ['id','name','yomi','room','gender','active','hidden','laxNote','cfg','schedule','padSet'];
 const REC_DEFAULT_HEADERS = ['id','residentId','date','time','datetime','type',
   'urineAmt','urineColor','urineSrc','consistency','stoolAmt','stoolColor','stoolSrc',
   'medicine','tablets','notes','staff','createdAt','updatedAt'];
@@ -384,6 +384,8 @@ function getAllResponse_(params){
       // 能力宣言（2026-07-30）: schedule 列を持ち saveSched を受け付けるサーバーであることを示す。
       // クライアントはこれが 1 以上のときだけ排泄予定の移行完了フラグを立てる（旧版では undefined）。
       schedVer:  1,
+      // 能力宣言（2026-10-19）: padSet 列（人ごとのおむつ・パッド）を持ち savePadSet を受け付ける
+      padSetVer: 1,
       /* ★次回の ?since= に使うべき値（2026-09-08）。シートを読み始めた時刻＝この応答が
          「いつ時点のシートか」を表す。端末は自分の時計を一切使わずこれを保存する。
          旧クライアントはこのキーを見ないため、追加しても挙動は変わらない。 */
@@ -481,6 +483,7 @@ function doPost(e){
       case 'delRecord':  deleteRecordMarked_(body.id);                              _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident, true); _afterFlush_.push(invalidateResidentsCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveSched':  return json(flushBeforeRelease_(saveSched_(body)));
+      case 'savePadSet': return json(flushBeforeRelease_(savePadSet_(body)));
       case 'delRes':     deleteRow_('Residents', body.id);                            _afterFlush_.push(invalidateResidentsCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveCfg':    writeConfig_(body.cfg);                                      return json(flushBeforeRelease_({ok:true}));
       // 入居者マスタの入院状態を更新（共通契約 C4）。旧版GASでは 'unknown action' となり、
@@ -818,6 +821,7 @@ function getDaysResponse_(rb){
       cfg: readConfig_(),
       delta: true,
       schedVer: 1,
+      padSetVer: 1,
       days: want,
       deleted: readDeletedIds_(0),
       serverTime: Date.now()
@@ -1089,6 +1093,8 @@ function upsertRow_(name, defaultHeaders, obj, ensureCols){
     if(key==='cfg' && obj.cfg) return JSON.stringify(obj.cfg);
     // schedule は常に既存セルを温存する（新規行は空）。配列で来ていても書かない＝ saveSched 専用。
     if(key==='schedule') return existing ? existing[ci] : '';
+    // padSet（人ごとのおむつ・パッド）も同じ。書き手は savePadSet_ のみ（2026-10-19）
+    if(key==='padset') return existing ? existing[ci] : '';
     if(key==='active') return obj.active!==false;
     if(key==='hidden') return obj.hidden===true;
     const v = objLc[key];
@@ -1131,6 +1137,54 @@ function saveSched_(body){
   _wrote_ = true;
   sh.getRange(rowIdx, schedCol+1).setValue(JSON.stringify(body.schedule));
   _afterFlush_.push(invalidateResidentsCache_);   // キャッシュは doPost が flush した後に消す（2026-09-23）
+  return {ok:true};
+}
+
+/** 人ごとのおむつ・パッド(padSet)の専用書き込み（2026-10-19 追加・saveSched_ と同じ作り）。
+ * body = {id, padSet:{at, day:[{n,l}], night:[{n,l}]}}。対象入居者の padSet セル 1 つだけを書く。
+ * ★新しさの比較: セルに入っている at より古い padSet は書かない（ok:true で受け流す）。
+ *   未送信の行列に残った古い送信が、後から別の端末で直した新しい値を巻き戻さないため。
+ * 行が無い場合は ok:false（先行する saveRes が行を作った後の再送で成功する）。 */
+function savePadSet_(body){
+  const ps = body && body.padSet;
+  if(!body || body.id==null || !ps || typeof ps!=='object' || Array.isArray(ps)) return {ok:false, error:'invalid padSet'};
+  const at = Number(ps.at) || 0;
+  if(!(at > 0)) return {ok:false, error:'invalid padSet.at'};
+  const clean = {at: at, day: [], night: []};
+  ['day','night'].forEach(function(k){
+    (Array.isArray(ps[k]) ? ps[k] : []).slice(0, 8).forEach(function(x){
+      if(!x || typeof x!=='object') return;
+      const n = String(x.n==null?'':x.n).trim().slice(0, 40);
+      const l = (x.l==='外'||x.l==='内') ? x.l : '';
+      if(n) clean[k].push({n: n, l: l});
+    });
+  });
+  const sh = getOrCreateSheet_('Residents', RES_DEFAULT_HEADERS);
+  ensureHeaders_(sh, RES_DEFAULT_HEADERS);   // padSet 列が無ければ末尾に追加（初回のみ書き込み）
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(v=>String(v).trim());
+  const idCol = headers.findIndex(h=>h.toLowerCase()==='id');
+  if(idCol < 0) return {ok:false, error:'id列が見つかりません: Residents'};
+  const psCol = headers.findIndex(h=>h.toLowerCase()==='padset');
+  if(psCol < 0) return {ok:false, error:'padSet列が見つかりません: Residents'};
+  const last = sh.getLastRow();
+  let rowIdx = -1;
+  if(last >= 2){
+    const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
+    for(let i=0;i<ids.length;i++){
+      if(String(ids[i][0])===String(body.id)){ rowIdx = i+2; break; }
+    }
+  }
+  if(rowIdx < 0) return {ok:false, error:'resident not found'};
+  const cur = sh.getRange(rowIdx, psCol+1).getValue();
+  let curAt = 0;
+  if(typeof cur === 'string' && cur.trim().charAt(0) === '{'){
+    try{ curAt = Number(JSON.parse(cur).at) || 0; }catch(e){ curAt = 0; }
+  }
+  if(curAt > at) return {ok:true, stale:true};   // 手元の方が古い＝書かない（端末は次の同期で新しい値を受け取る）
+  _wrote_ = true;
+  sh.getRange(rowIdx, psCol+1).setValue(JSON.stringify(clean));
+  _afterFlush_.push(invalidateResidentsCache_);
   return {ok:true};
 }
 

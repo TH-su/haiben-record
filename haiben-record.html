@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-vIQ05tMrGsfLfZWc7bu9bR91qDuQod8/NYVTZU2mGU0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-xFe9B5s/5MbplTvNP53p6n/3E8r8n+YOZTs6SMvZ9Aw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -512,6 +512,39 @@ textarea{resize:vertical;min-height:76px}
 .gs-t td:first-child{text-align:left}
 .gs-t small{color:var(--g6)}
 .gs-na{color:var(--g6)}
+/* 人ごとのおむつ・パッド（2026-10-19） */
+.ps-tabs{display:flex;gap:8px;margin-bottom:8px}
+.ps-tab{flex:1;min-height:44px;border:2px solid var(--g3);border-radius:8px;background:#fff;color:var(--g9);font-size: 0.9375rem;font-weight:700;cursor:pointer;font-family:inherit}
+.ps-tab.on{background:var(--pri);border-color:var(--pri);color:#fff}
+.ps-sel{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.ps-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;border:1px solid var(--g2);border-radius:8px;background:var(--g0)}
+.ps-row .ps-nm{flex:1;min-width:8em;font-size: 1rem;font-weight:700;color:var(--g9)}
+.ps-lay,.ps-del{min-width:48px;min-height:44px;border:2px solid var(--g3);border-radius:8px;background:#fff;color:var(--g9);font-size: 0.9375rem;font-weight:700;cursor:pointer;font-family:inherit}
+.ps-lay.on{background:#e8f5e9;border-color:#2e7d32;color:#1b5e20}
+.ps-del{color:var(--ng)}
+.ps-empty{font-size: 0.9375rem;color:var(--g6);padding:6px 2px}
+.ps-sub{font-size: 0.8125rem;font-weight:700;color:var(--g7);margin:6px 0 4px}
+.ps-pick-g{display:flex;flex-wrap:wrap;gap:8px}
+.ps-pick{min-height:44px;padding:6px 12px;border:2px dashed var(--g3);border-radius:8px;background:#fff;color:var(--g9);font-size: 0.9375rem;font-weight:600;cursor:pointer;font-family:inherit}
+.ps-pick:disabled{opacity:.45;cursor:default}
+.ps-free{margin-top:8px}
+.ps-free>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size: 0.875rem;font-weight:700;color:var(--g7)}
+.ps-free-r{display:flex;gap:8px}
+.ps-free-r input{flex:1}
+.ps-note{font-size: 0.8125rem;color:var(--g6);line-height:1.6;margin-top:4px}
+/* 入力画面: その方の品目を大きなボタンで */
+.pm-head{font-size: 0.9375rem;font-weight:700;color:var(--g9);margin-bottom:6px}
+.pm-g{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.pm-b{flex:1 1 200px;min-height:56px;padding:8px 12px;border:2px solid var(--g3);border-radius:10px;background:#fff;color:var(--g9);font-size: 1.0625rem;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;line-height:1.3}
+.pm-b small{display:block;font-size: 0.8125rem;font-weight:600;color:var(--g6)}
+.pm-b.on{background:#e8f5e9;border-color:#2e7d32;color:#1b5e20}
+.pm-b.on small{color:#2e7d32}
+.pm-q{display:flex;gap:8px;margin-bottom:10px}
+.pm-q button{flex:1;min-height:48px;border:2px solid var(--pri);border-radius:10px;background:var(--pri-l);color:var(--pri-d);font-size: 0.9375rem;font-weight:700;cursor:pointer;font-family:inherit}
+.pad-other>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size: 0.875rem;font-weight:700;color:var(--g7)}
+.rt-pad{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size: 0.9375rem;color:var(--g7);margin-top:4px;line-height:1.35;text-align:left}
+.hx-pad{margin:0 0 10px;padding:8px 12px;border:1px solid #c5d9a8;border-radius:10px;background:#f3f6e8;font-size: 0.9375rem;line-height:1.6;color:var(--g9)}
+.hx-pad b{color:#4b6316}
 /* 交換したもの（2026-10-16 第4段） */
 .cd.pad-closed #padBody{display:none}
 .cd.pad-closed .water-open-btn{display:block}
@@ -790,6 +823,13 @@ html.night #recStaff:read-only,html.night #mLaxStaff:read-only{background:#3a2d1
 html.night .btn-go:disabled,html.night .btn-go.is-disabled,html.night .btn-go:disabled:hover,html.night .btn-go.is-disabled:hover{background:#4a515a;color:#fff;opacity:1}
 html.night .hb-field-note{background:#3d2a10;color:#ffcc80;border-color:#b5772a}
 html.night .pad-st{background:var(--nt-sf2);color:var(--g9)}
+html.night .ps-tab,html.night .ps-lay,html.night .ps-del,html.night .ps-pick,html.night .pm-b{background:var(--nt-sf2);color:var(--g9)}
+html.night .ps-tab.on{background:var(--pri);color:#fff}
+html.night .ps-lay.on,html.night .pm-b.on{background:#173a20;border-color:#81c995;color:#c8f0d0}
+html.night .pm-b.on small{color:#a5d6a7}
+html.night .pm-q button{background:#17305a;color:var(--nt-pri-tx)}
+html.night .hx-pad{background:#1f2614;border-color:#4b6316}
+html.night .hx-pad b{color:#c5e384}
 html.night .pad-c.on{color:var(--nt-pri-tx)}
 html.night .pad-hi{background:#1f2614;border-left-color:#9bbf45}
 html.night .pad-hi b{color:#c5e384}
@@ -1089,7 +1129,10 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
     <div class="pad-off" id="padOff" hidden></div>
     <button type="button" class="water-open-btn" id="padOpen">＋ 交換したものを入れる</button>
     <div id="padBody">
-      <div class="pad-rows" id="padRows"></div>
+      <div id="padMine"></div>
+      <details class="pad-other" id="padOther" open><summary id="padOtherSum">品目と枚数で入れる</summary>
+        <div class="pad-rows" id="padRows"></div>
+      </details>
       <div class="pad-hint">交換だけの時は、排泄種別で「誘導・排泄なし」を選んで記録してください。</div>
     </div>
   </div>
@@ -1571,6 +1614,21 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
     <select id="mRS"><option value="active">在籍中</option><option value="inactive">退去済</option></select></div>
   <div class="fg"><label class="fl">下剤の使用法（メモ）</label>
     <textarea id="mRLax" rows="2" placeholder="例: 毎週月・木にプルゼニド1錠（夕食後）" style="width:100%;padding:8px;border:1px solid var(--g3);border-radius:6px;font-family:inherit;font-size: 0.875rem;resize:vertical"></textarea></div>
+  <div class="fg ps-wrap" id="mRPadWrap">
+    <label class="fl">🩲 使用しているおむつ・パッド</label>
+    <div class="ps-tabs" role="tablist" aria-label="昼と夜">
+      <button type="button" class="ps-tab on" data-k="day" role="tab" aria-selected="true">☀️ 昼（7時〜21時）</button>
+      <button type="button" class="ps-tab" data-k="night" role="tab" aria-selected="false">🌙 夜（21時〜翌7時）</button>
+    </div>
+    <div id="mRPadSel" class="ps-sel"></div>
+    <div class="ps-sub">施設の品目から選ぶ（タップで追加）</div>
+    <div id="mRPadPick" class="ps-pick-g"></div>
+    <details class="ps-free"><summary>その他（一覧に無い品目を書く）</summary>
+      <div class="ps-free-r"><input type="text" id="mRPadFree" maxlength="40" placeholder="例：テープ式おむつ LL" aria-label="一覧に無い品目"><button type="button" class="bn bs bsm" id="mRPadFreeAdd">追加</button></div>
+      <div class="ps-note">書いた品目は施設の品目にも足され、次からはタップで選べます。</div>
+    </details>
+    <div id="mRPadNote" class="ps-note"></div>
+  </div>
   <details style="margin-bottom:12px;background:#f5f5f5;padding:8px 10px;border-radius:6px"><summary style="cursor:pointer;font-weight:600;font-size: 0.8125rem">⚙️ この入居者のみアラートしきい値を変更（任意）</summary>
     <div style="font-size: 0.6875rem;color:var(--g5);margin:6px 0">空欄にすると全体設定（設定画面）の値が適用されます。</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -1845,12 +1903,24 @@ function padsNoteSrv(apiRec){
   var v=has?padsSrvTag():'0',was=null;try{was=localStorage.getItem(PAD_COL_KEY);localStorage.setItem(PAD_COL_KEY,v)}catch(e){}
   if(was!==v){try{renderPadCard();renderPadCfg()}catch(e){}}
 }
-var _padOpen=false,_padList=[];
+var _padOpen=false,_padList=[],_padMine=[],_padSig='',_padOtherOpen=false;
+/* その方の使用品のボタン: 押すと「交換した（1枚）」と「していない」を切り替える。全部交換・内側だけ も同じ ci.pads に入れる */
+function padMineClick(e){
+  var b=e.target&&e.target.closest?e.target.closest('button'):null;if(!b)return;
+  var o=parsePads(ci.pads);
+  if(b.dataset.q==='all'){_padMine.forEach(function(x){o[x.n]=Math.max(1,o[x.n]||0)})}
+  else if(b.dataset.q==='in'){_padMine.forEach(function(x){if(x.l==='内')o[x.n]=Math.max(1,o[x.n]||0);else if(x.l==='外')delete o[x.n]})}
+  else if(b.dataset.i!=null){var x=_padMine[parseInt(b.dataset.i,10)];if(!x)return;if((o[x.n]||0)>0)delete o[x.n];else o[x.n]=1}
+  else return;
+  ci.pads=o;_padOpen=true;
+  renderPadCard();
+  if(typeof updateSubmitGate==='function')updateSubmitGate();
+}
 function renderPadCard(){
   var card=$('padCard');if(!card)return;
   var off=$('padOff'),ok=padsAvail();
   if(!ok){
-    card.classList.add('pad-closed');card.classList.add('pad-na');
+    card.classList.add('pad-closed');card.classList.add('pad-na');_padSig='';
     if(off){off.hidden=false;off.textContent='スプレッドシートの記録シートに「pads」の列が無いため、交換したものはまだ記録できません。事務所の設定画面の「交換したものの品目」をご覧ください。'}
     return;
   }
@@ -1858,8 +1928,33 @@ function renderPadCard(){
   var cur=parsePads(ci&&ci.pads);
   var list=padKinds();Object.keys(cur).forEach(function(k){if(list.indexOf(k)<0)list.push(k)});
   _padList=list;
-  var open=_padOpen||!!(ci&&(ci.uPad||ci.sPad))||padsTotal(cur)>0;
+  /* その方の使用品（2026-10-19）: 入居者と記録の時刻（21時〜翌7時は夜）で決める */
+  var rv=($('resSel')&&$('resSel').value)||(ci&&ci.rid!=null?String(ci.rid):'');
+  var res=rv?D.residents.find(function(x){return String(x.id)===String(rv)}):null;
+  var ps=padSetFor(res,($('recDT')&&$('recDT').value)||Date.now());
+  _padMine=ps.list;
+  var sig=JSON.stringify([rv,ps.night,ps.list,cur,list,_padOpen,!!(ci&&(ci.uPad||ci.sPad))]);
+  if(sig===_padSig&&!card.classList.contains('pad-na'))return;   // 変わっていなければ描き直さない（開いた「ほかの品目」を閉じない）
+  _padSig=sig;
+  var open=_padOpen||!!(ci&&(ci.uPad||ci.sPad))||padsTotal(cur)>0||ps.list.length>0;
   card.classList.toggle('pad-closed',!open);
+  var mine=$('padMine'),oth=$('padOther');
+  if(mine){
+    if(ps.list.length){
+      var hasOut=ps.list.some(function(x){return x.l==='外'}),hasIn=ps.list.some(function(x){return x.l==='内'});
+      mine.innerHTML='<div class="pm-head">'+(ps.night?'🌙 夜':'☀️ 昼')+'の使用品（交換したものをタップ）</div>'+
+        '<div class="pm-q"><button type="button" class="pm-all" data-q="all">全部交換</button>'+(hasOut&&hasIn?'<button type="button" class="pm-in" data-q="in">内側だけ</button>':'')+'</div>'+
+        '<div class="pm-g">'+ps.list.map(function(x,i){var on=(cur[x.n]||0)>0,nm=escapeHtmlText(x.n);
+          return '<button type="button" class="pm-b'+(on?' on':'')+'" data-i="'+i+'" aria-pressed="'+on+'">'+(on?'✓ ':'')+nm+
+            '<small>'+(x.l==='外'?'外側':x.l==='内'?'内側':'')+(on?'　交換した':'')+'</small></button>';
+        }).join('')+'</div>';
+    }else mine.innerHTML='';
+  }
+  if(oth){
+    var extra=Object.keys(cur).some(function(k){return !ps.list.some(function(x){return x.n===k})});
+    if($('padOtherSum'))$('padOtherSum').textContent=ps.list.length?'＋ ほかの品目（ふだんと違うものを使った時）':'品目と枚数で入れる';
+    oth.open=!ps.list.length||extra||_padOtherOpen;
+  }
   var box=$('padRows');if(!box)return;
   box.innerHTML=list.map(function(k,i){
     var n=cur[k]||0,nm=escapeHtmlText(k);
@@ -1904,6 +1999,109 @@ function savePadKinds(){
   save();apiPush('saveCfg',{cfg:cfgSendPayload()});
   renderPadCfg();renderPadCard();
   showToast('✅ 交換したものの品目を保存しました');
+}
+
+/* ═══════════ 人ごとのおむつ・パッド（padSet・2026-10-19） ═══════════
+   r.padSet = {at:保存した時刻(ms), day:[{n:'品目 サイズ', l:'外'|'内'|''}], night:[…]}
+   ★書き手は savePadSet だけ（GAS の Residents シート padSet 列）。saveRes の行まるごとの上書きでは書かない＝排泄予定と同じ作り。
+   ★サーバーに値が無い（null・空のセル）時は手元を残す。両方にある時は at の新しい方を採る（未送信の手元の直しを巻き戻さない）。
+   ★全部外すのは「day も night も空の配列」を at 付きで明示する（空のセル＝値なし とは区別する・multi-device-sync 原則4）。 */
+var PADSET_SRV_KEY='hbcr_srv_padset';   // UI の状態だけ（サーバーが padSet に対応しているか・接続先ごと）
+function parsePadSet(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='string'){try{v=JSON.parse(v)}catch(e){return null}}
+  if(!v||typeof v!=='object'||Array.isArray(v))return null;
+  var at=Number(v.at)||0;if(!(at>0))return null;
+  var o={at:at,day:[],night:[]};
+  ['day','night'].forEach(function(k){
+    (Array.isArray(v[k])?v[k]:[]).slice(0,8).forEach(function(x){
+      if(!x||typeof x!=='object')return;
+      var n=String(x.n==null?'':x.n).trim().slice(0,40),l=(x.l==='外'||x.l==='内')?x.l:'';
+      if(n)o[k].push({n:n,l:l});
+    });
+  });
+  return o;
+}
+/* その時刻に使う品目（21時〜翌7時は夜。夜を決めていなければ昼） */
+function padSetFor(res,when){
+  var ps=parsePadSet(res&&res.padSet);if(!ps)return{night:false,list:[]};
+  var d=when instanceof Date?when:new Date(when||Date.now());if(isNaN(d.getTime()))d=new Date();
+  var nt=hbNightAuto(d);
+  if(nt&&ps.night.length)return{night:true,list:ps.night};
+  return{night:nt&&!ps.night.length?false:nt,list:ps.day};
+}
+function padSetLine(list){return(list||[]).map(function(x){return(x.l?x.l+'：':'')+x.n}).join('＋')}
+/* 同期の取り込み: サーバーの値を正規化し、手元の方が新しければ手元を残す */
+function padSetMerge(srv,loc){
+  var a=parsePadSet(srv),b=parsePadSet(loc);
+  if(!a)return b;
+  if(b&&b.at>a.at)return b;
+  return a;
+}
+function padSetNoteSrv(json){
+  try{var tag=padsSrvTag(),v=(json&&(json.padSetVer|0)>=1)?tag:'0';localStorage.setItem(PADSET_SRV_KEY,v)}catch(e){}
+}
+function padSetSrvOk(){if(!apiUrl)return true;try{return localStorage.getItem(PADSET_SRV_KEY)===padsSrvTag()}catch(e){return false}}
+/* 記録の「どこまで交換したか」。その記録の時刻の品目（今の設定）と照らして出す */
+function padScopeText(rec){
+  var o=parsePads(rec&&rec.pads),keys=Object.keys(o);if(!keys.length)return'';
+  var res=D.residents.find(function(x){return String(x.id)===String(rec.residentId)});
+  var dt=rec.datetime||((rec.date||'')+'T'+(rec.time||'00:00'));
+  var set=padSetFor(res,new Date(dt)).list;
+  var names=set.map(function(x){return x.n});
+  var allIn=set.length>0&&names.every(function(n){return o[n]>0});
+  var inner=set.filter(function(x){return x.l==='内'}).map(function(x){return x.n});
+  var onlyInner=inner.length>0&&keys.every(function(k){return inner.indexOf(k)>=0})&&set.some(function(x){return x.l==='外'});
+  var lbl=allIn?'全部交換':onlyInner?'内側だけ交換':'';
+  return(lbl?lbl+'（':'')+padsText(rec.pads)+(lbl?'）':'');
+}
+/* ── 入居者の編集: 使用しているおむつ・パッド ── */
+var _psEdit={day:[],night:[]},_psTab='day',_psOrig='';
+function psEditLoad(r){
+  var ps=parsePadSet(r&&r.padSet);
+  _psEdit={day:ps?ps.day.map(function(x){return{n:x.n,l:x.l}}):[],night:ps?ps.night.map(function(x){return{n:x.n,l:x.l}}):[]};
+  _psOrig=JSON.stringify(_psEdit);_psTab='day';
+  if($('mRPadFree'))$('mRPadFree').value='';
+  psEditRender();
+}
+function psEditRender(){
+  var box=$('mRPadSel'),pick=$('mRPadPick');if(!box||!pick)return;
+  $$('#mRPadWrap .ps-tab').forEach(function(b){var on=b.dataset.k===_psTab;b.classList.toggle('on',on);b.setAttribute('aria-selected',on?'true':'false')});
+  var cur=_psEdit[_psTab];
+  box.innerHTML=cur.length?cur.map(function(x,i){var nm=escapeHtmlText(x.n);
+    return '<div class="ps-row"><span class="ps-nm">'+nm+'</span>'+
+      '<button type="button" class="ps-lay'+(x.l==='外'?' on':'')+'" data-i="'+i+'" data-l="外" aria-pressed="'+(x.l==='外')+'" aria-label="'+nm+'を外側にする">外側</button>'+
+      '<button type="button" class="ps-lay'+(x.l==='内'?' on':'')+'" data-i="'+i+'" data-l="内" aria-pressed="'+(x.l==='内')+'" aria-label="'+nm+'を内側にする">内側</button>'+
+      '<button type="button" class="ps-del" data-i="'+i+'" aria-label="'+nm+'を外す">✕</button></div>';
+  }).join(''):'<div class="ps-empty">'+(_psTab==='night'?'夜の品目は未設定です（夜も昼の品目を出します）':'まだ選んでいません')+'</div>';
+  var have=cur.map(function(x){return x.n});
+  pick.innerHTML=padKinds().map(function(k,i){var nm=escapeHtmlText(k),dis=have.indexOf(k)>=0||cur.length>=8;
+    return '<button type="button" class="ps-pick" data-i="'+i+'"'+(dis?' disabled':'')+' aria-label="'+nm+'を追加">＋ '+nm+'</button>';
+  }).join('');
+  var note=$('mRPadNote');
+  if(note)note.textContent=(apiUrl&&!padSetSrvOk())?'⚠️ サーバー（GAS）がまだこの機能に対応していません。保存した内容はこの端末に残り、サーバーの更新後に自動で送られます。':'';
+}
+function psEditResult(){return{day:_psEdit.day.slice(),night:_psEdit.night.slice()}}
+function psEditClick(e){
+  var b=e.target&&e.target.closest?e.target.closest('button'):null;if(!b||b.disabled)return;
+  var cur=_psEdit[_psTab];
+  if(b.classList.contains('ps-tab')){_psTab=b.dataset.k==='night'?'night':'day'}
+  else if(b.classList.contains('ps-pick')){var k=padKinds()[parseInt(b.dataset.i,10)];if(k&&cur.length<8&&!cur.some(function(x){return x.n===k}))cur.push({n:k,l:''})}
+  else if(b.classList.contains('ps-lay')){var x=cur[parseInt(b.dataset.i,10)];if(x)x.l=(x.l===b.dataset.l)?'':b.dataset.l}
+  else if(b.classList.contains('ps-del')){cur.splice(parseInt(b.dataset.i,10),1)}
+  else if(b.id==='mRPadFreeAdd'){
+    var v=(($('mRPadFree')&&$('mRPadFree').value)||'').replace(/[|]/g,'').trim().slice(0,20);
+    if(!v){showToast('⚠️ 品目を書いてください','err');return}
+    var ks=padKinds();
+    if(ks.indexOf(v)<0){
+      if(ks.length>=24){showToast('⚠️ 施設の品目が多すぎます（24まで）。設定画面で使わない品目を消してください','err');return}
+      ks.push(v);D.cfg=Object.assign({},D.cfg||{},{padKinds:ks.join('|')});save();apiPush('saveCfg',{cfg:cfgSendPayload()});
+      try{renderPadCfg()}catch(e2){}
+    }
+    if(cur.length<8&&!cur.some(function(x){return x.n===v}))cur.push({n:v,l:''});
+    $('mRPadFree').value='';
+  }else return;
+  psEditRender();
 }
 let editResId=null,curRecId=null,curHistRid=null,editRecId=null,editLaxId=null,curDetRid=null,curDetSlot=null,curDetDate=null;
 const BL={1:'硬球状',2:'硬塊状',3:'ひび割れ',4:'普通便',5:'軟便',6:'泥状便',7:'水様便'};
@@ -2369,6 +2567,7 @@ async function syncFromAPI(showLoader,opts){
     /* サーバーの schedule 対応版（能力宣言）。旧GASは返さないため 0 になる。
        移行完了フラグはこれが 1 以上のときだけ立てる（下のヒール節）。 */
     var _srvSchedVer=(json.schedVer|0);
+    if(typeof padSetNoteSrv==='function')padSetNoteSrv(json);   // サーバーが人ごとのおむつ・パッド（padSet）に対応しているか
     /* 受信 schedule の防御的正規化。GAS を旧版へ戻すと schedule が生の JSON 文字列で返り、
        文字列のまま保持すると予定が画面から消え、その状態の保存で上書き破壊が起きる。
        文字列は parse を試み、配列にならないものは null にする（＝ローカルの予定を温存）。 */
@@ -2386,6 +2585,8 @@ async function syncFromAPI(showLoader,opts){
       if(r.name!=null)r.name=String(r.name).trim();
       if(r.room!=null)r.room=String(r.room).trim();
       if(r.active===undefined||r.active===null||r.active==='TRUE'||r.active===true)r.active=true;else r.active=false;
+      /* 人ごとのおむつ・パッド（2026-10-19）: セルの JSON 文字列を形を確かめて読む。空・壊れ＝値なし（キーごと落として手元を残す） */
+      if(r.padSet!==undefined&&typeof parsePadSet==='function'){var _pp=parsePadSet(r.padSet);if(_pp)r.padSet=_pp;else delete r.padSet}
       /* 将来サーバーが masterId 列を持った時に備える。空セルは「値なし」＝キーごと落として
          ローカルの紐づけを温存する（multi-device-sync 原則4・null と空の区別）。 */
       if(r.masterId==='')delete r.masterId;
@@ -2431,6 +2632,7 @@ async function syncFromAPI(showLoader,opts){
       var lr=localResById[k];
       if(lr){
         clientOnly.forEach(function(f){if(r[f]==null&&lr[f]!=null)r[f]=lr[f]});
+        if(typeof padSetMerge==='function'){var _psm=padSetMerge(r.padSet,lr.padSet);if(_psm)r.padSet=_psm;else delete r.padSet}
         if(_normNameX(r.name)===_normNameX(lr.name)){
           clientOnlyIdent.forEach(function(f){if(r[f]==null&&lr[f]!=null)r[f]=lr[f]});
         }else if(lr.masterId!=null&&lr.masterId!==''){
@@ -4832,7 +5034,9 @@ function renderResTiles(list){
       return '<button type="button" class="res-tile" data-rid="'+escapeHtmlText(r.id)+'">'+
         '<span class="rt-room">'+escapeHtmlText(r.room||'')+'号室</span>'+
         '<span class="rt-name">'+escapeHtmlText(r.name)+'</span>'+
-        '<span class="rt-s '+cls+'">'+escapeHtmlText(lbl)+'</span></button>';
+        '<span class="rt-s '+cls+'">'+escapeHtmlText(lbl)+'</span>'+
+        (function(){var pl=padSetFor(r,Date.now()).list;var tx=pl.map(function(x){return x.n}).join('＋');return pl.length?'<span class="rt-pad" title="'+escapeHtmlText(tx)+'">🩲 '+escapeHtmlText(tx)+'</span>':''})()+
+        '</button>';
     }).join('')+'</div>';
   }).join('');
   syncResPick();
@@ -4851,6 +5055,7 @@ function syncResPick(){
 var _waterOpen=false;
 function syncInputUI(){
   syncResPick();
+  try{renderPadCard()}catch(e){}
   var wc=$('waterCard');if(wc)wc.classList.toggle('water-closed',!(_waterOpen||Number(ci&&ci.waterCC)>0));
   var sum=$('submitSum');if(!sum)return;
   var v=$('resSel')?$('resSel').value:'',r=v?D.residents.find(function(x){return String(x.id)===String(v)}):null;
@@ -5149,7 +5354,7 @@ function updateSubmitBtnLabel(){
 }
 
 function resetForm(){ci={rid:null,type:null,urineAmt:null,urineColor:null,stoolAmt:null,consistency:null,stoolColor:null,uSelf:false,uPad:false,sToilet:false,sPad:false,waterCC:0,pads:{}};
-  _waterOpen=false;_resPickOpen=false;_padOpen=false;
+  _waterOpen=false;_resPickOpen=false;_padOpen=false;_padOtherOpen=false;
   if(typeof setWaterCC==='function') setWaterCC(0);
   editRecId=null;
   setNow();$('recNote').value='';$('resSel').value='';
@@ -5956,6 +6161,7 @@ function renderTL(){const date=$('tlDate').value||today();
         }
         if(r.type==='laxative'){info+='💊'+(r.medicine?escapeHtmlText(r.medicine.slice(0,2)):'')+(r.tablets?escapeHtmlText(r.tablets):'')}
         if(r.type==='none'){info+='誘導'}
+        if(padsTotal(r.pads)){var _sc=padScopeText(r);info+=(info?' ':'')+'<span title="'+escapeHtmlText('交換: '+_sc)+'">🩲'+(/^全部交換/.test(_sc)?'全':/^内側だけ/.test(_sc)?'内':'')+'</span>'}
         if(Number(r.waterCC)>0){ info+=(info?' ':'')+'<span class="water-mini" title="水分摂取 '+Number(r.waterCC)+'cc">'+waterSvg('1.1em')+Number(r.waterCC)+'cc</span>'; }
         return dot+(info?'<span class="tl-info">'+info+'</span>':'')}).join('');
       cells+='<td class="tl-c has'+schCls+ovdCls+'" data-slot="'+reIdA+'-'+s+'">'+schLbl+inner+ovdLbl+'</td>'}
@@ -6144,7 +6350,7 @@ function showDet(id){const r=D.records.find(x=>x.id===id);if(!r)return;curRecId=
     if(r.type==='stool'||r.type==='both'){const c=fmtCons(r);h+='<div class="hi s" style="margin-bottom:8px"><b style="color:var(--s)">🟤 排便</b>'+(c?'<div>性状: '+escapeHtmlText(c)+'</div>':'')+(r.stoolAmt?'<div>量: '+escapeHtmlText(r.stoolAmt)+'</div>':'')+(r.stoolColor?'<div>色: '+escapeHtmlText(r.stoolColor)+'</div>':'')+'</div>'}
   }
   if(Number(r.waterCC)>0)h+='<div class="hi" style="margin-bottom:8px;background:#e3f2fd;border-left:4px solid #1976d2;padding:8px 12px;border-radius:6px"><b style="color:#0d47a1;display:inline-flex;align-items:center;gap:6px">'+waterSvg('1.3em')+' 水分摂取</b><div>'+Number(r.waterCC)+' cc</div></div>';
-  if(padsTotal(r.pads))h+='<div class="hi pad-hi" style="margin-bottom:8px"><b>🩲 交換したもの</b><div>'+escapeHtmlText(padsText(r.pads))+'</div></div>';
+  if(padsTotal(r.pads))h+='<div class="hi pad-hi" style="margin-bottom:8px"><b>🩲 交換したもの</b><div>'+escapeHtmlText(padScopeText(r))+'</div></div>';
   if(r.notes)h+='<div style="padding:8px;background:var(--g0);border-radius:6px;font-size: 0.8125rem;margin-top:6px">📝 '+escapeHtmlText(r.notes)+'</div>';
   if(r.staff)h+='<div style="margin-top:8px;font-size: 0.75rem;color:var(--g5)">記録者: '+escapeHtmlText(r.staff)+'</div>';
   $('mDetC').innerHTML=h;$('mDet').classList.add('on')}
@@ -6403,6 +6609,14 @@ function guideRateHtml(rid){
     '<div class="sc-leg">成功率＝トイレで出た記録 ÷（トイレで出た記録＋誘導・排泄なし）。自発のトイレも含みます。'+
     '失禁率＝パッド内を含む記録の割合。交換を付けた「誘導・排泄なし」は空振りに数えません。</div></details>';
 }
+/* 履歴の上部: 使用しているおむつ・パッド（2026-10-19）。閉じない欄（いつも見える） */
+function padSetHistHtml(rid){
+  var res=D.residents.find(function(x){return x.id===rid});var ps=parsePadSet(res&&res.padSet);
+  if(!ps||(!ps.day.length&&!ps.night.length))return'';
+  return '<div class="hx-pad"><b>🩲 使用しているおむつ・パッド</b><br>'+
+    '☀️ 昼：'+(ps.day.length?escapeHtmlText(padSetLine(ps.day)):'未設定')+'<br>'+
+    '🌙 夜：'+(ps.night.length?escapeHtmlText(padSetLine(ps.night)):'昼と同じ')+'</div>';
+}
 /* 履歴: 交換したものの枚数（今月・先月） */
 function padUseHtml(rid){
   var pool=recsByRes(rid),t=today(),ym=t.slice(0,7);
@@ -6415,7 +6629,7 @@ function padUseHtml(rid){
 }
 function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   curHistRid=rid;
-  if($('mHistExtra')){try{$('mHistExtra').innerHTML=stoolCalHtml(rid)+laxHistHtml(rid)+guideRateHtml(rid)+padUseHtml(rid)}catch(e){console.error('[hbcr] 排便カレンダーの作成に失敗:',e);$('mHistExtra').innerHTML=''}}
+  if($('mHistExtra')){try{$('mHistExtra').innerHTML=padSetHistHtml(rid)+stoolCalHtml(rid)+laxHistHtml(rid)+guideRateHtml(rid)+padUseHtml(rid)}catch(e){console.error('[hbcr] 排便カレンダーの作成に失敗:',e);$('mHistExtra').innerHTML=''}}
   if($('mHistInput'))$('mHistInput').style.display=(res.active===false)?'none':'';
   if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
   $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
@@ -7898,6 +8112,7 @@ function editRes(id){if(hbFieldDeny())return;const r=D.residents.find(x=>x.id===
   if($('mRSW')){$('mRSW').value=(rc.stoolWarnD!=null?rc.stoolWarnD:'');$('mRSW').placeholder='全体設定: '+D.cfg.stoolWarnD}
   if($('mRSD')){$('mRSD').value=(rc.stoolDangerD!=null?rc.stoolDangerD:'');$('mRSD').placeholder='全体設定: '+D.cfg.stoolDangerD}
   setMasterManagedFields(r.masterId!=null);
+  psEditLoad(r);
   $('mRes').classList.add('on')}
 /* ════════ 入院管理モーダル ════════ */
 var _hospEditRid=null;
@@ -8012,8 +8227,12 @@ function saveRes(){if(hbFieldDeny())return;const nm=$('mRN').value.trim(),rm=$('
     r.laxNote=laxNote;if(hasCfg)r.cfg=cfgOv;else delete r.cfg;resObj=r}}
   else{var nid=nextResId();
     resObj={id:nid,name:nm,yomi:ym,room:rm,gender:gn,active:(st!=='inactive'),laxNote:laxNote};if(hasCfg)resObj.cfg=cfgOv;D.residents.push(resObj)}
+  /* 使用しているおむつ・パッド（2026-10-19）: 変えた時だけ at を付けて専用の送信で書く */
+  var _psNew=psEditResult(),_psChanged=JSON.stringify(_psNew)!==_psOrig;
+  if(resObj&&_psChanged)resObj.padSet={at:Date.now(),day:_psNew.day,night:_psNew.night};
   save();
   if(resObj)apiPush('saveRes',{resident:resObj});
+  if(resObj&&_psChanged){apiPush('savePadSet',{id:resObj.id,padSet:resObj.padSet});_psOrig=JSON.stringify(_psNew)}
   $('mRes').classList.remove('on');editResId=null;renderCfg();buildResSel();showToast('✅ 保存しました')}
 
 /* ═══════════ EXPORT / IMPORT ═══════════ */
@@ -8771,6 +8990,9 @@ function _initRest(){
     renderPadCard();
   }));
   if($('padOpen'))$('padOpen').addEventListener('click',function(){_padOpen=true;renderPadCard()});
+  if($('padMine'))$('padMine').addEventListener('click',padMineClick);
+  if($('padOther'))$('padOther').addEventListener('toggle',function(){_padOtherOpen=this.open&&_padMine.length>0});
+  if($('recDT'))$('recDT').addEventListener('change',function(){try{renderPadCard()}catch(e){}});
   if($('padRows'))$('padRows').addEventListener('click',function(e){
     var b=e.target&&e.target.closest?e.target.closest('.pad-st'):null;if(!b||b.disabled)return;
     padStep(parseInt(b.dataset.i,10),parseInt(b.dataset.d,10));
@@ -9122,7 +9344,9 @@ function _initRest(){
     if($('mRLax'))$('mRLax').value='';
     ['mRUW','mRUD','mRSW','mRSD'].forEach(function(id){if($(id)){$(id).value='';$(id).placeholder='全体設定: '+(id==='mRUW'?D.cfg.urineWarnH:id==='mRUD'?D.cfg.urineDangerH:id==='mRSW'?D.cfg.stoolWarnD:D.cfg.stoolDangerD)}});
     setMasterManagedFields(false); // 新規追加は常に編集可（編集モーダルの読み取り専用状態を持ち越さない）
+    psEditLoad(null);
     $('mRes').classList.add('on')});
+  if($('mRPadWrap'))$('mRPadWrap').addEventListener('click',psEditClick);
   $('mResCancel').addEventListener('click',function(){$('mRes').classList.remove('on');editResId=null});
   $('mResSave').addEventListener('click',saveRes);
   // 入院管理モーダル
