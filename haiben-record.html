@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-P9ySMem5F07t3+ixGeBCDz+aFAXTm0l6ic1qs4REvF8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-vIQ05tMrGsfLfZWc7bu9bR91qDuQod8/NYVTZU2mGU0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -4825,7 +4825,9 @@ function renderResTiles(list){
     return '<div class="rt-fl">'+escapeHtmlText(floorLabel(f))+'</div><div class="rt-grid">'+groups[f].map(function(r){
       var ls=lastR(r.id,'s'),sh=elH(ls||null,r.id),bc=badgeCls(sh,'s',r.id);
       var cls=bc==='eb-ng'?'rt-ng':bc==='eb-w'?'rt-w':'rt-ok';
-      var lbl=(sh===null)?'便 未記録':'便'+Math.floor(sh/24)+'日';
+      /* 日数は時系列の「便-N」と同じ暦の日の差（今日の日付 − 最後の排便1回分の日付）で出す（2026-10-19）。
+         以前は経過時間÷24の切り捨てで、前日の夜の排便が「便0日」になり時系列より短く出ていた。色（黄・赤）は従来どおり経過時間としきい値で決める */
+      var lbl=!ls?'便 未記録':'便'+Math.max(0,dayDiff(today(),String(ls.date||ls.datetime||'').slice(0,10)))+'日';
       if(bc==='eb-ng')lbl='⚠ '+lbl;
       return '<button type="button" class="res-tile" data-rid="'+escapeHtmlText(r.id)+'">'+
         '<span class="rt-room">'+escapeHtmlText(r.room||'')+'号室</span>'+
