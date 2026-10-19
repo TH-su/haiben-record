@@ -576,7 +576,8 @@ function readSheet_(name, defaultHeaders){
     const o = {};
     // schedule だけは列名の大小を吸収してキー名を 'schedule' に正規化する（他の列は現状維持）。
     // 'Schedule' 表記のシートでクライアントが値を受け取れず、移行が永久に完了しない事故を防ぐ。
-    headers.forEach((h,i)=>{ if(h) o[/^schedule$/i.test(h)?'schedule':h]=normalizeCell_(h,row[i]); });
+    // padSet も同じく大小を吸収する（2026-10-19。端末は r.padSet を読む）
+    headers.forEach((h,i)=>{ if(h) o[/^schedule$/i.test(h)?'schedule':/^padset$/i.test(h)?'padSet':h]=normalizeCell_(h,row[i]); });
     return o;
   }).filter(o => o.id!=null && o.id!=='');
 }
@@ -1148,9 +1149,12 @@ function saveSched_(body){
 function savePadSet_(body){
   const ps = body && body.padSet;
   if(!body || body.id==null || !ps || typeof ps!=='object' || Array.isArray(ps)) return {ok:false, error:'invalid padSet'};
-  const at = Number(ps.at) || 0;
+  let at = Number(ps.at) || 0;
   if(!(at > 0)) return {ok:false, error:'invalid padSet.at'};
-  const clean = {at: at, day: [], night: []};
+  // 端末の時計が進んでいても、サーバーの時刻より先の at は付けない（その端末の値がいつまでも勝ち続けないように）
+  const nowMs = Date.now();
+  if(at > nowMs + 300000) at = nowMs;
+  const clean = {at: 0, day: [], night: []};
   ['day','night'].forEach(function(k){
     (Array.isArray(ps[k]) ? ps[k] : []).slice(0, 8).forEach(function(x){
       if(!x || typeof x!=='object') return;
@@ -1181,7 +1185,8 @@ function savePadSet_(body){
   if(typeof cur === 'string' && cur.trim().charAt(0) === '{'){
     try{ curAt = Number(JSON.parse(cur).at) || 0; }catch(e){ curAt = 0; }
   }
-  if(curAt > at) return {ok:true, stale:true};   // 手元の方が古い＝書かない（端末は次の同期で新しい値を受け取る）
+  if(curAt > at) return {ok:true, stale:true};
+  clean.at = at;   // 手元の方が古い＝書かない（端末は次の同期で新しい値を受け取る）
   _wrote_ = true;
   sh.getRange(rowIdx, psCol+1).setValue(JSON.stringify(clean));
   _afterFlush_.push(invalidateResidentsCache_);
