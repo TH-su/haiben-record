@@ -231,6 +231,14 @@ head('9. 履歴は欄と表を1つのスクロールにする（2026-10-16）');
   ok(/<details class="hx-sec"><summary>📅 排便カレンダー/.test(SRC)&&/<details class="hx-sec"><summary>💊 下剤と反応/.test(SRC),'排便カレンダーと下剤と反応は閉じた状態で開く');
 })();
 
+head('10. 入力画面のタイルの便の日数は、時系列の「便-N」と同じ暦の日の差（2026-10-19）');
+(function(){
+  const f=X.fn('renderResTiles');
+  ok(/'便'\+Math\.max\(0,dayDiff\(today\(\),String\(ls\.date\|\|ls\.datetime\|\|''\)\.slice\(0,10\)\)\)\+'日'/.test(f),'タイルの日数は 今日 − 最後の排便1回分の日付');
+  ok(!/Math\.floor\(sh\/24\)/.test(f),'経過時間÷24 の切り捨ては使わない');
+  ok(/var ls=lastR\(r\.id,'s'\)/.test(f)&&/var sDiff=ls\?dayDiff\(ls\.date,date\):null/.test(X.fn('renderTL')),'どちらも同じ「最後の排便1回分」（lastR・少量の決まり込み）から数える');
+})();
+
 console.log('\n══════════════════════════════════');
 console.log('  ✅ '+pass+' 件  /  ❌ '+fail+' 件');
 console.log('══════════════════════════════════');
