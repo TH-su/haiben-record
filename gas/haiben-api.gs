@@ -39,6 +39,7 @@ const DEL_DEFAULT_HEADERS = ['id','deletedAt','date'];
 const BAK_SHEET = 'DeletedRows';
 const BAK_DEFAULT_HEADERS = ['at','sheet','id','json'];
 const BAK_KEEP = 2000;
+const BAK_DAYS = 90;   // 削除の印（Deleted）と同じく、90日より古い控えは消す（退去した方の情報を長く残さない）
 const DEL_KEEP_DAYS = 90;
 const DEL_TRIM_AT = 3000;            // 印がこれを超えたら古いものを間引く
 const DELETED_CACHE_KEY = 'deleted_v1';
@@ -634,11 +635,28 @@ function readRecordsFast_(){
 function backupRowBeforeDelete_(sheetName, headers, rowVals, id){
   const o = {};
   headers.forEach(function(h, i){ if(h) o[h] = rowVals[i]; });
+  const json = JSON.stringify(o);
+  if(json.length > 45000) throw new Error('控えが長すぎます');   // 切れた控えは戻せない＝消さない
   const bs = getOrCreateSheet_(BAK_SHEET, BAK_DEFAULT_HEADERS);
   _wrote_ = true;
-  bs.appendRow([new Date().toISOString(), sheetName, String(id), JSON.stringify(o).slice(0, 45000)]);
-  const last = bs.getLastRow(), extra = last - 1 - BAK_KEEP;
-  if(extra > 0) bs.deleteRows(2, extra);
+  bs.appendRow([new Date().toISOString(), sheetName, String(id), json]);
+  trimDeletedRows_(bs);
+}
+/** 控えの間引き: BAK_KEEP 行を超えた分と、BAK_DAYS 日より古い分を上から消す。失敗しても削除は止めない（trimDeleted_ と同じ） */
+function trimDeletedRows_(bs){
+  try{
+    const last = bs.getLastRow();
+    if(last < 2) return;
+    let n = Math.max(0, last - 1 - BAK_KEEP);
+    const cut = Date.now() - BAK_DAYS * 86400000;
+    const at = bs.getRange(2, 1, last - 1, 1).getValues();
+    while(n < at.length - 1){   // いま足した最後の1行は残す
+      const t = Date.parse(String(at[n][0]));
+      if(!(t < cut)) break;
+      n++;
+    }
+    if(n > 0){ _wrote_ = true; bs.deleteRows(2, n); }
+  }catch(e){ console.warn('DeletedRows の間引きに失敗（控えは書けている）'); }
 }
 
 /** ============ 削除の印の書き込み・読み取り（2026-10-07） ============ */

@@ -76,7 +76,7 @@ function makeGasCtx(gasSource, sheet, opts){
      2026-10-07: 削除の印（Deleted）を試すため、名前ごとに別の盤面を持てるようにした。
      ★Records と Deleted・DeletedRows 以外の名前は、従来どおり記録の盤面を返す（既存テストの挙動を変えない）。
      opts.failCreate(名前) が真なら、その名前の作成・取得で例外にする（控えを書けない場面の試験）。 */
-  function makeFake(sheet){ return {
+  function makeFake(sheet,name){ return {
     getLastRow:()=>sheet.length,
     getLastColumn:()=>sheet.reduce((m,r)=>Math.max(m,r.length),0),
     getMaxColumns:()=>sheet.reduce((m,r)=>Math.max(m,r.length),0),
@@ -110,19 +110,19 @@ function makeGasCtx(gasSource, sheet, opts){
       };
     },
     insertColumnsAfter(){},
-    appendRow(row){ if(writable)sheet.push(row.slice()); },
+    appendRow(row){ if(opts&&opts.failAppend&&opts.failAppend(name))throw new Error('Service Spreadsheets failed'); if(writable)sheet.push(row.slice()); },
     deleteRow(n){ if(writable)sheet.splice(n-1,1); },
-    deleteRows(n,k){ if(writable)sheet.splice(n-1,k||1); },
+    deleteRows(n,k){ if(opts&&opts.failDeleteRows&&opts.failDeleteRows(name))throw new Error('Service Spreadsheets failed'); if(writable)sheet.splice(n-1,k||1); },
     getName(){ return ''; }
   }; }
-  const fakeSheet=makeFake(sheet);
+  const fakeSheet=makeFake(sheet,'Records');
   const sheets=(opts&&opts.sheets)||{};          // 名前 → 2次元配列（呼び出し側が覗ける実体）
   const fakes={Records:fakeSheet};
-  Object.keys(sheets).forEach(n=>{fakes[n]=makeFake(sheets[n])});
+  Object.keys(sheets).forEach(n=>{fakes[n]=makeFake(sheets[n],n)});
   const OWN=['Deleted','DeletedRows'];   // 自分の盤面を持つ名前（DeletedRows は消す前の控え・2026-10-21）
   function _byName(n){ if(fakes[n])return fakes[n]; return OWN.indexOf(n)>=0?null:fakeSheet; }
   function _create(n,headers){
-    if(!fakes[n]){ sheets[n]=headers?[headers.slice()]:[]; fakes[n]=makeFake(sheets[n]); }
+    if(!fakes[n]){ sheets[n]=headers?[headers.slice()]:[]; fakes[n]=makeFake(sheets[n],n); }
     return fakes[n];
   }
   ctx.__sheets=sheets;

@@ -65,9 +65,40 @@ head('3. 控えを書けない時は消さない');
   const ctx=makeGasCtx(GAS,sh,{writable:true,sheets,failCreate:n=>n==='DeletedRows'});
   const X=String(sh[2][0]), before=sh.length;
   let r; try{r=post(ctx,{action:'delRecord',id:X})}catch(e){r={threw:String(e)}}
-  ok(sh.length===before&&sh.slice(1).some(row=>String(row[0])===X),'控えを書けなければ記録は消さない',r);
+  ok(r.ok!==true&&sh.length===before&&sh.slice(1).some(row=>String(row[0])===X),'控えを書けなければ記録は消さない・成功と返さない',r);
   try{r=post(ctx,{action:'delRes',id:'R1'})}catch(e){r={threw:String(e)}}
   ok(ctx.__sheets.Residents.slice(1).some(row=>row[0]==='R1'),'控えを書けなければ入居者は消さない',r);
+  ok(!ctx.__sheets.Deleted,'控えを書けなければ削除の印（Deleted）も書かない（記録が残っているのに端末から消える食い違いを作らない）',ctx.__sheets.Deleted);
+})();
+(function(){
+  const sh=makeSheet(), sheets={DeletedRows:[['at','sheet','id','json']]};
+  const ctx=makeGasCtx(GAS,sh,{writable:true,sheets,failAppend:n=>n==='DeletedRows'});
+  const X=String(sh[2][0]), before=sh.length;
+  let r; try{r=post(ctx,{action:'delRecord',id:X})}catch(e){r={threw:String(e)}}
+  ok(r.ok!==true&&sh.length===before,'控えのシートはあるが1行を足せない時も、記録は消さない・成功と返さない',r);
+})();
+(function(){
+  const sh=makeSheet(); sh[2][REC_HEADERS_FULL.indexOf('notes')]='x'.repeat(46000);
+  const ctx=makeGasCtx(GAS,sh,{writable:true,sheets:{}});
+  const X=String(sh[2][0]), before=sh.length;
+  let r; try{r=post(ctx,{action:'delRecord',id:X})}catch(e){r={threw:String(e)}}
+  ok(r.ok!==true&&sh.length===before,'控えが長すぎて切れる時は消さない（切れた控えは戻せない）',r);
+})();
+(function(){
+  const old=new Date(Date.now()-100*86400000).toISOString(), mid=new Date(Date.now()-10*86400000).toISOString();
+  const sh=makeSheet(), sheets={DeletedRows:[['at','sheet','id','json'],[old,'Records','o1','{}'],[old,'Records','o2','{}'],[mid,'Records','m1','{}']]};
+  const ctx=makeGasCtx(GAS,sh,{writable:true,sheets});
+  post(ctx,{action:'delRecord',id:String(sh[1][0])});
+  const ids=ctx.__sheets.DeletedRows.slice(1).map(r=>r[2]);
+  ok(ids.indexOf('o1')<0&&ids.indexOf('o2')<0&&ids.indexOf('m1')>=0&&ids.length===2,'90日より古い控えは消し、新しいものは残す',ids);
+})();
+(function(){
+  const big=[['at','sheet','id','json']]; for(let i=0;i<2000;i++)big.push(['t','Records','old'+i,'{}']);
+  const sh=makeSheet(), sheets={DeletedRows:big};
+  const ctx=makeGasCtx(GAS,sh,{writable:true,sheets,failDeleteRows:n=>n==='DeletedRows'});
+  const X=String(sh[1][0]);
+  const r=post(ctx,{action:'delRecord',id:X});
+  ok(r.ok===true&&!sh.slice(1).some(row=>String(row[0])===X),'控えの間引きで失敗しても記録は消す（控えは書けている）',r);
 })();
 
 head('4. 控えは端末へ返さない');
