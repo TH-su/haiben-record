@@ -34,6 +34,11 @@ const RECENT_DAYS = 14;
  * ★氏名・記録の中身は入れない。90日より古い印は、行数が増えた時に書き込みのついでに間引く。 */
 const DEL_SHEET = 'Deleted';
 const DEL_DEFAULT_HEADERS = ['id','deletedAt','date'];
+// 消す前の行の中身の控え（2026-10-21・改善プロンプト第3弾の5）。サーバーの中だけに置き、端末へは返さない。
+// 記録・入居者を消す前に1行足す。書けなければ例外＝消さない（控えのない削除をしない）。誤操作の後に戻すためのもの
+const BAK_SHEET = 'DeletedRows';
+const BAK_DEFAULT_HEADERS = ['at','sheet','id','json'];
+const BAK_KEEP = 2000;
 const DEL_KEEP_DAYS = 90;
 const DEL_TRIM_AT = 3000;            // 印がこれを超えたら古いものを間引く
 const DELETED_CACHE_KEY = 'deleted_v1';
@@ -625,6 +630,17 @@ function readRecordsFast_(){
  *   「速いが取りこぼす」より「遅いが正しい」を必ず選ぶ（記録の欠落は静かに永久化するため）。
  * ★返す行の条件は全件読み側のフィルタと同一に保つこと（片方だけ直すと差分だけが壊れる）。
  */
+/** 消す前の行の中身を控えへ1行足す（BAK_KEEP を超えたら古い順に間引く）。書けなければ例外を外へ出す＝呼んだ側は消さない */
+function backupRowBeforeDelete_(sheetName, headers, rowVals, id){
+  const o = {};
+  headers.forEach(function(h, i){ if(h) o[h] = rowVals[i]; });
+  const bs = getOrCreateSheet_(BAK_SHEET, BAK_DEFAULT_HEADERS);
+  _wrote_ = true;
+  bs.appendRow([new Date().toISOString(), sheetName, String(id), JSON.stringify(o).slice(0, 45000)]);
+  const last = bs.getLastRow(), extra = last - 1 - BAK_KEEP;
+  if(extra > 0) bs.deleteRows(2, extra);
+}
+
 /** ============ 削除の印の書き込み・読み取り（2026-10-07） ============ */
 /** 記録を消して印を残す。行が見つからなくても印は残す（他の端末が持っている写しを送り直させない）。 */
 function deleteRecordMarked_(id){
@@ -644,6 +660,8 @@ function deleteRecordMarked_(id){
             if(dateCol >= 0){
               try{ dateYmd = _normYmd_(sh.getRange(i+2, dateCol+1).getValue()); }catch(e){ dateYmd = ''; }
             }
+            // ★消す前に行の中身を控える（2026-10-21）。書けなければ例外で、消さない
+            backupRowBeforeDelete_('Records', headers, sh.getRange(i+2, 1, 1, headers.length).getValues()[0], id);
             _wrote_ = true;
             sh.deleteRow(i+2);
             break;
@@ -1204,6 +1222,8 @@ function deleteRow_(name, id){
   const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
   for(let i=0;i<ids.length;i++){
     if(String(ids[i][0])===String(id)){
+      // ★消す前に行の中身を控える（2026-10-21）。書けなければ例外で、消さない
+      backupRowBeforeDelete_(name, headers, sh.getRange(i+2, 1, 1, headers.length).getValues()[0], id);
       _wrote_ = true;
       sh.deleteRow(i+2);
       return;

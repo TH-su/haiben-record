@@ -74,7 +74,8 @@ function makeGasCtx(gasSource, sheet, opts){
   /* シート実体（SpreadsheetApp 経路＝readSheet_ のフォールバックでも同じ盤面を見せる）。
      getOrCreateSheet_ だけを差し替え、readSheet_/readRecordsFast_/readRecordsWindow_ は実物のまま動かす。
      2026-10-07: 削除の印（Deleted）を試すため、名前ごとに別の盤面を持てるようにした。
-     ★Records と Deleted 以外の名前は、従来どおり記録の盤面を返す（既存テストの挙動を変えない）。 */
+     ★Records と Deleted・DeletedRows 以外の名前は、従来どおり記録の盤面を返す（既存テストの挙動を変えない）。
+     opts.failCreate(名前) が真なら、その名前の作成・取得で例外にする（控えを書けない場面の試験）。 */
   function makeFake(sheet){ return {
     getLastRow:()=>sheet.length,
     getLastColumn:()=>sheet.reduce((m,r)=>Math.max(m,r.length),0),
@@ -118,13 +119,14 @@ function makeGasCtx(gasSource, sheet, opts){
   const sheets=(opts&&opts.sheets)||{};          // 名前 → 2次元配列（呼び出し側が覗ける実体）
   const fakes={Records:fakeSheet};
   Object.keys(sheets).forEach(n=>{fakes[n]=makeFake(sheets[n])});
-  function _byName(n){ if(fakes[n])return fakes[n]; return n==='Deleted'?null:fakeSheet; }
+  const OWN=['Deleted','DeletedRows'];   // 自分の盤面を持つ名前（DeletedRows は消す前の控え・2026-10-21）
+  function _byName(n){ if(fakes[n])return fakes[n]; return OWN.indexOf(n)>=0?null:fakeSheet; }
   function _create(n,headers){
     if(!fakes[n]){ sheets[n]=headers?[headers.slice()]:[]; fakes[n]=makeFake(sheets[n]); }
     return fakes[n];
   }
   ctx.__sheets=sheets;
-  ctx.getOrCreateSheet_=(n,headers)=>{ if(n==='Deleted')return fakes[n]||_create(n,headers); return fakeSheet; };
+  ctx.getOrCreateSheet_=(n,headers)=>{ if(OWN.indexOf(n)>=0){ if(opts&&opts.failCreate&&opts.failCreate(n))throw new Error('Service Spreadsheets failed'); return fakes[n]||_create(n,headers); } return fakeSheet; };
   ctx.readResidentsCached_=()=>residents.map(r=>Object.assign({},r));
   ctx.readConfig_=()=>Object.assign({},config);
   return ctx;
