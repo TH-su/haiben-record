@@ -50,20 +50,32 @@ const GETDAYS_MAX = 7;               // getDays 1回で受ける日数の上限
  * スクリプトプロパティ HAIBEN_TOKEN に合言葉を設定すると、全リクエスト（doGet/doPost）で
  * トークン検証が有効になる。★未設定なら全リクエストを断る（2026-10-08 に「猶予モード」＝未設定なら認証なしで通す、をやめた。
  *   本番は設定済みを確かめてから配信）。HAIBEN_TOKEN を消すと全端末が止まるので消さない。
- * トークンの受け取り: GET は ?token=、POST は JSON ボディの token（master.gs と同方式）。 */
+ * トークンの受け取り: POST の JSON ボディの token だけ（2026-10-22・URL のクエリ ?token= は読まない＝履歴・記録・Referer に残る経路を断つ。
+ *   画面・申送ビューアは本文で送っている。合言葉の要る読み取りは 2026-09-23 から GET で受けていない。master.gs と同方式）。 */
 const TOKEN_PROP = 'HAIBEN_TOKEN';
 /* 例外の時に画面へ返す定型文（2026-10-18 改善プロンプト第2弾の14）。例外の中身（シート名・列名・内部の文言）は応答に出さず、
    GAS の実行ログ（console.error）にだけ残す。画面は ok:false を見て未送信として送り直す（文言の中身は見ていない） */
 const SERVER_ERR_MSG = 'サーバーで処理できませんでした。時間をおいてもう一度お試しください';
 
+// 合言葉の比べ方は、一致した長さで時間が変わらない比較（tokensEqual_・個別機能訓練計画書API と一字一句同じ中身。
+// 2026-10-22 改善プロンプト第3弾の11 で排泄にもそろえた）。長さが違えばすぐ false（長さは合言葉の中身ではない）
+function tokensEqual_(a, b) {
+  a = String(a == null ? '' : a);
+  b = String(b == null ? '' : b);
+  if (a.length !== b.length) return false;
+  var diff = 0, i;
+  for (i = 0; i < a.length; i++) diff |= (a.charCodeAt(i) ^ b.charCodeAt(i));
+  return diff === 0;
+}
 function _token(e){
   var exp = PropertiesService.getScriptProperties().getProperty(TOKEN_PROP);
   if(!exp) return false; // 未設定は断る（2026-10-08 までは猶予モードで true＝検証しないだった）
-  var got = (e && e.parameter && e.parameter.token) || '';
-  if(!got && e && e.postData){
-    try{ got = JSON.parse(e.postData.contents).token || ''; }catch(err){}
+  var got = '';
+  if(e && e.postData){
+    try{ var b = JSON.parse(e.postData.contents); got = (b && b.token) || ''; }catch(err){}
   }
-  return got === exp;
+  if(!got || typeof got !== 'string') return false;
+  return tokensEqual_(got, exp);
 }
 
 /** 403 相当のレスポンス（GAS は HTTP ステータスを変えられないため JSON で表現） */
