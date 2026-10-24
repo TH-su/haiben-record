@@ -1,0 +1,266 @@
+/* ══════════════════════════════════════════════════════════════════════
+   デイ（せせらぎ）の表示の検証（2026-10-24・正本 §9.7）
+   実行:  node tests/daycare-view.test.js
+   ──────────────────────────────────────────────────────────────────────
+   守る約束:
+     1 受け渡しのキー su_daycare_handoff_v1 の読み解き（無い・壊れている・今日・今日でない）。care-log と同じ値で確かめる
+     2 並びはふりがなの五十音（NFKC・カタカナはひらがな・無ければ氏名。care-log の kanaSortKey と同じ）
+     3 帯の数: n＝受け取った人数／居ない方＝表に出ない方（「対象外も表示」の時は対象外の方を表に出し、数えない）
+     4 印もキーも無い端末（施設の端末）は今までと同じ対象・並び。直す前の版（c840fb1）の式と同じ結果になる
+     5 キーがあっても印が無ければ施設の表示（施設の端末に care-log が書いたキーがあっても変わらない）
+     6 ?view=daycare は読んだらすぐ URL から消す。?masterId= と hash は残す。今の ?view=（hist・5day）の読み方は変えない
+     7 このアプリはキーを書かない・消さない（読むだけ）
+     8 〔デイ せせらぎへ戻る〕の行き先は公開の URL で care-log のデイの画面
+   ★haiben-record.html の実物のソースから関数を切り出して評価する（写経しない）。HAIBEN_HTML で差し替えは変異テスト用。
+   ★架空データだけ。接続先は設定しない＝サーバーへは何も送らない。
+   ══════════════════════════════════════════════════════════════════════ */
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const cp = require('child_process');
+const { makeExtractor } = require('./_extract.js');
+
+const ROOT = path.join(__dirname, '..');
+const FILE = process.env.HAIBEN_HTML || path.join(ROOT, 'haiben-record.html');
+const HTML = fs.readFileSync(FILE, 'utf8');
+const scriptOf = (h) => /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*)<\/script>/.exec(h)[1];
+const SRC = scriptOf(HTML);
+const X = makeExtractor(SRC);
+/* 直す前の最後の版（デイの表示を足す前の main）。施設の端末の対象・並びがこれと同じであることを確かめる */
+const OLD_SHA = 'c840fb1';
+let OLD_SRC = null;
+try { OLD_SRC = scriptOf(cp.execFileSync('git', ['-C', ROOT, 'show', OLD_SHA + ':haiben-record.html'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 })); } catch (e) { OLD_SRC = null; }
+
+let pass = 0, fail = 0;
+function ok(c, m, extra) { if (c) { pass++; console.log('  ✅ ' + m); } else { fail++; console.log('  ❌ ' + m + (extra !== undefined ? '  → ' + JSON.stringify(extra).slice(0, 400) : '')); } }
+function head(t) { console.log('\n─── ' + t + ' ───'); }
+
+/* デイの表示の関数をまとめて評価する箱。store は localStorage の中身、search・hash は URL */
+const DC_FNS = ['hbDcParse', 'hbDcKana', 'hbDcCmp', 'hbDcCount', 'hbDcOn', 'hbDcKeep', 'hbDcOrder', 'hbDcListable',
+  'hbDcMarkGet', 'hbDcMarkSet', 'hbDcReadParam', 'hbDcLoad', 'hbDcInit', 'hbDcBind', 'isExcretionTarget', 'resSortKey', 'resSortAiu', 'hbReadViewParam'];
+function box(opts) {
+  opts = opts || {};
+  const store = Object.assign({}, opts.store || {});
+  const writes = [];
+  const cls = new Set();
+  const listeners = [];
+  const loc = { search: opts.search || '', pathname: '/haiben-record/haiben-record.html', hash: opts.hash || '' };
+  const b = {
+    TODAY: opts.today || '2026-10-24',
+    localStorage: {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
+      setItem: (k, v) => { writes.push(['set', k, String(v)]); store[k] = String(v); },
+      removeItem: (k) => { writes.push(['remove', k]); delete store[k]; }
+    },
+    location: loc,
+    history: { replaceState: (s, t, url) => { const u = new URL(url, 'https://th-su.github.io'); loc.search = u.search; loc.hash = u.hash; loc.pathname = u.pathname; } },
+    URLSearchParams, URL,
+    document: {
+      documentElement: { classList: { toggle: (c, on) => { if (on) cls.add(c); else cls.delete(c); } } },
+      addEventListener: (ev) => listeners.push('document:' + ev)
+    },
+    window: { addEventListener: (ev) => listeners.push('window:' + ev) },
+    $: () => null,
+    showToast: () => {},
+    hbDcRenderBar: () => {},
+    console,
+    isUserRes: (r) => !!r && !r.staff,
+    isAttnRes: (r) => !!r.attn,
+    showNonTargets: !!opts.showNonTargets,
+    onlyAttn: !!opts.onlyAttn,
+    store, writes, cls, listeners, loc
+  };
+  vm.createContext(b);
+  vm.runInContext([
+    X.varDecl('DC_MARK_KEY'), X.varDecl('_dc'), X.varDecl('_dcBound'),
+    'function today(){return TODAY}',
+    DC_FNS.map((n) => X.fn(n)).join('\n')
+  ].join('\n'), b);
+  return b;
+}
+const HANDOFF = 'su_daycare_handoff_v1';
+const key = (o) => JSON.stringify(o);
+
+head('1 受け渡しのキーの読み解き（§9.7 の形・care-log と同じ値）');
+{
+  const b = box();
+  const P = (raw, td) => b.hbDcParse(raw, td || '2026-10-24');
+  /* care-log が書く値と同じ形（at はミリ秒・mids は入居者マスタの id の文字列） */
+  const sample = key({ v: 1, day: '2026-10-24', at: 1761292800000, mids: ['m001', 'm002', 'R-3_x'] });
+  const o = P(sample);
+  ok(o.st === 'ok' && o.day === '2026-10-24' && o.mids.join(',') === 'm001,m002,R-3_x' && o.badN === 0, '今日の一覧は ok・mids をそのまま受け取る', o);
+  ok(P(sample, '2026-10-25').st === 'stale' && P(sample, '2026-10-25').mids.length === 3, '今日でない一覧は stale（mids は残す＝一覧を空にしない）');
+  ok(P(key({ v: 1, day: '2026-10-24', mids: ['a'] })).st === 'ok', 'at が無くても受け付ける（at は読まない）');
+  ok(P(null).st === 'none' && P('').st === 'none', 'キーが無い → none');
+  const bad = [
+    ['JSON でない', '{v:1'], ['配列', '[1,2]'], ['数', '1'], ['null', 'null'],
+    ['v が 2', key({ v: 2, day: '2026-10-24', mids: [] })], ['v が文字', key({ v: '1', day: '2026-10-24', mids: [] })],
+    ['day の形が違う', key({ v: 1, day: '2026/10/24', mids: [] })], ['day が無い', key({ v: 1, mids: [] })],
+    ['mids が配列でない', key({ v: 1, day: '2026-10-24', mids: 'a,b' })], ['mids が多すぎる', key({ v: 1, day: '2026-10-24', mids: Array.from({ length: 1001 }, (_, i) => 'm' + i) })]
+  ];
+  bad.forEach(([lbl, raw]) => ok(P(raw).st === 'bad', '壊れている → bad（' + lbl + '）'));
+  const mix = P(key({ v: 1, day: '2026-10-24', mids: ['a1', 'a1', ' b2 ', 7, '', null, '<x>', 'x'.repeat(33), { id: 1 }] }));
+  ok(mix.st === 'ok' && mix.mids.join(',') === 'a1,b2,7' && mix.badN === 5, '重複は1つ・前後の空白は落とす・形の違う値は捨てて badN に数える', mix);
+  ok(P(key({ v: 1, day: '2026-10-24', mids: [] })).st === 'ok' && P(key({ v: 1, day: '2026-10-24', mids: [] })).mids.length === 0, '空の一覧（全員休み）も ok');
+}
+
+head('2 五十音の並び（care-log の kanaSortKey と同じ）');
+{
+  const b = box();
+  ok(b.hbDcKana({ yomi: 'ミホン', name: '見本' }) === 'みほん', 'カタカナはひらがなにそろえる');
+  ok(b.hbDcKana({ yomi: 'ｶｸｳ', name: '架空' }) === 'かくう', '半角カナは NFKC でそろえてからひらがな');
+  ok(b.hbDcKana({ yomi: '  ', name: ' 架空 ' }) === '架空' && b.hbDcKana({ name: '架空' }) === '架空', 'ふりがなが無い・空白だけの時は氏名');
+  ok(b.hbDcKana({ yomi: 'ヴィ' }) === 'ゔぃ' && b.hbDcKana({ yomi: 'ヶ' }) === 'ゖ', 'ァ〜ヶ の範囲をひらがなへ');
+  const arr = [{ id: 3, yomi: 'カ' }, { id: 1, yomi: 'あ' }, { id: 2, yomi: 'か' }, { id: 9, yomi: '', name: 'さ' }];
+  ok(arr.slice().sort(b.hbDcCmp).map((r) => r.id).join(',') === '1,2,3,9', '同じ読みは id の小さい順（カタカナとひらがなは同じ読み）');
+}
+
+head('3 帯の数（n＝受け取った人数・居ない方＝表に出ない方）');
+{
+  const RES = [
+    { id: 1, name: '架空一', masterId: 'm1' },
+    { id: 2, name: '架空二', masterId: 'm2', targetExcretion: false },
+    { id: 3, name: '架空三', masterId: 'm3', active: false },
+    { id: 4, name: '架空四', masterId: 'm4', hidden: true },
+    { id: 5, name: '架空五', masterId: 5 }
+  ];
+  const dc = { mids: ['m1', 'm2', 'm3', 'm4', '5', 'm9'], badN: 1 };
+  const b = box();
+  let c = b.hbDcCount(RES, dc, b.hbDcListable);
+  ok(c.n === 7 && c.shown === 2 && c.miss === 5, '対象外・退去・隠した・結べない・形の違う値は「居ない方」（masterId は文字列で比べる）', c);
+  const b2 = box({ showNonTargets: true });
+  c = b2.hbDcCount(RES, dc, b2.hbDcListable);
+  ok(c.n === 7 && c.shown === 3 && c.miss === 4, '「対象外も表示」の時は対象外の方を表に出し、居ない方に数えない（親の補足 1）', c);
+}
+
+head('4 施設の端末（印もキーも無い）は今までと同じ対象・並び');
+const RES = [
+  { id: 10, name: '架空Ａ', yomi: 'ワヲン', room: '305', masterId: 'm10' },
+  { id: 11, name: '架空Ｂ', yomi: 'あいう', room: '101', masterId: 'm11' },
+  { id: 12, name: '架空Ｃ', yomi: 'ｲﾛﾊ', room: '201', masterId: 'm12' },
+  { id: 13, name: '架空Ｄ', yomi: '', room: '102', masterId: 'm13', attn: true },
+  { id: 14, name: '架空Ｅ', yomi: 'かきく', room: '202' },
+  { id: 15, name: '架空Ｆ', yomi: 'さしす', room: '203', masterId: 'm15', targetExcretion: false },
+  { id: 16, name: '架空Ｇ', yomi: 'たちつ', room: '204', masterId: 'm16', hidden: true },
+  { id: 17, name: '架空Ｈ', yomi: 'なにぬ', room: '205', masterId: 'm17', active: false },
+  { id: 18, name: '職員の控え', room: '', staff: true, masterId: 'm18' },
+  { id: 19, name: '架空Ｉ', yomi: 'カキク', room: '103', masterId: 'm19', attn: true }
+];
+/* render の中の対象・並びの式だけを取り出す（一覧・時系列は const res=…;、入力は const a=…sort(resSortAiu)…;） */
+function exprOf(src, fn, re) {
+  const body = makeExtractor(src).fn(fn);
+  const m = re.exec(body);
+  if (!m) throw new Error(fn + ' の式が見つかりません');
+  return m[0];
+}
+const RE_RES = /const res=[^\n]*;/;
+const RE_A = /const a=[\s\S]*?\.sort\(resSortAiu\)\)?;/;
+function run(b, expr, name, date, ciRid) {
+  vm.runInContext('var D={residents:' + JSON.stringify(RES) + '};var ci={rid:' + JSON.stringify(ciRid == null ? null : ciRid) + '};var date=' + JSON.stringify(date || '2026-10-24') + ';', b);
+  return vm.runInContext('(function(){' + expr + 'return ' + name + '.map(function(r){return r.id}).join(",")})()', b);
+}
+{
+  ok(!!OLD_SRC, '直す前の版（' + OLD_SHA + '）を git から取り出せた');
+  if (OLD_SRC) {
+    const cases = [['renderTL', RE_RES, 'res'], ['renderBoard', RE_RES, 'res'], ['buildResSel', RE_A, 'a']];
+    for (const [fn, re, name] of cases) {
+      const oldE = exprOf(OLD_SRC, fn, re), newE = exprOf(SRC, fn, re);
+      for (const flags of [{}, { onlyAttn: true }, { showNonTargets: true }, { onlyAttn: true, showNonTargets: true }]) {
+        for (const ciRid of [null, 15]) {
+          const b = box(flags);
+          const o = run(b, oldE, name, null, ciRid), n = run(b, newE, name, null, ciRid);
+          ok(o === n && b._dc === null, fn + ' ' + JSON.stringify(flags) + ' 選択中=' + ciRid + ': 直す前と同じ（' + n + '）', { old: o, new: n });
+        }
+      }
+    }
+  }
+  /* キーがあっても印が無ければ施設の表示（care-log が書いたキーが施設の端末に残っていても変わらない） */
+  const b = box({ store: { [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m11', 'm12'] }) } });
+  const fromUrl = b.hbDcInit();
+  ok(fromUrl === false && b._dc === null && !b.cls.has('hb-daycare'), 'キーがあっても印が無ければデイの表示にしない（_dc は null・html の印なし）');
+  ok(b.writes.length === 0 && b.listeners.length === 0, '施設の端末では何も書かず、待ち受けも付けない', { writes: b.writes, listeners: b.listeners });
+  const arr = [{ id: 1 }, { id: 2 }];
+  ok(b.hbDcOrder(arr) === arr && b.hbDcKeep({ id: 1 }) === true && b.hbDcKeep(null) === true && b.hbDcOn() === false, '素通し: hbDcOrder は同じ配列をそのまま返し、hbDcKeep は常に true');
+}
+
+head('5 デイの表示（印＋今日のキー）');
+{
+  const store = { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', at: 1, mids: ['m10', 'm11', 'm12', 'm13', 'm15', 'm16', 'm19', 'm99'] }) };
+  const b = box({ store });
+  b.hbDcInit();
+  ok(b._dc && b._dc.st === 'ok' && b.hbDcOn() && b.cls.has('hb-daycare'), '印とキーがあればデイの表示（html に hb-daycare）');
+  ok(b.listeners.indexOf('document:visibilitychange') >= 0 && b.listeners.indexOf('window:focus') >= 0 && b.listeners.indexOf('window:pageshow') >= 0, '画面が前に出るたびにキーを読み直す（visibilitychange・focus・pageshow）', b.listeners);
+  const tl = run(b, exprOf(SRC, 'renderTL', RE_RES), 'res');
+  ok(tl === '11,12,19,10,13', '時系列: デイの方だけ・五十音（あいう・いろは・かきく・わをん・架空Ｄ（ふりがな無し＝氏名・漢字はかなの後））。対象外・隠した方は出ない', tl);
+  ok(run(b, exprOf(SRC, 'renderBoard', RE_RES), 'res') === tl, '一覧表も同じ対象・並び');
+  ok(run(b, exprOf(SRC, 'buildResSel', RE_A), 'a') === tl, '入力の選択肢も同じ対象・並び');
+  ok(run(b, exprOf(SRC, 'buildResSel', RE_A), 'a', null, 14) === '11,12,14,19,10,13', '選んでいる方（デイの方でない）は今の決まりどおり選択肢に残す（?masterId= で開いた方を選べる）');
+  vm.runInContext('onlyAttn=true', b);
+  ok(run(b, exprOf(SRC, 'renderTL', RE_RES), 'res') === '19,13', '「要注意だけ」はデイの方の中で効く');
+  vm.runInContext('onlyAttn=false;showNonTargets=true', b);
+  ok(run(b, exprOf(SRC, 'renderTL', RE_RES), 'res') === '11,12,19,15,10,13', '「対象外も表示」はデイの方の中の対象外の方を出す');
+  /* 中身が同じなら描き直さない・変われば描き直す */
+  ok(b.hbDcLoad() === false, '同じキーを読み直しても「変わった」にしない（押している最中に表を差し替えない）');
+  b.store[HANDOFF] = key({ v: 1, day: '2026-10-24', mids: ['m10'] });
+  ok(b.hbDcLoad() === true && b._dc.mids.join(',') === 'm10', 'キーが変われば読み直して描き直す');
+  vm.runInContext('TODAY="2026-10-25"', b);
+  ok(b.hbDcLoad() === true && b._dc.st === 'stale' && b.hbDcOn() && run(b, exprOf(SRC, 'renderTL', RE_RES), 'res', '2026-10-25') === '10', '日付が変わると stale（警告を出し、一覧は空にせず mids で絞り続ける）');
+}
+
+head('6 キーが無い・壊れている時（印はある）');
+{
+  for (const [lbl, raw] of [['無い', undefined], ['壊れている', '{oops']]) {
+    const store = { hbcr_daycare: '1' };
+    if (raw !== undefined) store[HANDOFF] = raw;
+    const b = box({ store });
+    b.hbDcInit();
+    ok(b._dc && (b._dc.st === 'none' || b._dc.st === 'bad') && !b.hbDcOn() && b.cls.has('hb-daycare'), lbl + ': 帯は出す（1行）が絞り込まない＝施設の表示');
+    const o = run(b, exprOf(SRC, 'renderTL', RE_RES), 'res');
+    vm.runInContext('_dc=null', b);
+    ok(o === run(b, exprOf(SRC, 'renderTL', RE_RES), 'res'), lbl + ': 対象・並びは施設の端末と同じ', o);
+  }
+  const src = X.fn('hbDcRenderBar');
+  ok(/デイの一覧がこの端末にありません/.test(src) && /デイの一覧を読めませんでした/.test(src) && /いまは施設の表示です/.test(src), '無い・壊れているの文言');
+  ok(/デイの一覧が今日のものではありません。デイ せせらぎから開き直してください/.test(src), '今日でない時の文言は §9.7 のとおり');
+  ok(/排泄ケア記録に居ない方 '\+c\.miss\+'名/.test(src) && !/r\.name|\.yomi/.test(src), '結べない方は数だけ（帯に氏名を出さない）');
+}
+
+head('7 ?view=daycare の読み方（読んだらすぐ URL から消す・親の補足 2）');
+{
+  let b = box({ search: '?view=daycare', hash: '#cfg=x' });
+  ok(b.hbDcInit() === true && b.store.hbcr_daycare === '1', '?view=daycare で印を付ける');
+  ok(b.loc.search === '' && b.loc.hash === '#cfg=x', 'URL から view だけを消す（接続先の救済の hash は残す）', b.loc);
+  b = box({ search: '?view=daycare&masterId=m11' });
+  ok(b.hbDcInit() === true && b.loc.search === '?masterId=m11' && b.hbReadViewParam() === '', '?masterId= は残し、今の入口が読む（view は消えているので履歴を開くと取り違えない）', b.loc);
+  for (const s of ['?view=hist&masterId=m1', '?view=5day&masterId=m1', '?masterId=m1', '', '?view=Daycare']) {
+    b = box({ search: s });
+    ok(b.hbDcInit() === false && b.loc.search === s && b.writes.length === 0 && b._dc === null, 'デイの指定でない URL は触らない（' + (s || '空') + '）');
+  }
+  ok(box({ search: '?view=hist' }).hbReadViewParam() === 'hist' && box({ search: '?view=5day' }).hbReadViewParam() === '5day' && box({ search: '?view=daycare' }).hbReadViewParam() === '', '今の ?view=（hist・5day）の読み方は変えていない');
+  b = box({ store: { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: [] }) } });
+  b.hbDcInit(); b.hbDcMarkSet(false); b.hbDcLoad();
+  ok(b._dc === null && !b.cls.has('hb-daycare') && b.store[HANDOFF] !== undefined, '〔施設の表示に戻す〕は自分の印だけを消す（キーは残す）');
+  b = box({ store: { hbcr_daycare: 'yes', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m11'] }) } });
+  ok(b.hbDcInit() === false && b._dc === null, '印は既知の値（"1"）だけを受け付ける');
+}
+
+head('8 書かない・戻り先・つなぎ込み');
+{
+  const writesKey = /(setItem|removeItem)\(\s*(DC_HANDOFF_KEY|['"]su_daycare_handoff_v1['"])/.test(SRC);
+  ok(!writesKey && (SRC.match(/su_daycare_handoff_v1/g) || []).length >= 1, 'このアプリはキーを書かない・消さない（読むだけ）');
+  ok(/DC_HANDOFF_KEY='su_daycare_handoff_v1'/.test(X.varDecl('DC_MARK_KEY')) && /DC_MARK_KEY='hbcr_daycare'/.test(X.varDecl('DC_MARK_KEY')), 'キーの名前は §9.7 のとおり・印は hbcr_ で始まる');
+  const m = /<a id="dcBack" href="([^"]+)">デイ せせらぎへ戻る<\/a>/.exec(HTML);
+  ok(!!m && new URL(m[1], 'https://th-su.github.io/haiben-record/haiben-record.html').href === 'https://th-su.github.io/care-log/#/record/daycare', '〔デイ せせらぎへ戻る〕は同じタブで care-log のデイの画面（公開の URL に解いて確かめる）', m && m[1]);
+  ok(/<button type="button" id="dcOff">施設の表示に戻す<\/button>/.test(HTML), '〔施設の表示に戻す〕がある');
+  ok(/hbDcKeep\(re\)&&tlOvdForRes/.test(X.fn('tlOvdRefresh')), '1分ごとの更新も同じ対象で判定する（要注意だけの時に毎分描き直さない）');
+  ok(/if\(hbDcOn\(\)\)hbDcScrollDay\(\)/.test(X.fn('showSc')) && /tlCompact\)return/.test(X.fn('hbDcScrollDay')) && /hr-top'\)\[8\]/.test(X.fn('hbDcScrollDay')), '時系列を開くと 8:30 の位置へ送る（全体表示は送らない）');
+  const init = X.fn('_initRest');
+  ok(init.indexOf('_dcFromUrl=hbDcInit()') >= 0 && init.indexOf('_dcFromUrl=hbDcInit()') < init.indexOf('buildResSel()') && init.indexOf('restoreSc()') < init.indexOf("showSc('tl')") && init.indexOf("showSc('tl')") < init.indexOf('hbApplyMasterIdParam()'), '起動の順: デイの判定 → 最初の描画 → 画面の復元 → ?view=daycare なら時系列 → ?masterId=');
+  ok(/\$\('dcBar'\)\]\.concat/.test(X.fn('_fitScrollBox')) && /if\(dc&&dc\.offsetParent\)\{dc\.style\.top=t\+'px';t\+=dc\.offsetHeight\}/.test(X.fn('layoutStickyTops')), '貼り付く位置と表の高さの計算に帯を足す（出ていない時は数えない）');
+  ok(/\.dcbar\{display:none\}/.test(HTML) && /html\.hb-daycare \.dcbar\{position:sticky/.test(HTML) && /@media print\{\.dcbar\{display:none !important\}\}/.test(HTML), '帯は印のある端末だけに出し、印刷には出さない');
+}
+
+console.log('\n══════════════════════════════════');
+console.log('  合格 ' + pass + ' / 不合格 ' + fail);
+process.exit(fail ? 1 : 0);
