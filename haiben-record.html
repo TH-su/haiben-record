@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-GU1kwqDCTgkNl1y5w7E75eDgv3VEOypvdRAsxdvvZhU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-7hNwk27DmKLeWB+oA4yedIsqMuAptUhkuMnmMrlkxbE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -8901,10 +8901,11 @@ function _initRest(){
   }
   // ローカルに保存された職員リストがサーバーに反映されていない場合は自動で再送信
   // 起動時の自動 push は廃止（サンプル/古いデータがサーバーを上書きする事故を防ぐ）
-  // 時計
-  function tick(){const n=new Date();$('hDate').textContent=n.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+  // 時計（裏のタブでは書き換えず、見えた時に1回書き換える・2026-10-24 アプリ間連携の見直し 段1）
+  function tick(){if(document.hidden)return;const n=new Date();$('hDate').textContent=n.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
     $('hTime').textContent=n.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}
   tick();setInterval(tick,1e4);
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')tick()});
   // 遅延保存の確実な書き込み保証：ページ離脱・バックグラウンド遷移時に同期フラッシュ
   window.addEventListener('pagehide',flushSave);
   window.addEventListener('beforeunload',flushSave);
