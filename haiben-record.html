@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-3i01IiNWfGBBw1B6nw4Bamhr60uG/IN19JRTCjKqobo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-yd1z1ZidlijT+3USvHezPSBQSsBSlfX+t6p9i+I1VR8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -60,6 +60,7 @@ html.hb-daycare .dcbar{position:sticky;top:56px;z-index:98;
 /* 警告の行は現場端末の注意書き（.hb-field-note）と同じ色（文字 7.8:1。--warn-tx と --warn-bg の組は 3.6:1 で本文に足りない） */
 .dcbar .dc-warn{flex-basis:100%;padding:6px 10px;border:1px solid #ffb74d;border-radius:6px;
   background:#fff3e0;color:#8a2c00;font-weight:700}
+.dcbar .dc-note{flex-basis:100%;font-weight:700}
 @media print{.dcbar{display:none !important}}
 /* アプリ間ジャンプ（care-schedule / daycare-roster と同じ見た目。共通部品が無いため各ファイルに持つ） */
 .hdr-btn{min-height:40px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);
@@ -1032,6 +1033,7 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
     <button type="button" id="dcOff">施設の表示に戻す</button>
   </div>
   <div class="dc-warn" id="dcWarn" role="alert" hidden></div>
+  <div class="dc-note" id="dcNote" role="status" aria-live="polite" hidden></div>
 </div>
 
 <!-- ローディングオーバーレイ -->
@@ -8935,21 +8937,22 @@ function hbDcLoad(){
 /* 帯の文を書く（氏名は出さない。数だけ） */
 function hbDcRenderBar(){
   var txt=$('dcBarTxt'),w=$('dcWarn');if(!txt||!w)return;
-  if(!_dc){txt.textContent='';w.textContent='';w.hidden=true;return}
+  /* 文が前と同じなら書き直さない（帯は読み上げの対象＝1分ごとの読み直しで同じ文を毎分読ませない） */
+  var put=function(el,v,html){if(el._dcV===v)return;el._dcV=v;if(html)el.innerHTML=v;else el.textContent=v};
+  if(!_dc){put(txt,'');put(w,'');w.hidden=true;return}
   if(!hbDcOn()){
-    txt.innerHTML='<b>デイ せせらぎ</b>　'+(_dc.st==='none'?'デイの一覧がこの端末にありません':'デイの一覧を読めませんでした')+
-      '。デイ せせらぎの今日の画面の〔排泄〕から開き直してください（いまは施設の表示です）';
-    w.textContent='';w.hidden=true;return;
+    put(txt,'<b>デイ せせらぎ</b>　'+(_dc.st==='none'?'デイの一覧がこの端末にありません':'デイの一覧を読めませんでした')+
+      '。デイ せせらぎの今日の画面の〔排泄〕から開き直してください（いまは施設の表示です）',true);
+    put(w,'');w.hidden=true;return;
   }
   var c=hbDcCount(D&&D.residents,_dc,hbDcListable);
-  txt.innerHTML='<b>デイ せせらぎ</b>　'+(_dc.st==='ok'?'今日':escapeHtmlText(fmtMD(_dc.day)))+' '+c.n+'名'+
-    (c.miss>0?'　<span class="dc-miss">排泄ケア記録に居ない方 '+c.miss+'名</span>':'');
+  put(txt,'<b>デイ せせらぎ</b>　'+(_dc.st==='ok'?'今日':escapeHtmlText(fmtMD(_dc.day)))+' '+c.n+'名'+
+    (c.miss>0?'　<span class="dc-miss">排泄ケア記録に居ない方 '+c.miss+'名</span>':''),true);
   /* 今日でない時は §9.7 の文言に、施設の端末向けの出口（〔施設の表示に戻す〕）を添える（施設と共用の端末で翌日も絞られたままにしない） */
   var warn=[];
   if(_dc.st==='stale')warn.push('⚠ デイの一覧が今日のものではありません。デイ せせらぎから開き直してください（施設の端末では〔施設の表示に戻す〕を押してください）');
   if(_dcMem)warn.push('⚠ この端末にデイの表示の印を残せませんでした。再読み込みすると施設の表示に戻ります');
-  if(warn.length){w.textContent=warn.join('　');w.hidden=false}
-  else{w.textContent='';w.hidden=true}
+  put(w,warn.join('　'));w.hidden=!warn.length;
 }
 /* 時系列を日中（8:30〜）が見える位置へ横に送る（デイの表示・30分の表示の時だけ。「全体」の24列は1画面に入るので送らない）。
    8時の見出し（th.hr-top）の実測の位置＋半分（:30）を、氏名の列のすぐ右に合わせる（tlNowPlace と同じ測り方） */
@@ -8979,27 +8982,46 @@ function hbDcRefresh(){
 }
 /* 〔施設の表示に戻す〕: 自分の印だけを消し、今の画面のまま施設の並びで描き直す（受け渡しのキーは care-log のものなので消さない） */
 function hbDcOff(){
-  hbDcMarkSet(false);_dcMem=false;hbDcLoad();hbDcRerender();
+  hbDcMarkSet(false);_dcMem=false;hbDcLoad();hbDcRerender();hbDcBackNote('');
   showToast('施設の表示に戻しました');
 }
 /* 〔デイ せせらぎへ戻る〕（同じタブで移る）。送信待ちの記録があるまま移ると送信が止まり、この端末で次に排泄ケア記録を
-   開くまで施設の端末に届かない（控え hbcr_wq・hbcr_pq に残るので消えはしない）。そこで送り終えるまで最大 DC_BACK_WAIT_MS 待ってから移り、
-   送り切れない時（圏外など）は件数を出して確かめる。送信待ちが無ければリンクのまますぐ移る */
-var DC_BACK_WAIT_MS=8000,_dcBackBusy=false;
+   開くまで施設の端末に届かない（控え hbcr_wq・hbcr_pq に残るので消えはしない）。そこで送り終えてから移る。
+   ・送っている最中（_writeSending・_pqFlushing）や件数が進んでいる間は待ち続ける（GAS は1件で最大30秒かかる・最長 DC_BACK_MAX_MS）
+   ・進まないまま DC_BACK_IDLE_MS たったら（圏外など）、件数と「施設の画面に出るのが遅れる」ことを出して確かめる
+   ・待っている間は帯に「送っています」を出し続け、ほかを押したら待つのをやめる（数秒後に勝手に画面が移らない）
+   ・ほかの確かめの小窓が開いている間は、確かめを出さずに待つ（小窓の受け口は1つだけのため）
+   送信待ちが無ければリンクのまますぐ移る */
+var DC_BACK_IDLE_MS=8000,DC_BACK_MAX_MS=45000,_dcBackBusy=false,_dcBackTok=0;
+function _dcBackSig(){return (_writeQ?_writeQ.length:0)+'|'+_pqCount+'|'+(_wqCurrent&&_wqCurrent.data&&_wqCurrent.data.id||(_wqCurrent?1:0))}
+function hbDcBackNote(t){var n=$('dcNote');if(!n)return;if(n._dcV===t)return;n._dcV=t;n.textContent=t;n.hidden=!t}
 function hbDcBack(ev){
   if(_unsentCount()<=0)return;
   if(ev)ev.preventDefault();
   if(_dcBackBusy)return;
   _dcBackBusy=true;
-  var a=$('dcBack'),href=a?a.href:'../care-log/#/record/daycare',t0=Date.now();
-  showToast('📤 記録を送っています（'+_unsentCount()+'件）。送り終えたらデイ せせらぎへ戻ります');
+  var tok=++_dcBackTok,a=$('dcBack'),href=a?a.href:'../care-log/#/record/daycare',t0=Date.now(),tLast=t0,last=_dcBackSig();
+  var stop=function(e){var t=e&&e.target;if(t&&t.closest&&t.closest('#dcBack'))return;end(true)};
+  function unhook(){try{document.removeEventListener('pointerdown',stop,true);document.removeEventListener('keydown',stop,true)}catch(e){}}
+  function end(say){
+    if(tok!==_dcBackTok)return;
+    _dcBackTok++;_dcBackBusy=false;unhook();hbDcBackNote('');
+    if(say)showToast('デイ せせらぎへ戻るのをやめました');
+  }
+  try{document.addEventListener('pointerdown',stop,true);document.addEventListener('keydown',stop,true)}catch(e){}
   try{_writeDrain()}catch(e){}   // 送信中なら何もしない。空なら失敗して控えた分（hbcr_pq）を送り直す
   (function wait(){
-    var m=_unsentCount();
-    if(m<=0){_dcBackBusy=false;location.href=href;return}
-    if(Date.now()-t0<DC_BACK_WAIT_MS){setTimeout(wait,300);return}
-    customConfirm('まだ送れていない記録が '+m+' 件あります。\nこの端末で次に排泄ケア記録を開いた時に送ります（記録は消えません）。\n\nこのままデイ せせらぎへ戻りますか？')
-      .then(function(yes){_dcBackBusy=false;if(yes)location.href=href});
+    if(tok!==_dcBackTok)return;
+    if(!_dc){end(false);return}                                   // 〔施設の表示に戻す〕を押した
+    var m=_unsentCount(),now=Date.now(),sg=_dcBackSig();
+    if(m<=0){end(false);location.href=href;return}
+    if(sg!==last||_writeSending||_pqFlushing){last=sg;tLast=now}   // 進んでいる・送っている最中は待ち続ける
+    hbDcBackNote('📤 記録を送っています（'+m+'件）。送り終えたらデイ せせらぎへ戻ります（ほかを押すとやめます）');
+    if(now-tLast<DC_BACK_IDLE_MS&&now-t0<DC_BACK_MAX_MS){setTimeout(wait,300);return}
+    var mc=$('mConf');if(mc&&mc.classList&&mc.classList.contains('on')){setTimeout(wait,300);return}
+    unhook();   // 確かめの小窓のボタンで「やめる」にならないよう、待ち受けを外してから出す
+    customConfirm('まだ送れていない記録が '+m+' 件あります。\n施設の画面に出るのは、この端末で次に排泄ケア記録を開いて送り終えた時です（記録は消えません）。\n\nこのままデイ せせらぎへ戻りますか？')
+      .then(function(yes){if(tok!==_dcBackTok)return;end(false);if(yes)location.href=href});
   })();
 }
 var _dcBound=false;
