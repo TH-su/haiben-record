@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-xx8xASyrpwvCmlVoAEY/pub+eOf0VzZxBELmnDAxDKg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-3i01IiNWfGBBw1B6nw4Bamhr60uG/IN19JRTCjKqobo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -5638,8 +5638,14 @@ function layoutStickyTops(){
   var h=hdr.offsetHeight,fb=$('fromMaster'),dc=$('dcBar');
   if(fb)fb.style.top=h+'px';
   var t=h+((fb&&fb.offsetParent)?fb.offsetHeight:0);
-  // デイの帯（2026-10-24）は確認バーの下に重ねて貼り付ける。印の無い端末では出ない＝t は今までと同じ
-  if(dc&&dc.offsetParent){dc.style.top=t+'px';t+=dc.offsetHeight}
+  /* デイの帯（2026-10-24）は確認バーの下に重ねて貼り付ける。印の無い端末では出ない＝t は今までと同じ。
+     貼り付けると今の画面の表に見出しと1行も残らない時（iPhone の横・表示200% など）は、日付の操作バーと同じく貼り付けない */
+  if(dc&&dc.offsetParent){
+    var ah=document.querySelector('.scr.on .bd-hdr'),abox=ah&&ah.parentElement?ah.parentElement.querySelector('.tl-w,.bd-w'):null;
+    var dcFit=!abox||(_smallVh()-(t+dc.offsetHeight+ah.offsetHeight)-_boxBelow(abox)-4)>=_boxFloor(abox);
+    dc.style.position=dcFit?'':'static';dc.style.top=dcFit?t+'px':'';
+    if(dcFit)t+=dc.offsetHeight;
+  }
   $$('.bd-hdr').forEach(function(el){
     if(!el.offsetParent)return;                                   // 表示中の画面だけ（隠れた画面は高さが測れない）
     var box=el.parentElement&&el.parentElement.querySelector('.tl-w,.bd-w');
@@ -8852,6 +8858,7 @@ function rpCsv(){
 var DC_MARK_KEY='hbcr_daycare',DC_HANDOFF_KEY='su_daycare_handoff_v1';
 var DC_EMPTY_MSG='デイ せせらぎの方で、ここに出せる方がいません（上の帯の人数を確かめてください）';
 var _dc=null;   // null＝施設の表示。{st:'ok'|'stale'|'none'|'bad',day,mids,badN,set,sig}
+var _dcMem=false;   // 印を端末に書けなかった時だけ、この画面の間だけ持つ印（?view=daycare で開いた時）
 /* 受け渡しのキーを読み解く（純関数）。raw: localStorage の文字列（null 可）／td: 今日（YYYY-MM-DD）
    st: 'none'＝キーが無い／'bad'＝壊れている／'ok'＝今日の一覧／'stale'＝今日でない一覧（mids では絞り続ける）
    mids は重複を除き、?masterId= の入口と同じ形の値だけを残す。形の違う値は badN に数える（「居ない方」に入れる）。at は読まない */
@@ -8892,10 +8899,13 @@ function hbDcCount(residents,dc,listable){
 function hbDcOn(){return !!(_dc&&(_dc.st==='ok'||_dc.st==='stale'))}
 function hbDcKeep(r){
   if(!hbDcOn())return true;
-  return !!(r&&r.masterId!=null&&r.masterId!==''&&_dc.set[String(r.masterId)]);
+  return !!(r&&r.masterId!=null&&r.masterId!==''&&_dc.set[String(r.masterId)]&&hbDcLinkOk(r));
 }
+/* 紐づけ（masterId）が別人を指している行（マスタ連携の点検の mismatch）はデイの方として出さない（2026-08-06 の混線の守りと同じ）。
+   その方は「居ない方」に数える。名簿が無い・判定できない（unknown）時は ?masterId= の入口と同じく信じる */
+function hbDcLinkOk(r){try{return _linkStateOf(r)!=='mismatch'}catch(e){return true}}
 function hbDcOrder(a){return hbDcOn()?a.slice().sort(hbDcCmp):a}
-function hbDcListable(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&!!r.name&&(showNonTargets||isExcretionTarget(r))}
+function hbDcListable(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&!!r.name&&(showNonTargets||isExcretionTarget(r))&&hbDcLinkOk(r)}
 function hbDcMarkGet(){try{return localStorage.getItem(DC_MARK_KEY)==='1'}catch(e){return false}}
 function hbDcMarkSet(on){try{if(on)localStorage.setItem(DC_MARK_KEY,'1');else localStorage.removeItem(DC_MARK_KEY)}catch(e){}}
 /* ?view=daycare を読み、読んだらすぐ URL から view だけを消す（共有のリンクや再読み込みで勝手にデイの表示へ入らない。以後は印で保つ）。
@@ -8911,7 +8921,7 @@ function hbDcReadParam(){
 /* 印とキーから今の状態を作り直す。中身（状態・日・mids）が変わった時だけ true */
 function hbDcLoad(){
   var nx=null;
-  if(hbDcMarkGet()){
+  if(hbDcMarkGet()||_dcMem){
     var raw=null;try{raw=localStorage.getItem(DC_HANDOFF_KEY)}catch(e){}
     nx=hbDcParse(raw,today());
     nx.set={};(nx.mids||[]).forEach(function(m){nx.set[m]=1});
@@ -8934,7 +8944,11 @@ function hbDcRenderBar(){
   var c=hbDcCount(D&&D.residents,_dc,hbDcListable);
   txt.innerHTML='<b>デイ せせらぎ</b>　'+(_dc.st==='ok'?'今日':escapeHtmlText(fmtMD(_dc.day)))+' '+c.n+'名'+
     (c.miss>0?'　<span class="dc-miss">排泄ケア記録に居ない方 '+c.miss+'名</span>':'');
-  if(_dc.st==='stale'){w.textContent='⚠ デイの一覧が今日のものではありません。デイ せせらぎから開き直してください';w.hidden=false}
+  /* 今日でない時は §9.7 の文言に、施設の端末向けの出口（〔施設の表示に戻す〕）を添える（施設と共用の端末で翌日も絞られたままにしない） */
+  var warn=[];
+  if(_dc.st==='stale')warn.push('⚠ デイの一覧が今日のものではありません。デイ せせらぎから開き直してください（施設の端末では〔施設の表示に戻す〕を押してください）');
+  if(_dcMem)warn.push('⚠ この端末にデイの表示の印を残せませんでした。再読み込みすると施設の表示に戻ります');
+  if(warn.length){w.textContent=warn.join('　');w.hidden=false}
   else{w.textContent='';w.hidden=true}
 }
 /* 時系列を日中（8:30〜）が見える位置へ横に送る（デイの表示・30分の表示の時だけ。「全体」の24列は1画面に入るので送らない）。
@@ -8960,20 +8974,42 @@ function hbDcRerender(){
 }
 /* 画面が前に出るたびにキーを読み直す（care-log で休みを直して戻った時など）。中身が変わった時だけ描き直す＝押している最中に表を差し替えない */
 function hbDcRefresh(){
-  if(!_dc&&!hbDcMarkGet())return;
+  if(!_dc&&!hbDcMarkGet()&&!_dcMem)return;
   if(hbDcLoad())hbDcRerender();else hbDcRenderBar();
 }
 /* 〔施設の表示に戻す〕: 自分の印だけを消し、今の画面のまま施設の並びで描き直す（受け渡しのキーは care-log のものなので消さない） */
 function hbDcOff(){
-  hbDcMarkSet(false);hbDcLoad();hbDcRerender();
+  hbDcMarkSet(false);_dcMem=false;hbDcLoad();hbDcRerender();
   showToast('施設の表示に戻しました');
+}
+/* 〔デイ せせらぎへ戻る〕（同じタブで移る）。送信待ちの記録があるまま移ると送信が止まり、この端末で次に排泄ケア記録を
+   開くまで施設の端末に届かない（控え hbcr_wq・hbcr_pq に残るので消えはしない）。そこで送り終えるまで最大 DC_BACK_WAIT_MS 待ってから移り、
+   送り切れない時（圏外など）は件数を出して確かめる。送信待ちが無ければリンクのまますぐ移る */
+var DC_BACK_WAIT_MS=8000,_dcBackBusy=false;
+function hbDcBack(ev){
+  if(_unsentCount()<=0)return;
+  if(ev)ev.preventDefault();
+  if(_dcBackBusy)return;
+  _dcBackBusy=true;
+  var a=$('dcBack'),href=a?a.href:'../care-log/#/record/daycare',t0=Date.now();
+  showToast('📤 記録を送っています（'+_unsentCount()+'件）。送り終えたらデイ せせらぎへ戻ります');
+  try{_writeDrain()}catch(e){}   // 送信中なら何もしない。空なら失敗して控えた分（hbcr_pq）を送り直す
+  (function wait(){
+    var m=_unsentCount();
+    if(m<=0){_dcBackBusy=false;location.href=href;return}
+    if(Date.now()-t0<DC_BACK_WAIT_MS){setTimeout(wait,300);return}
+    customConfirm('まだ送れていない記録が '+m+' 件あります。\nこの端末で次に排泄ケア記録を開いた時に送ります（記録は消えません）。\n\nこのままデイ せせらぎへ戻りますか？')
+      .then(function(yes){_dcBackBusy=false;if(yes)location.href=href});
+  })();
 }
 var _dcBound=false;
 function hbDcBind(){
   if(_dcBound)return;
   _dcBound=true;
   var off=$('dcOff');if(off)off.addEventListener('click',hbDcOff);
+  var bk=$('dcBack');if(bk)bk.addEventListener('click',hbDcBack);
   var again=function(){try{hbDcRefresh()}catch(e){console.warn('[hbcr] デイの一覧の読み直しをスキップ:',e)}};
+  setInterval(again,60*1000);   // 画面を出したまま日付をまたいだ時も今日でないことに気づく（中身が同じなら帯の文を書くだけ）
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')again()});
   window.addEventListener('focus',again);
   window.addEventListener('pageshow',again);
@@ -8983,7 +9019,7 @@ function hbDcBind(){
    戻り値: ?view=daycare で開いたか（true なら画面の復元の後に時系列を開く） */
 function hbDcInit(){
   var fromUrl=hbDcReadParam();
-  if(fromUrl)hbDcMarkSet(true);
+  if(fromUrl){hbDcMarkSet(true);_dcMem=!hbDcMarkGet()}   // 書けなければこの画面の間だけデイの表示（帯に一言）
   hbDcLoad();
   if(_dc){hbDcRenderBar();hbDcBind()}
   return fromUrl;

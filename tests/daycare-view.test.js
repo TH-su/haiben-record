@@ -3,8 +3,8 @@
    実行:  node tests/daycare-view.test.js
    ──────────────────────────────────────────────────────────────────────
    守る約束:
-     1 受け渡しのキー su_daycare_handoff_v1 の読み解き（無い・壊れている・今日・今日でない）。care-log と同じ値で確かめる
-     2 並びはふりがなの五十音（NFKC・カタカナはひらがな・無ければ氏名。care-log の kanaSortKey と同じ）
+     1 受け渡しのキー su_daycare_handoff_v1 の読み解き（無い・壊れている・今日・今日でない）。§9.7 の形の見本の値で確かめる（care-log 側の試験も同じ値を使うとそろう）
+     2 並びはふりがなの五十音（NFKC・カタカナはひらがな・無ければ氏名。読みのそろえ方は care-log の kanaSortKey と同じ。同じ読みの時はこのアプリの id 順）
      3 帯の数: n＝受け取った人数／居ない方＝表に出ない方（「対象外も表示」の時は対象外の方を表に出し、数えない）
      4 印もキーも無い端末（施設の端末）は今までと同じ対象・並び。直す前の版（c840fb1）の式と同じ結果になる
      5 キーがあっても印が無ければ施設の表示（施設の端末に care-log が書いたキーがあっても変わらない）
@@ -37,8 +37,9 @@ function ok(c, m, extra) { if (c) { pass++; console.log('  ✅ ' + m); } else { 
 function head(t) { console.log('\n─── ' + t + ' ───'); }
 
 /* デイの表示の関数をまとめて評価する箱。store は localStorage の中身、search・hash は URL */
-const DC_FNS = ['hbDcParse', 'hbDcKana', 'hbDcCmp', 'hbDcCount', 'hbDcOn', 'hbDcKeep', 'hbDcOrder', 'hbDcListable',
-  'hbDcMarkGet', 'hbDcMarkSet', 'hbDcReadParam', 'hbDcLoad', 'hbDcInit', 'hbDcBind', 'isExcretionTarget', 'resSortKey', 'resSortAiu', 'hbReadViewParam'];
+const DC_FNS = ['hbDcParse', 'hbDcKana', 'hbDcCmp', 'hbDcCount', 'hbDcOn', 'hbDcKeep', 'hbDcLinkOk', 'hbDcOrder', 'hbDcListable',
+  'hbDcMarkGet', 'hbDcMarkSet', 'hbDcReadParam', 'hbDcLoad', 'hbDcInit', 'hbDcBind', 'hbDcRenderBar', 'hbDcRefresh', 'hbDcOff', 'hbDcBack',
+  'isExcretionTarget', 'resSortKey', 'resSortAiu', 'hbReadViewParam'];
 function box(opts) {
   opts = opts || {};
   const store = Object.assign({}, opts.store || {});
@@ -46,11 +47,15 @@ function box(opts) {
   const cls = new Set();
   const listeners = [];
   const loc = { search: opts.search || '', pathname: '/haiben-record/haiben-record.html', hash: opts.hash || '' };
+  /* 帯の部品の代役（文・警告・ボタン）。hbDcRenderBar を実際に動かして中身を確かめる */
+  const els = { dcBarTxt: { textContent: '', innerHTML: '' }, dcWarn: { textContent: '', hidden: true }, dcBack: { href: 'https://th-su.github.io/care-log/#/record/daycare', addEventListener: (ev) => listeners.push('dcBack:' + ev) }, dcOff: { addEventListener: (ev) => listeners.push('dcOff:' + ev) } };
+  const calls = { rerender: 0, toast: [], confirm: [], go: [] };
+  const timers = [];
   const b = {
     TODAY: opts.today || '2026-10-24',
     localStorage: {
       getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
-      setItem: (k, v) => { writes.push(['set', k, String(v)]); store[k] = String(v); },
+      setItem: (k, v) => { if (opts.readOnly) throw new Error('QuotaExceededError'); writes.push(['set', k, String(v)]); store[k] = String(v); },
       removeItem: (k) => { writes.push(['remove', k]); delete store[k]; }
     },
     location: loc,
@@ -61,19 +66,31 @@ function box(opts) {
       addEventListener: (ev) => listeners.push('document:' + ev)
     },
     window: { addEventListener: (ev) => listeners.push('window:' + ev) },
-    $: () => null,
-    showToast: () => {},
-    hbDcRenderBar: () => {},
+    $: (id) => els[id] || null,
+    showToast: (m) => calls.toast.push(m),
+    hbDcRerender: () => { calls.rerender++; },
+    escapeHtmlText: (x) => String(x).replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';'),
+    fmtMD: (d) => { const p = String(d).split('-'); return parseInt(p[1], 10) + '/' + parseInt(p[2], 10); },
+    _linkStateOf: (r) => (r && r.mm ? 'mismatch' : 'ok'),
+    unsent: 0,
+    _unsentCount: function () { return b.unsent; },
+    _writeDrain: () => {},
+    customConfirm: (m) => { calls.confirm.push(m); return { then: (f) => f(!!opts.confirmYes) }; },
+    setInterval: () => { timers.push('interval'); return 0; },
+    setTimeout: (f) => { timers.push(f); return 0; },
+    D: { residents: opts.residents || [] },
     console,
     isUserRes: (r) => !!r && !r.staff,
     isAttnRes: (r) => !!r.attn,
     showNonTargets: !!opts.showNonTargets,
     onlyAttn: !!opts.onlyAttn,
-    store, writes, cls, listeners, loc
+    store, writes, cls, listeners, loc, els, calls, timers
   };
+  loc.set = (h) => calls.go.push(h);
   vm.createContext(b);
   vm.runInContext([
-    X.varDecl('DC_MARK_KEY'), X.varDecl('_dc'), X.varDecl('_dcBound'),
+    X.varDecl('DC_MARK_KEY'), X.varDecl('_dc'), X.varDecl('_dcMem'), X.varDecl('_dcBound'), X.varDecl('DC_BACK_WAIT_MS'),
+    "Object.defineProperty(location,'href',{set:function(h){location.set(h)},get:function(){return ''}});",
     'function today(){return TODAY}',
     DC_FNS.map((n) => X.fn(n)).join('\n')
   ].join('\n'), b);
@@ -257,8 +274,129 @@ head('8 書かない・戻り先・つなぎ込み');
   ok(/if\(hbDcOn\(\)\)hbDcScrollDay\(\)/.test(X.fn('showSc')) && /tlCompact\)return/.test(X.fn('hbDcScrollDay')) && /hr-top'\)\[8\]/.test(X.fn('hbDcScrollDay')), '時系列を開くと 8:30 の位置へ送る（全体表示は送らない）');
   const init = X.fn('_initRest');
   ok(init.indexOf('_dcFromUrl=hbDcInit()') >= 0 && init.indexOf('_dcFromUrl=hbDcInit()') < init.indexOf('buildResSel()') && init.indexOf('restoreSc()') < init.indexOf("showSc('tl')") && init.indexOf("showSc('tl')") < init.indexOf('hbApplyMasterIdParam()'), '起動の順: デイの判定 → 最初の描画 → 画面の復元 → ?view=daycare なら時系列 → ?masterId=');
-  ok(/\$\('dcBar'\)\]\.concat/.test(X.fn('_fitScrollBox')) && /if\(dc&&dc\.offsetParent\)\{dc\.style\.top=t\+'px';t\+=dc\.offsetHeight\}/.test(X.fn('layoutStickyTops')), '貼り付く位置と表の高さの計算に帯を足す（出ていない時は数えない）');
+  ok(/\$\('dcBar'\)\]\.concat/.test(X.fn('_fitScrollBox')) && /if\(dc&&dc\.offsetParent\)\{/.test(X.fn('layoutStickyTops')) && /if\(dcFit\)t\+=dc\.offsetHeight/.test(X.fn('layoutStickyTops')), '貼り付く位置と表の高さの計算に帯を足す（出ていない時は数えない）');
+  ok(/dc\.style\.position=dcFit\?'':'static'/.test(X.fn('layoutStickyTops')) && /_boxFloor\(abox\)/.test(X.fn('layoutStickyTops')), '表に見出しと1行も残らない時は帯を貼り付けない（日付の操作バーと同じ判定）');
   ok(/\.dcbar\{display:none\}/.test(HTML) && /html\.hb-daycare \.dcbar\{position:sticky/.test(HTML) && /@media print\{\.dcbar\{display:none !important\}\}/.test(HTML), '帯は印のある端末だけに出し、印刷には出さない');
+}
+
+
+head('9 帯の文（hbDcRenderBar を動かす）');
+{
+  const RES9 = [{ id: 1, name: '架空一', masterId: 'm1' }, { id: 2, name: '架空二', masterId: 'm2' }, { id: 3, name: '架空三', masterId: 'm3', targetExcretion: false }];
+  const mk = (store, o) => { const b = box(Object.assign({ store, residents: RES9 }, o || {})); b.hbDcInit(); b.hbDcRenderBar(); return b; };
+  let b = mk({ hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1', 'm2', 'm3', 'm9'] }) });
+  ok(/デイ せせらぎ<\/b>　今日 4名　<span class="dc-miss">排泄ケア記録に居ない方 2名<\/span>/.test(b.els.dcBarTxt.innerHTML) && b.els.dcWarn.hidden === true, '今日: 「今日 4名・排泄ケア記録に居ない方 2名」（対象外と結べない方）・警告なし', b.els.dcBarTxt.innerHTML);
+  ok(!/架空/.test(b.els.dcBarTxt.innerHTML), '帯に氏名を出さない');
+  b = mk({ hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1', 'm2', 'm3'] }) }, { showNonTargets: true });
+  ok(/今日 3名/.test(b.els.dcBarTxt.innerHTML) && !/居ない方/.test(b.els.dcBarTxt.innerHTML), '「対象外も表示」の時は対象外の方を数えない（全員出ている時は「居ない方」を出さない）', b.els.dcBarTxt.innerHTML);
+  b = mk({ hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-23', mids: ['m1'] }) });
+  ok(/10\/23 1名/.test(b.els.dcBarTxt.innerHTML) && b.els.dcWarn.hidden === false && b.els.dcWarn.textContent.indexOf('デイの一覧が今日のものではありません。デイ せせらぎから開き直してください') >= 0 && /施設の端末では〔施設の表示に戻す〕を押してください/.test(b.els.dcWarn.textContent), '今日でない: 一覧の日付と、§9.7 の警告＋施設の端末向けの出口', [b.els.dcBarTxt.innerHTML, b.els.dcWarn.textContent]);
+  b = mk({ hbcr_daycare: '1' });
+  ok(/デイの一覧がこの端末にありません/.test(b.els.dcBarTxt.innerHTML) && /いまは施設の表示です/.test(b.els.dcBarTxt.innerHTML) && b.els.dcWarn.hidden === true, 'キーなし: 1行（施設の表示）');
+  b = mk({ hbcr_daycare: '1', [HANDOFF]: '{oops' });
+  ok(/デイの一覧を読めませんでした/.test(b.els.dcBarTxt.innerHTML) && b.els.dcWarn.hidden === true, '壊れたキー: 1行（施設の表示）');
+  b = box({ store: {}, residents: RES9 }); b.hbDcRenderBar();
+  ok(b.els.dcBarTxt.textContent === '' && b.els.dcWarn.hidden === true, '施設の端末: 帯の文は空（CSS で帯も出ない）');
+}
+
+head('10 紐づけがずれている方（mismatch）はデイの方として出さない');
+{
+  const R = [{ id: 1, name: '架空一', masterId: 'm1' }, { id: 2, name: '架空二', masterId: 'm2', mm: true }];
+  const b = box({ store: { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1', 'm2'] }) }, residents: R });
+  b.hbDcInit();
+  ok(b.hbDcKeep(R[0]) === true && b.hbDcKeep(R[1]) === false, 'masterId は一致しても、紐づけが別人を指す行は出さない');
+  const c = b.hbDcCount(R, b._dc, b.hbDcListable);
+  ok(c.n === 2 && c.shown === 1 && c.miss === 1, 'その方は「居ない方」に数える', c);
+  vm.runInContext('_linkStateOf=function(){throw new Error("x")}', b);
+  ok(b.hbDcKeep(R[1]) === true, '判定できない時は ?masterId= の入口と同じく信じる');
+  const f = box({ residents: R }); f.hbDcInit();
+  ok(f.hbDcKeep(R[1]) === true, '施設の端末では今までどおり（判定しない）');
+}
+
+head('11 〔施設の表示に戻す〕・読み直し（関数を動かす）');
+{
+  const store = { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1'] }) };
+  let b = box({ store });
+  b.hbDcInit();
+  ok(b.listeners.indexOf('dcOff:click') >= 0 && b.listeners.indexOf('dcBack:click') >= 0 && b.timers.indexOf('interval') >= 0, 'ボタン2つの待ち受けと、日付をまたいだ時の1分ごとの読み直しを付ける', [b.listeners, b.timers.length]);
+  b.hbDcRefresh();
+  ok(b.calls.rerender === 0, '中身が同じなら描き直さない');
+  b.store[HANDOFF] = key({ v: 1, day: '2026-10-24', mids: ['m1', 'm2'] });
+  b.hbDcRefresh();
+  ok(b.calls.rerender === 1, 'キーが変われば描き直す');
+  vm.runInContext('TODAY="2026-10-25"', b);
+  b.hbDcRefresh();
+  ok(b.calls.rerender === 2 && b._dc.st === 'stale', '日付をまたぐと（1分ごとの読み直しで）今日でない扱いにして描き直す');
+  b.hbDcOff();
+  ok(b._dc === null && b.store.hbcr_daycare === undefined && b.store[HANDOFF] !== undefined && b.calls.rerender === 3 && !b.cls.has('hb-daycare') && /施設の表示に戻しました/.test(b.calls.toast.join()), '〔施設の表示に戻す〕: 自分の印だけ消し、施設の表示で描き直す（キーは残す）');
+  b.hbDcRefresh();
+  ok(b.calls.rerender === 3 && b._dc === null, '戻した後の読み直しは何もしない');
+  const f = box({ store: { [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1'] }) } });
+  f.hbDcInit(); f.hbDcRefresh();
+  ok(f._dc === null && f.calls.rerender === 0 && f.writes.length === 0, '施設の端末（キーだけ）: 読み直しても何も変えない');
+}
+
+head('12 〔デイ せせらぎへ戻る〕は送り終えてから移る（関数を動かす）');
+{
+  const store = { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1'] }) };
+  let b = box({ store }); b.hbDcInit();
+  let prevented = false;
+  const ev = { preventDefault: () => { prevented = true; } };
+  b.unsent = 0; b.hbDcBack(ev);
+  ok(!prevented && b.calls.go.length === 0, '送信待ちが無ければリンクのまま（止めない）');
+  b.unsent = 2; prevented = false; b.timers.length = 0; b.hbDcBack(ev);
+  ok(prevented && /記録を送っています（2件）/.test(b.calls.toast.join()) && b.calls.go.length === 0, '送信待ちがあれば止めて「送っています」を出す');
+  b.unsent = 0; const tick = b.timers.find((x) => typeof x === 'function'); if (tick) tick();
+  ok(b.calls.go.length === 1 && /care-log\/#\/record\/daycare$/.test(b.calls.go[0]), '送り終えたら care-log のデイの画面へ移る', b.calls.go);
+  b = box({ store, confirmYes: false }); b.hbDcInit(); vm.runInContext('DC_BACK_WAIT_MS=-1', b);
+  b.unsent = 3; b.hbDcBack(ev);
+  ok(/まだ送れていない記録が 3 件あります/.test(b.calls.confirm.join()) && /記録は消えません/.test(b.calls.confirm.join()) && b.calls.go.length === 0, '送り切れない時は件数を出して確かめる（キャンセルなら移らない）');
+  b = box({ store, confirmYes: true }); b.hbDcInit(); vm.runInContext('DC_BACK_WAIT_MS=-1', b);
+  b.unsent = 1; b.hbDcBack(ev);
+  ok(b.calls.go.length === 1, '確かめて「実行する」なら移る（記録は控えに残り、次に開いた時に送る）');
+}
+
+head('13 印を端末に書けない時（?view=daycare）');
+{
+  const b = box({ search: '?view=daycare', readOnly: true, store: { [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1'] }) } });
+  ok(b.hbDcInit() === true && b.hbDcOn() === true && b._dcMem === true, '書けなくても、この画面の間はデイの表示にする');
+  b.hbDcRenderBar();
+  ok(/印を残せませんでした/.test(b.els.dcWarn.textContent) && b.els.dcWarn.hidden === false, '帯に「印を残せませんでした」を出す');
+  b.hbDcOff();
+  ok(b._dc === null && b._dcMem === false, '〔施設の表示に戻す〕で、この画面の印も消す');
+}
+
+head('14 入力のタイル（renderResTiles）: 施設の端末は直す前と同じ・デイは1つのまとまり');
+{
+  const LIST = [
+    { id: 1, name: '架空一', room: '201', yomi: 'さ' }, { id: 2, name: '架空二', room: '101', yomi: 'か' },
+    { id: 3, name: '架空三', room: '１０５', yomi: 'あ' }, { id: 4, name: '架空四', room: '', yomi: 'た' }, { id: 5, name: '架空五', room: '202', yomi: 'な' }
+  ];
+  function tiles(src, dcOn) {
+    const XX = makeExtractor(src);
+    const elsT = { resTiles: { innerHTML: '' } };
+    const sb = {
+      $: (id) => elsT[id] || null, escapeHtmlText: (x) => String(x), syncResPick: () => {},
+      lastR: (rid, t) => (rid % 2 ? { date: '2026-10-22' } : null), elH: () => 30, badgeCls: (h, t, rid) => (rid === 3 ? 'eb-ng' : 'eb-ok'),
+      dayDiff: (a, b2) => 2, today: () => '2026-10-24', padSetFor: (r) => ({ list: r.id === 2 ? [{ n: '見本パッド' }] : [] }), Date,
+      hbDcOn: () => dcOn, DC_EMPTY_MSG: 'EMPTY'
+    };
+    vm.createContext(sb);
+    vm.runInContext(['_roomNum', 'roomToFloor', 'floorLabel', 'renderResTiles'].map((n) => XX.fn(n)).join('\n'), sb);
+    sb.renderResTiles(LIST.slice());
+    const empty = (sb.renderResTiles([]), elsT.resTiles.innerHTML);
+    sb.renderResTiles(LIST.slice());
+    return { html: elsT.resTiles.innerHTML, empty };
+  }
+  ok(!!OLD_SRC, '直す前の版がある');
+  if (OLD_SRC) {
+    const o = tiles(OLD_SRC, false), n = tiles(SRC, false);
+    ok(o.html === n.html && o.empty === n.empty && /1階/.test(n.html) && /2階/.test(n.html), '施設の端末: タイルの中身（階ごとのまとまり・空の時の文）が直す前と同じ');
+  }
+  const d = tiles(SRC, true);
+  ok((d.html.match(/class="rt-fl"/g) || []).length === 1 && /デイ せせらぎ（五十音順）/.test(d.html) && d.empty.indexOf('EMPTY') >= 0, 'デイ: 階に分けず1つのまとまり。空の時はデイ向けの文');
+  const order = (d.html.match(/data-rid="(\d+)"/g) || []).map((x) => x.replace(/\D/g, '')).join(',');
+  ok(order === '1,2,3,4,5', 'デイ: 受け取った並び（五十音に並べた後の順）のまま', order);
 }
 
 console.log('\n══════════════════════════════════');
