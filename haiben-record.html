@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-W3/HUqWyemoAbMg6CM7qRQTMf7gXiWgeDv9sMQSBjnI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-MOgqm6QdNQYwI6JnzWEG+5Im7U7ZfQEp+hvh11xE4qA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -4345,11 +4345,12 @@ function mergeCommonResidents(srcList, opts){
          care-log は cfg.dayOnly だけを見て今日の要注意から外すため、印が残ると施設で記録を始めた後も「施設では記録していません」と出続ける。
          外すのは dayOnly のキーだけ（閾値などほかのキーは残す・全部無くなれば cfg ごと消す）。送り方は下の退去の解除と同じ。
          何台が同時に外しても、送る中身は同じ（dayOnly の無い cfg）になる */
-      /* ★名簿の新しさの関門（反証 B2）: 外すのは、この共有名簿が加えた時刻（dayOnlyAt）より新しい時だけ。
-         端末に残った古い共有名簿の「対象」で外すと、足しては外される往復になる。新しさが分からない時は外さない */
-      var _doAt=(tgt.cfg&&typeof tgt.cfg==='object')?Number(tgt.cfg.dayOnlyAt):NaN;
-      if(tExc===true&&typeof hbIsDayOnly==='function'&&hbIsDayOnly(tgt)&&(!(_doAt>0)||_thisTs>_doAt)){
-        var _ncf={};Object.keys(tgt.cfg).forEach(function(k){if(k!=='dayOnly'&&k!=='dayOnlyAt')_ncf[k]=tgt.cfg[k]});
+      /* ★名簿の新しさは比べない（2026-10-25・確認の反証で B2 を取り消し）。加えた時刻より新しい名簿の時だけ外すと、
+         取り込まれる前に加えた「入居者マスタで既に対象の方」の印が外れず、施設の一覧から消えたままになる（重大）。
+         dayOnly が付くのは排泄ケア記録に行が無かった方だけ（既にある行には書かない・B1）なので、名簿が対象と言えば外してよい。
+         古い名簿で外れても、施設の一覧に出る側（安全側）に倒れる */
+      if(tExc===true&&typeof hbIsDayOnly==='function'&&hbIsDayOnly(tgt)){
+        var _ncf={};Object.keys(tgt.cfg).forEach(function(k){if(k!=='dayOnly')_ncf[k]=tgt.cfg[k]});
         if(Object.keys(_ncf).length)tgt.cfg=_ncf;else delete tgt.cfg;
         changed++;
         if(typeof apiPush==='function')apiPush('saveRes',{resident:tgt});
@@ -9232,9 +9233,8 @@ async function hbDcAdd(mid){
     if(!y||y.act!==x.act||String(y.rid)!==String(x.rid)){showToast('⚠️ 状態が変わったため加えませんでした。一覧を見直してください');hbDcMissRender();return}
     var idx=_linkIdx(),c=idx&&idx.byMid?idx.byMid[String(mid)]:null;if(!c||y.act!=='add')return;
     var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
-    /* dayOnlyAt＝加えた時刻（反証 B2）。入居者マスタが後から排泄の対象にした時、これより新しい共有名簿でだけ印を外す */
     var r={id:nextResId(),name:c.name||'',room:c.room,gender:g,yomi:c.kana||'',careLevel:c.careLevel||'',
-       active:true,masterId:c.masterId,_fromMaster:true,cfg:{dayOnly:true,dayOnlyAt:Date.now()}};
+       active:true,masterId:c.masterId,_fromMaster:true,cfg:{dayOnly:true}};
     if(Object.prototype.hasOwnProperty.call(c,'hospitalized'))r.masterHosp=!!c.hospitalized;
     D.residents.push(r);
     save();apiPush('saveRes',{resident:r});

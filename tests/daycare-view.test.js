@@ -658,41 +658,41 @@ function mergeBox(src) {
   const common = (b, apps, at) => b.localStorage.setItem('su_residents_common', JSON.stringify(Object.assign({ residents: [Object.assign({ masterId: 'm1', name: '架空一', room: '101', active: true }, apps === undefined ? {} : { targetApps: apps })] }, at ? { updatedAt: new Date(at).toISOString() } : {})));
   const T0 = Date.parse('2026-10-25T00:00:00Z');
   let b = mergeBox(SRC);
-  b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0, stoolWarnD: 3 } })];
+  b.D.residents = [row({ cfg: { dayOnly: true, stoolWarnD: 3 } })];
   common(b, ['excretion'], T0 + 60000);
   b.mergeCommonResidents(null, { noAdd: true });
   let r = b.D.residents[0];
-  ok(JSON.stringify(r.cfg) === JSON.stringify({ stoolWarnD: 3 }) && r.targetExcretion === true && b.isExcretionTarget(r) === true, '加えた後の共有名簿で対象になったら、dayOnly と dayOnlyAt が外れ、ほかのキー（閾値）は残る・施設の対象になる', r.cfg);
+  ok(JSON.stringify(r.cfg) === JSON.stringify({ stoolWarnD: 3 }) && r.targetExcretion === true && b.isExcretionTarget(r) === true, '共有名簿で対象になったら、dayOnly が外れ、ほかのキー（閾値）は残る・施設の対象になる', r.cfg);
   ok(b.pushes.length === 1 && b.pushes[0][0] === 'saveRes' && JSON.stringify(b.pushes[0][1].resident.cfg) === JSON.stringify({ stoolWarnD: 3 }), 'saveRes で dayOnly の無い cfg をサーバーへ送る（退去の解除と同じ送り方）', b.pushes);
   b.mergeCommonResidents(null, { noAdd: true });
   ok(b.pushes.length === 1, 'もう一度突き合わせても、二度は送らない');
   b = mergeBox(SRC);
-  b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0 } })];
+  b.D.residents = [row({ cfg: { dayOnly: true } })];
   common(b, ['excretion'], T0 + 60000);
   b.mergeCommonResidents(null, { noAdd: true });
   ok(b.D.residents[0].cfg === undefined && b.pushes.length === 1 && b.pushes[0][1].resident.cfg === undefined, '印だけの cfg は cfg ごと消して送る（GAS の列は空になる）');
-  // B2: 名簿の新しさの関門
+  // B2 は取り消し（確認の反証 重大）: 名簿の新しさは比べない。取り込まれる前に加えた、既に対象の方の印も外れる
   for (const [lbl, at] of [['加えた時刻より古い共有名簿', T0 - 60000], ['更新時刻の無い共有名簿', 0]]) {
     b = mergeBox(SRC);
-    b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0, stoolWarnD: 3 } })];
+    b.D.residents = [row({ cfg: { dayOnly: true, stoolWarnD: 3 } })];
     common(b, ['excretion'], at);
     b.mergeCommonResidents(null, { noAdd: true });
-    ok(b.D.residents[0].cfg.dayOnly === true && b.pushes.length === 0, lbl + 'の「対象」では外さない（足しては外される往復をしない・B2）');
+    ok(JSON.stringify(b.D.residents[0].cfg) === JSON.stringify({ stoolWarnD: 3 }) && b.pushes.length === 1, lbl + 'でも、対象なら外す（施設の対象の方が施設の一覧から消えたままにならない・安全側）');
   }
   for (const [lbl, apps] of [['対象外（targetApps に excretion が無い）', ['weight']], ['名簿に targetApps が無い', undefined]]) {
     b = mergeBox(SRC);
-    b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0, stoolWarnD: 3 } })];
+    b.D.residents = [row({ cfg: { dayOnly: true, stoolWarnD: 3 } })];
     common(b, apps, T0 + 60000);
     b.mergeCommonResidents(null, { noAdd: true });
     r = b.D.residents[0];
     ok(r.cfg.dayOnly === true && r.cfg.stoolWarnD === 3 && b.pushes.length === 0 && b.isExcretionTarget(r) === false, lbl + ': dayOnly は外れない・何も送らない');
   }
   b = mergeBox(SRC);
-  b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0 } })];
-  b.mergeCommonResidents([{ masterId: 'm1', name: '架空一', room: '101', active: true, targetApps: ['excretion'] }], { noAdd: true });
-  ok(b.D.residents[0].cfg.dayOnly === true && b.pushes.length === 0, '代理名簿（配列で渡す経路）の突き合わせでは外さない（新しさが代理名簿の時刻になるため）');
+  b.D.residents = [row({ cfg: { dayOnly: true } })];
+  b.mergeCommonResidents([{ masterId: 'm1', name: '架空一', room: '101', active: true }], { noAdd: true });
+  ok(b.D.residents[0].cfg.dayOnly === true && b.pushes.length === 0, '代理名簿（サーバー経由・targetApps が無い）の突き合わせでは外さない');
   // 2台が同時に外しても同じ中身
-  const pay = [0, 1].map(() => { const x = mergeBox(SRC); x.D.residents = [row({ cfg: { stoolWarnD: 3, dayOnly: true, dayOnlyAt: T0, other: 'k' } })]; common(x, ['excretion'], T0 + 60000); x.mergeCommonResidents(null, { noAdd: true }); return JSON.stringify(x.pushes); });
+  const pay = [0, 1].map(() => { const x = mergeBox(SRC); x.D.residents = [row({ cfg: { stoolWarnD: 3, dayOnly: true, other: 'k' } })]; common(x, ['excretion'], T0 + 60000); x.mergeCommonResidents(null, { noAdd: true }); return JSON.stringify(x.pushes); });
   ok(pay[0] === pay[1] && /"other":"k"/.test(pay[0]) && !/dayOnly/.test(pay[0]), '2台が同時に外しても、送る中身は同じ（dayOnly の無い cfg）');
   // dayOnly の無い方の突き合わせは直す前と同じ
   if (OLD_SRC) {
@@ -760,7 +760,7 @@ const asyncTests = (async () => {
   let b = mk({ confirmYes: true });
   await b.hbDcAdd('m6');
   const nr = b.D.residents.find((r) => r.id === 77);
-  ok(!!nr && nr.name === '架空六' && nr.yomi === 'カクウロク' && nr.room === '106' && nr.gender === '女性' && nr.careLevel === '要介護1' && nr.active === true && nr.masterId === 'm6' && nr._fromMaster === true && nr.cfg.dayOnly === true && nr.cfg.dayOnlyAt > 0 && Object.keys(nr.cfg).length === 2 && nr.masterHosp === false && nr.targetExcretion === undefined, '加える: 名簿からの新規の取り込みと同じ作り＋cfg.dayOnly と加えた時刻 dayOnlyAt（targetExcretion は付けない）', nr);
+  ok(!!nr && nr.name === '架空六' && nr.yomi === 'カクウロク' && nr.room === '106' && nr.gender === '女性' && nr.careLevel === '要介護1' && nr.active === true && nr.masterId === 'm6' && nr._fromMaster === true && JSON.stringify(nr.cfg) === JSON.stringify({ dayOnly: true }) && nr.masterHosp === false && nr.targetExcretion === undefined, '加える: 名簿からの新規の取り込みと同じ作り＋cfg.dayOnly だけ（targetExcretion・加えた時刻は付けない）', nr);
   ok(b.pushes.length === 1 && b.pushes[0][0] === 'saveRes' && b.pushes[0][1].resident.cfg.dayOnly === true && b.calls.rerender === 1, '保存は今の入居者の保存と同じ送信（saveRes）を1回・描き直す');
   ok(/氏名: 架空六（カクウロク）/.test(b.calls.confirm[0]) && /居室: 106号室/.test(b.calls.confirm[0]) && /施設の一覧・時系列・帳票には出ません/.test(b.calls.confirm[0]), '確かめの小窓に氏名・ふりがな・居室を出す（取り違え防止）', b.calls.confirm[0]);
   await b.hbDcAdd('m6');
