@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-yd1z1ZidlijT+3USvHezPSBQSsBSlfX+t6p9i+I1VR8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-p1d2rcmOWbnok/RFihz+kCPDusFLBX5Mjj2lHdkveuM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -61,6 +61,16 @@ html.hb-daycare .dcbar{position:sticky;top:56px;z-index:98;
 .dcbar .dc-warn{flex-basis:100%;padding:6px 10px;border:1px solid #ffb74d;border-radius:6px;
   background:#fff3e0;color:#8a2c00;font-weight:700}
 .dcbar .dc-note{flex-basis:100%;font-weight:700}
+/* 居ない方の一覧（2026-10-25・§9.9） */
+.dcm-note{font-size: 0.875rem;color:var(--g7);line-height:1.6;margin-bottom:10px}
+.dcm-list{list-style:none;margin:0;padding:0;max-height:60vh;overflow:auto}
+.dcm-row{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--g2)}
+.dcm-nm{font-size: 1rem}
+.dcm-nm b{font-size: 1.0625rem}
+.dcm-sub{color:var(--g7);font-size: 0.875rem;margin-left:6px}
+.dcm-why{color:#8a2c00;font-weight:700;font-size: 0.875rem}
+.dcm-add{min-height:44px}
+.dcm-empty{padding:12px 0;font-weight:700}
 @media print{.dcbar{display:none !important}}
 /* アプリ間ジャンプ（care-schedule / daycare-roster と同じ見た目。共通部品が無いため各ファイルに持つ） */
 .hdr-btn{min-height:40px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);
@@ -504,6 +514,9 @@ textarea{resize:vertical;min-height:76px}
 .rt-s.rt-ok{background:var(--s-bg);color:var(--s)}
 .rt-s.rt-w{background:#fff59d;color:#6d5300;border-color:#fbc02d}
 .rt-s.rt-ng{background:var(--ng-l);color:var(--ng);border-color:var(--ng)}
+/* デイだけの方の札（2026-10-25・§9.9）。日数の判定の代わりに出す。色は帯と同じ --pri-l／--pri-d（文字 8.2:1） */
+.dc-only{display:inline-block;padding:1px 7px;border:1px solid var(--pri-d);border-radius:8px;background:var(--pri-l);color:var(--pri-d);font-size: 0.75rem;font-weight:700;white-space:nowrap}
+.rt-s.rt-dc{background:var(--pri-l);color:var(--pri-d);border-color:var(--pri-d)}
 .res-picked{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .res-picked[hidden]{display:none}
 .res-picked .rp-txt{font-size: 1.125rem;font-weight:700;color:var(--g9)}
@@ -805,6 +818,8 @@ html.night{
 html.night .hdr{background:linear-gradient(135deg,#0a2a5e,#0b3f94)}
 html.night .frombar button{background:var(--nt-sf)}
 html.night .dcbar{color:var(--nt-pri-tx)}
+html.night .dc-only,html.night .rt-s.rt-dc{color:var(--nt-pri-tx);border-color:var(--nt-pri-tx)}
+html.night .dcm-why{color:var(--warn-tx)}
 html.night .dcbar .dc-acts a,html.night .dcbar .dc-acts button{background:var(--nt-sf);color:var(--nt-pri-tx);border-color:var(--nt-pri-tx)}
 html.night .dcbar .dc-warn{background:var(--warn-bg);color:var(--warn-tx);border-color:var(--warn-tx)}
 html.night .bnav{background:#181c21;box-shadow:0 -2px 10px rgba(0,0,0,.5)}
@@ -1029,6 +1044,7 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
 <div class="dcbar" id="dcBar" role="region" aria-label="デイ せせらぎの表示">
   <div class="dc-txt" id="dcBarTxt" role="status" aria-live="polite"></div>
   <div class="dc-acts">
+    <button type="button" id="dcMiss" hidden>居ない方の一覧</button>
     <a id="dcBack" href="../care-log/#/record/daycare">デイ せせらぎへ戻る</a>
     <button type="button" id="dcOff">施設の表示に戻す</button>
   </div>
@@ -1810,6 +1826,14 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
     <button class="bn bs" id="mPromptCancel">キャンセル</button>
     <button class="bn bp" id="mPromptOk">OK</button>
   </div>
+</div></div>
+
+<!-- デイ せせらぎの方のうち、排泄ケア記録の表に出ていない方（2026-10-25・§9.9）。確かめの小窓（mConf）より前に置く＝重なった時に確かめが上に出る -->
+<div class="mo" id="mDcMiss" role="dialog" aria-modal="true" aria-labelledby="mDcMissT"><div class="md" style="max-width:560px">
+  <div class="md-t" id="mDcMissT">排泄ケア記録に居ない方</div>
+  <div class="dcm-note">デイ せせらぎの今日の方のうち、排泄ケア記録の表に出ていない方です。〔デイの記録に加える〕を押すと、デイ せせらぎの表示だけに出る方（デイのみ）として加えます。施設の一覧・時系列・帳票には出ません。</div>
+  <ul class="dcm-list" id="mDcMissList"></ul>
+  <div class="md-f"><button type="button" class="bn bs" id="mDcMissClose">閉じる</button></div>
 </div></div>
 
 <div class="mo" id="mConf"><div class="md" style="max-width:360px">
@@ -4438,8 +4462,18 @@ function setupMasterRosterPoll(){
     _mrPollTick();
   });
 }
-/* 排泄記録の対象者か（targetExcretion===false の人のみ対象外。未設定/true は対象＝no-op安全） */
-function isExcretionTarget(r){return !r||r.targetExcretion!==false}
+/* デイだけの方（2026-10-25・デイ記録の正本 §9.9）: 施設では排泄の記録をしていない方を、デイの表示から加えた行。
+   印は入居者の cfg（サーバーに列あり・JSON）の dayOnly:true。care-log も同じ印を読む */
+function hbIsDayOnly(r){return !!(r&&r.cfg&&typeof r.cfg==='object'&&r.cfg.dayOnly===true)}
+/* 排泄記録の対象者か（targetExcretion===false の人のみ対象外。未設定/true は対象＝no-op安全）。
+   ★デイだけの方は、入居者マスタが排泄の対象と言った時（targetExcretion===true）だけ対象（§9.9）。
+     ほかの端末が入居者マスタと結ぶ前（targetExcretion が未設定）でも施設の一覧・時系列・要注意に出さないため */
+function isExcretionTarget(r){if(!r)return true;if(hbIsDayOnly(r))return r.targetExcretion===true;return r.targetExcretion!==false}
+/* 施設の対象ではないデイだけの方（日数の判定・要注意を出さない方） */
+function hbDayOnlyEff(r){return hbIsDayOnly(r)&&!isExcretionTarget(r)}
+/* 一覧・時系列に出すか（対象の判定）。デイだけの方でない方は今までどおり（showNonTargets||isExcretionTarget）。
+   デイだけの方はデイの表示の時だけ出す（施設の表示では「対象外も表示」でも出さない＝日数の判定が誤るため） */
+function hbListTarget(r){if(hbDayOnlyEff(r))return hbDcOn();return showNonTargets||isExcretionTarget(r)}
 var showNonTargets=false; // 「対象外も表示」トグル（一覧/時系列の履歴閲覧用）
 /* 下剤の反応（2026-10-16）。下剤の記録から24時間以内の最初の排便（少量も含む）を「反応」とみなす。
    {st:'ok',h,rec}＝反応あり（h 時間後）／{st:'wait',h}＝まだ24時間たっていない（h 時間経過）／{st:'none'}＝24時間たっても排便なし */
@@ -4473,6 +4507,7 @@ function laxReactHtml(lx){
 var ONLY_ATTN_KEY='hbcr_only_attn';
 var onlyAttn=(function(){try{return localStorage.getItem(ONLY_ATTN_KEY)==='1'}catch(e){return false}})();
 function isAttnRes(re,date){
+  if(typeof hbDayOnlyEff==='function'&&hbDayOnlyEff(re))return false;   // デイだけの方はデイの日の記録だけ＝日数の判定が誤るので要注意にしない（§9.9）
   if(isFullHospDay(re,date))return false;
   var lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
   if(badgeCls(elH(lu||null,re.id),'u',re.id)!=='eb-ok')return true;
@@ -5060,7 +5095,7 @@ function restoreSc(){
 /* 五十音順：フリガナ優先、未設定なら氏名でフォールバック */
 function resSortKey(r){return String((r&&r.yomi)?r.yomi:(r&&r.name)?r.name:'').trim()}
 function resSortAiu(a,b){return resSortKey(a).localeCompare(resSortKey(b),'ja')}
-function buildResSel(){const sel=$('resSel');const a=hbDcOrder(D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(isExcretionTarget(r)||(ci&&ci.rid===r.id))&&(hbDcKeep(r)||(ci&&ci.rid===r.id))})
+function buildResSel(){const sel=$('resSel');const a=hbDcOrder(D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(isExcretionTarget(r)||(hbDcOn()&&hbIsDayOnly(r))||(ci&&ci.rid===r.id))&&(hbDcKeep(r)||(ci&&ci.rid===r.id))})
   .sort(resSortAiu));const cv=ci.rid;   // デイの表示の間はデイの方（と選んでいる方）だけ・五十音。施設の端末では素通し
   if(_dc)hbDcRenderBar();
   sel.innerHTML='<option value="">― 入居者を選んでください ―</option>'+
@@ -5091,6 +5126,7 @@ function renderResTiles(list){
          以前は経過時間÷24の切り捨てで、前日の夜の排便が「便0日」になり時系列より短く出ていた。色（黄・赤）は従来どおり経過時間としきい値で決める */
       var lbl=!ls?'便 未記録':'便'+Math.max(0,dayDiff(today(),String(ls.date||ls.datetime||'').slice(0,10)))+'日';
       if(bc==='eb-ng')lbl='⚠ '+lbl;
+      if(hbDayOnlyEff(r)){lbl='デイのみ';cls='rt-dc'}   // デイだけの方は便の日数を出さない（デイの日の記録だけ＝誤る・§9.9）
       return '<button type="button" class="res-tile" data-rid="'+escapeHtmlText(r.id)+'">'+
         '<span class="rt-room">'+escapeHtmlText(r.room||'')+'号室</span>'+
         '<span class="rt-name">'+escapeHtmlText(r.name)+'</span>'+
@@ -5457,7 +5493,7 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
   if($('bdHdrUCnt'))$('bdHdrUCnt').textContent=cntLbl;
   if($('bdHdrSCnt'))$('bdHdrSCnt').textContent=cntLbl;
   // デイの表示の間はデイの方だけ・五十音（hbDcKeep・hbDcOrder は施設の端末では素通し＝今までと同じ対象・並び）
-  const res=hbDcOrder(D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))&&(!onlyAttn||isAttnRes(r,date))&&hbDcKeep(r)}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')}));
+  const res=hbDcOrder(D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&hbListTarget(r)&&(!onlyAttn||isAttnRes(r,date))&&hbDcKeep(r)}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')}));
   if(_dc)hbDcRenderBar();
   tb.innerHTML=res.map((re,i)=>{
     const lu=lastR(re.id,'u'),ls=lastR(re.id,'s');
@@ -5524,7 +5560,9 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
     var hideDiff=isFullHosp||(admissionEvent)||isTodayView;
     var uOffHtml=(!hideDiff&&lu&&uDiff<0)?'<div><span style="'+offStyle(ub,'u')+'">'+fmtDayOff(uDiff)+'日</span></div>':'';
     var sOffHtml=(!hideDiff&&ls&&sDiff<0)?'<div><span style="'+offStyle(sb,'s')+'">'+fmtDayOff(sDiff)+'日</span></div>':'';
-    let rc=i%2===1?'ev':'';if(ub==='eb-ng'||sb==='eb-ng')rc+=' rd';else if(ub==='eb-w'||sb==='eb-w')rc+=' rw';
+    /* デイだけの方（§9.9）はデイの日の記録だけ＝経過時間の色と行の色（要注意）を出さず「デイのみ」と出す */
+    var dcOnly=hbDayOnlyEff(re);
+    let rc=i%2===1?'ev':'';if(dcOnly);else if(ub==='eb-ng'||sb==='eb-ng')rc+=' rd';else if(ub==='eb-w'||sb==='eb-w')rc+=' rw';
     // 入院期間中（完全入院日）は行全体をグレーアウト（CSS の .hosp-full クラスで全セル背景上書き）
     if(isFullHosp)rc+=' hosp-full';
     var rowStyle='';
@@ -5540,10 +5578,10 @@ function renderBoard(){const date=$('bdDate').value||today();const tb=$('bdBody'
       '<td><strong>'+escapeHtmlText(re.room)+'</strong></td>'+
       '<td style="text-align:start;white-space:nowrap"><span style="cursor:pointer;color:var(--pri);text-decoration:underline" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+hospMarker+'</td>'+
       '<td style="white-space:nowrap">'+(lu?'<b>'+escapeHtmlText(fmtLast(lu,date))+'</b>':'<span class="nr">未記録</span>')+'</td>'+
-      '<td><span class="eb '+ub+'">'+fmtEl(uh)+'</span>'+uOffHtml+'</td>'+
+      '<td>'+(dcOnly?'<span class="dc-only">デイのみ</span>':'<span class="eb '+ub+'">'+fmtEl(uh)+'</span>'+uOffHtml)+'</td>'+
       '<td>'+du.length+'回'+(tU>0?'<div style="font-size: 0.625rem;color:var(--u)">'+tU+'ml</div>':'')+(tU===0&&du.some(r=>typeof r.urineAmt==='string'&&r.urineAmt)?'<div style="font-size: 0.625rem;color:var(--u)">'+escapeHtmlText(du.filter(r=>typeof r.urineAmt==='string'&&r.urineAmt).map(r=>r.urineAmt).join('・'))+'</div>':'')+'</td>'+
       '<td style="white-space:nowrap">'+(ls?'<b>'+escapeHtmlText(fmtLast(ls,date))+'</b>':'<span class="nr">未記録</span>')+'</td>'+
-      '<td><span class="eb '+sb+'">'+fmtEl(sh)+'</span>'+sOffHtml+'</td>'+
+      '<td>'+(dcOnly?'<span class="dc-only">デイのみ</span>':'<span class="eb '+sb+'">'+fmtEl(sh)+'</span>'+sOffHtml)+'</td>'+
       '<td>'+ds.length+'回</td>'+
       '<td style="white-space:nowrap">'+(lCons?'<span class="tg tg-s">'+escapeHtmlText(lCons)+'</span>':'')+(lSA?' <span style="font-size: 0.6875rem">'+escapeHtmlText(lSA)+'</span>':'')+'</td>'+
       '<td style="font-size: 0.8125rem;text-align:start;min-width:300px;max-width:360px;word-break:break-word;white-space:normal;line-height:1.45;padding:8px 10px">'+(notesHtml||'<span style="color:var(--g5)">—</span>')+laxHtml+'</td>'+
@@ -5833,7 +5871,7 @@ function tlOvdRefresh(){
   if(onlyAttn&&isToday&&tb){
     var shown={};Array.prototype.forEach.call(tb.querySelectorAll('.tl-nm-link'),function(e){shown[e.dataset.hist]=1});
     var miss=D.residents.some(function(re){
-      return !shown[String(re.id)]&&isUserRes(re)&&re.active!==false&&re.hidden!==true&&re.name&&(showNonTargets||isExcretionTarget(re))&&hbDcKeep(re)&&tlOvdForRes(re,date,nowM).length>0;
+      return !shown[String(re.id)]&&isUserRes(re)&&re.active!==false&&re.hidden!==true&&re.name&&hbListTarget(re)&&hbDcKeep(re)&&tlOvdForRes(re,date,nowM).length>0;
     });
     if(miss)tlRenderKeepScroll();
   }
@@ -6154,7 +6192,7 @@ var TL_COMPACT_KEY='hbcr_tl_compact';
 var tlCompact=(function(){try{return localStorage.getItem(TL_COMPACT_KEY)==='1'}catch(e){return false}})();
 function renderTL(){const date=$('tlDate').value||today();
   // デイの表示の間はデイの方だけ・五十音（hbDcKeep・hbDcOrder は施設の端末では素通し＝今までと同じ対象・並び）
-  const res=hbDcOrder(D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&(showNonTargets||isExcretionTarget(r))&&(!onlyAttn||isAttnRes(r,date))&&hbDcKeep(r)}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')}));
+  const res=hbDcOrder(D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&hbListTarget(r)&&(!onlyAttn||isAttnRes(r,date))&&hbDcKeep(r)}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')}));
   if(_dc)hbDcRenderBar();
   // 予定の超過表示は「今日」を見ているときだけ（過去日・未来日には出さない）
   var tlIsToday=(date===today()),tlNowM=_tlNowMin(),tlOvdN=0;
@@ -6260,6 +6298,7 @@ function renderTL(){const date=$('tlDate').value||today();
     var offHtml=(uPill||sPill)
       ?'<div style="display:flex;align-items:center;gap:4px;margin-top:2px">'+uPill+'<span style="margin-left:auto">'+sPill+'</span></div>'
       :'';
+    if(hbDayOnlyEff(re))offHtml='<div style="margin-top:2px"><span class="dc-only">デイのみ</span></div>';   // 日数の札（尿-N・便-N）を出さない（§9.9）
     var fdBtn='<button class="bn bs fd-btn" data-fd="'+reIdA+'" title="5日間の排泄パターン" style="padding:2px 6px;margin-left:4px;font-size: 0.625rem;min-height:22px;min-width:0;vertical-align:middle">📊5日</button>';
     // 🏥 完全入院日（入院翌日〜退院前日）は氏名セルもグレーアウトし、排泄カウントの代わりに「入院中」表示
     var isFullHospTL=isFullHospDay(re,date);
@@ -6922,6 +6961,7 @@ function renderCfg(){
       var badges='';
       if(isInactive)badges+='<span style="background:#9e9e9e;color:#fff;font-size: 0.6875rem;padding:2px 6px;border-radius:4px;margin-right:4px">退去済</span>';
       if(isHidden&&!isInactive)badges+='<span style="background:#fb8c00;color:#fff;font-size: 0.6875rem;padding:2px 6px;border-radius:4px;margin-right:4px">非表示</span>';
+      if(hbIsDayOnly(r))badges+='<span class="dc-only" style="margin-right:4px" title="デイ せせらぎの表示から加えた方（施設の一覧・時系列には出ません）">デイのみ</span>';
       // 🏥 現在入院中ならバッジ表示（入居者マスタの入院フラグも統合＝isHospNow）
       if(!isInactive&&isHospNow(r))badges+='<span style="background:#c62828;color:#fff;font-size: 0.6875rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">🏥 入院中</span>';
       var histBtn=isInactive?'<button class="bn bs bsm res-hist" data-id="'+escapeHtmlText(r.id)+'">履歴</button>':'';
@@ -8284,6 +8324,7 @@ async function delRes(id){if(hbFieldDeny())return;var r=D.residents.find(functio
   D.residents=D.residents.filter(function(x){return x.id!==id});save();
   apiPush('delRes',{id:id});
   renderCfg();buildResSel();showToast('🗑️ 削除しました')}
+var RES_CFG_KEYS=['urineWarnH','urineDangerH','stoolWarnD','stoolDangerD'];   // 入居者を直す画面で入れ直す cfg のキー（閾値）
 function saveRes(){if(hbFieldDeny())return;const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$('mRG').value;
   var ym=$('mRY')?$('mRY').value.trim():'';
   var st=$('mRS')?$('mRS').value:'active';
@@ -8299,7 +8340,12 @@ function saveRes(){if(hbFieldDeny())return;const nm=$('mRN').value.trim(),rm=$('
     /* 在籍状態はマスタ紐づき者ではマスタが正本（セレクトも disabled）。
        万一値が届いても書き換えない＝保存しても次の名簿同期で戻る二重管理を作らない。 */
     if(r.masterId==null||r.masterId==='')r.active=(st!=='inactive');
-    r.laxNote=laxNote;if(hasCfg)r.cfg=cfgOv;else delete r.cfg;resObj=r}}
+    r.laxNote=laxNote;
+    /* cfg は閾値4つを入れ直し、それ以外のキー（デイだけの方の dayOnly ほか）は残す（2026-10-25・§9.9）。
+       以前は閾値だけで作り直していたため、施設の画面で直すと dayOnly が消え、施設の一覧に出てしまった */
+    var nc={};if(r.cfg&&typeof r.cfg==='object')Object.keys(r.cfg).forEach(function(k){if(RES_CFG_KEYS.indexOf(k)<0)nc[k]=r.cfg[k]});
+    Object.keys(cfgOv).forEach(function(k){nc[k]=cfgOv[k]});
+    if(Object.keys(nc).length)r.cfg=nc;else delete r.cfg;resObj=r}}
   else{var nid=nextResId();
     resObj={id:nid,name:nm,yomi:ym,room:rm,gender:gn,active:(st!=='inactive'),laxNote:laxNote};if(hasCfg)resObj.cfg=cfgOv;D.residents.push(resObj)}
   /* 使用しているおむつ・パッド（2026-10-19）: 変えた時だけ at を付けて専用の送信で書く */
@@ -8364,7 +8410,7 @@ var RP_PAPER={monthly:'A4 portrait',floor:'A4 landscape',bowel:'A4 landscape',bo
 /* 帳票の対象にする入居者（画面の一覧と同じ絞り込み＝紙と画面で母集団を揃える） */
 function rpResidents(){
   return D.residents.filter(function(r){
-    return isUserRes(r)&&isValidRes(r)&&r.active!==false&&r.hidden!==true&&r.name;
+    return isUserRes(r)&&isValidRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&!hbDayOnlyEff(r);   // デイだけの方は施設の帳票に入れない（未排便などの判定が誤る・§9.9）
   }).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')});
 }
 function rpPad(n){return(n<10?'0':'')+n}
@@ -8907,7 +8953,7 @@ function hbDcKeep(r){
    その方は「居ない方」に数える。名簿が無い・判定できない（unknown）時は ?masterId= の入口と同じく信じる */
 function hbDcLinkOk(r){try{return _linkStateOf(r)!=='mismatch'}catch(e){return true}}
 function hbDcOrder(a){return hbDcOn()?a.slice().sort(hbDcCmp):a}
-function hbDcListable(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&!!r.name&&(showNonTargets||isExcretionTarget(r))&&hbDcLinkOk(r)}
+function hbDcListable(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&!!r.name&&hbListTarget(r)&&hbDcLinkOk(r)}
 function hbDcMarkGet(){try{return localStorage.getItem(DC_MARK_KEY)==='1'}catch(e){return false}}
 function hbDcMarkSet(on){try{if(on)localStorage.setItem(DC_MARK_KEY,'1');else localStorage.removeItem(DC_MARK_KEY)}catch(e){}}
 /* ?view=daycare を読み、読んだらすぐ URL から view だけを消す（共有のリンクや再読み込みで勝手にデイの表示へ入らない。以後は印で保つ）。
@@ -8939,6 +8985,7 @@ function hbDcRenderBar(){
   var txt=$('dcBarTxt'),w=$('dcWarn');if(!txt||!w)return;
   /* 文が前と同じなら書き直さない（帯は読み上げの対象＝1分ごとの読み直しで同じ文を毎分読ませない） */
   var put=function(el,v,html){if(el._dcV===v)return;el._dcV=v;if(html)el.innerHTML=v;else el.textContent=v};
+  var mb0=$('dcMiss');if(mb0)mb0.hidden=true;
   if(!_dc){put(txt,'');put(w,'');w.hidden=true;return}
   if(!hbDcOn()){
     put(txt,'<b>デイ せせらぎ</b>　'+(_dc.st==='none'?'デイの一覧がこの端末にありません':'デイの一覧を読めませんでした')+
@@ -8946,6 +8993,7 @@ function hbDcRenderBar(){
     put(w,'');w.hidden=true;return;
   }
   var c=hbDcCount(D&&D.residents,_dc,hbDcListable);
+  var mb=$('dcMiss');if(mb)mb.hidden=!(c.miss>0);   // 居ない方がいる時だけ〔居ない方の一覧〕
   put(txt,'<b>デイ せせらぎ</b>　'+(_dc.st==='ok'?'今日':escapeHtmlText(fmtMD(_dc.day)))+' '+c.n+'名'+
     (c.miss>0?'　<span class="dc-miss">排泄ケア記録に居ない方 '+c.miss+'名</span>':''),true);
   /* 今日でない時は §9.7 の文言に、施設の端末向けの出口（〔施設の表示に戻す〕）を添える（施設と共用の端末で翌日も絞られたままにしない） */
@@ -8974,6 +9022,7 @@ function hbDcRerender(){
   try{if(sc&&sc.id==='sc-board')renderBoard()}catch(e){}
   try{if(sc&&sc.id==='sc-tl')tlRenderKeepScroll()}catch(e){}
   try{layoutStickyTops();refitBoxes()}catch(e){}
+  try{var mm=$('mDcMiss');if(mm&&mm.classList.contains('on'))hbDcMissRender()}catch(e){}
 }
 /* 画面が前に出るたびにキーを読み直す（care-log で休みを直して戻った時など）。中身が変わった時だけ描き直す＝押している最中に表を差し替えない */
 function hbDcRefresh(){
@@ -9024,12 +9073,105 @@ function hbDcBack(ev){
       .then(function(yes){if(tok!==_dcBackTok)return;end(false);if(yes)location.href=href});
   })();
 }
+/* ── デイだけの方を加える（2026-10-25・§9.9） ──
+   デイの方のうち表に出ていない方の一覧を作る（純関数）。residents: 入居者／dc: _dc（mids・badN）／
+   idx: 入居者マスタの名簿の索引（buildRosterIndex・null＝この端末に名簿なし）／listable: 表に出せるか（hbDcListable）。
+   act: 'add'＝新しく足す／'mark'＝既にある行（排泄の対象外）の cfg に dayOnly を足す／null＝加えない（why に理由）。
+   ★二重に足さない: 同じ masterId の行があれば足さない（その行を使うか理由を出す）。名簿や排泄ケア記録に同じ氏名の方がいる時も足さない */
+function hbDcMissing(residents,dc,idx,listable){
+  var byMid={},shown={};
+  (residents||[]).forEach(function(r){
+    if(!r||r.masterId==null||r.masterId==='')return;
+    var k=String(r.masterId);
+    (byMid[k]=byMid[k]||[]).push(r);
+    if(listable(r))shown[k]=1;
+  });
+  var rows=[];
+  (dc&&dc.mids||[]).forEach(function(mid){
+    if(shown[mid])return;
+    var c=(idx&&idx.byMid)?(idx.byMid[mid]||null):null;
+    var x={mid:mid,name:c?String(c.name||''):'',kana:c?String(c.kana||''):'',room:c?String(c.room||''):'',act:null,rid:null,why:''};
+    var ex=(byMid[mid]||[]).filter(function(r){return isUserRes(r)});
+    if(ex.length){
+      var e=ex.filter(function(r){return r.active!==false})[0]||ex[0];
+      x.name=e.name||x.name;x.kana=e.yomi||x.kana;x.room=e.room||x.room;x.rid=e.id;
+      if(!hbDcLinkOk(e))x.why='紐づけがずれています（設定→マスタ連携の点検で直してください）';
+      else if(e.active===false)x.why='排泄ケア記録で退去になっています（入居者マスタと名簿を合わせてください）';
+      else if(e.hidden===true)x.why='排泄ケア記録で非表示にしています（設定→入居者の管理で確かめてください）';
+      else if(!e.name)x.why='排泄ケア記録の氏名が空です（設定→入居者の管理で確かめてください）';
+      else if(hbIsDayOnly(e))x.why='表に出せない状態です（設定→入居者の管理で確かめてください）';
+      else x.act='mark';
+    }else if(!idx)x.why='この端末に入居者マスタの名簿がありません（接続と同期を確かめてください）';
+    else if(!c)x.why='入居者マスタの名簿に見つかりません';
+    else if(c.active===false)x.why='入居者マスタで退去になっています';
+    else if(!x.name)x.why='入居者マスタに氏名がありません';
+    else if(!x.room)x.why='入居者マスタに居室がありません';
+    else if((idx.nameCount&&idx.nameCount[_normNameX(x.name)]||0)>1)x.why='入居者マスタに同じ氏名の方が2人以上います';
+    else if((residents||[]).some(function(r){return r&&isUserRes(r)&&r.active!==false&&_normNameX(r.name)===_normNameX(x.name)}))x.why='排泄ケア記録に同じ氏名の方がいます（設定→マスタ連携の点検で紐づけを確かめてください）';
+    else x.act='add';
+    rows.push(x);
+  });
+  rows.sort(function(a,b){if(!a.name!==!b.name)return a.name?-1:1;return hbDcKana({yomi:a.kana,name:a.name}).localeCompare(hbDcKana({yomi:b.kana,name:b.name}),'ja')});   // 氏名のわからない方は後ろ
+  return {rows:rows,badN:(dc&&dc.badN)||0};
+}
+function hbDcMissFind(mid){
+  if(!hbDcOn())return null;
+  var m=hbDcMissing(D&&D.residents,_dc,_linkIdx(),hbDcListable);
+  for(var i=0;i<m.rows.length;i++)if(m.rows[i].mid===String(mid))return m.rows[i];
+  return null;
+}
+function hbDcMissRender(){
+  var ul=$('mDcMissList');if(!ul)return;
+  if(!hbDcOn()){ul.innerHTML='<li class="dcm-empty">デイの一覧を読めていません（デイ せせらぎの今日の画面の〔排泄〕から開き直してください）</li>';return}
+  var m=hbDcMissing(D&&D.residents,_dc,_linkIdx(),hbDcListable);
+  if(!m.rows.length&&!m.badN){ul.innerHTML='<li class="dcm-empty">✅ 居ない方はいません</li>';return}
+  ul.innerHTML=m.rows.map(function(x){
+    var nm=x.name?'<b>'+escapeHtmlText(x.name)+'</b>'+(x.kana?'<span class="dcm-sub">'+escapeHtmlText(x.kana)+'</span>':'')+(x.room?'<span class="dcm-sub">'+escapeHtmlText(x.room)+'号室</span>':'')
+                 :'<b>氏名がわからない方</b>';
+    var act=x.act?'<button type="button" class="bn bp dcm-add" data-mid="'+escapeHtmlText(x.mid)+'">デイの記録に加える</button>'
+                 :'<div class="dcm-why">⚠ '+escapeHtmlText(x.why)+'</div>';
+    return '<li class="dcm-row"><div class="dcm-nm">'+nm+'</div>'+act+'</li>';
+  }).join('')+(m.badN?'<li class="dcm-row"><div class="dcm-why">⚠ 形の違う値が '+m.badN+'件あります（デイ せせらぎの一覧を確かめてください）</div></li>':'');
+}
+/* 〔デイの記録に加える〕。確かめの小窓に氏名・ふりがな・居室を出し（取り違え防止）、押した後にもう一度二重を確かめてから書く。
+   保存は今の入居者の保存と同じ送信（saveRes）。足す行は名簿からの新規の取り込み（mergeCommonResidents）と同じ作り＋cfg.dayOnly */
+var _dcAddBusy=false;
+async function hbDcAdd(mid){
+  if(_dcAddBusy)return;
+  var x=hbDcMissFind(mid);
+  if(!x||!x.act){showToast('⚠️ この方は加えられません'+(x&&x.why?'（'+x.why+'）':''));hbDcMissRender();return}
+  _dcAddBusy=true;
+  try{
+    var ok=await customConfirm('デイの記録に加えます。\n\n氏名: '+x.name+(x.kana?'（'+x.kana+'）':'')+'\n居室: '+x.room+'号室\n\nデイ せせらぎの表示だけに出ます（施設の一覧・時系列・帳票には出ません）。\nこの方で間違いありませんか？');
+    if(!ok)return;
+    var y=hbDcMissFind(mid);   // 確かめている間に同期で変わっていないか、もう一度（二重に足さない）
+    if(!y||y.act!==x.act||String(y.rid)!==String(x.rid)){showToast('⚠️ 状態が変わったため加えませんでした。一覧を見直してください');hbDcMissRender();return}
+    var r=null;
+    if(y.act==='mark'){
+      r=D.residents.find(function(z){return String(z.id)===String(y.rid)});if(!r)return;
+      r.cfg=Object.assign({},(r.cfg&&typeof r.cfg==='object')?r.cfg:{},{dayOnly:true});   // 今の cfg（閾値など）は残して dayOnly だけ足す
+    }else{
+      var idx=_linkIdx(),c=idx&&idx.byMid?idx.byMid[String(mid)]:null;if(!c)return;
+      var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
+      r={id:nextResId(),name:c.name||'',room:c.room,gender:g,yomi:c.kana||'',careLevel:c.careLevel||'',
+         active:true,masterId:c.masterId,_fromMaster:true,cfg:{dayOnly:true}};
+      if(Object.prototype.hasOwnProperty.call(c,'hospitalized'))r.masterHosp=!!c.hospitalized;
+      D.residents.push(r);
+    }
+    save();apiPush('saveRes',{resident:r});
+    showToast('✅ デイの記録に加えました（'+r.name+' さん）');
+    hbDcRerender();hbDcMissRender();
+  }finally{_dcAddBusy=false}
+}
 var _dcBound=false;
 function hbDcBind(){
   if(_dcBound)return;
   _dcBound=true;
   var off=$('dcOff');if(off)off.addEventListener('click',hbDcOff);
   var bk=$('dcBack');if(bk)bk.addEventListener('click',hbDcBack);
+  var ms=$('dcMiss');if(ms)ms.addEventListener('click',function(){hbDcMissRender();var m=$('mDcMiss');if(m)m.classList.add('on')});
+  var mc=$('mDcMissClose');if(mc)mc.addEventListener('click',function(){var m=$('mDcMiss');if(m)m.classList.remove('on')});
+  var ml=$('mDcMissList');if(ml)ml.addEventListener('click',function(e){var b=e.target&&e.target.closest?e.target.closest('.dcm-add'):null;if(b)hbDcAdd(b.dataset.mid)});
   var again=function(){try{hbDcRefresh()}catch(e){console.warn('[hbcr] デイの一覧の読み直しをスキップ:',e)}};
   setInterval(again,60*1000);   // 画面を出したまま日付をまたいだ時も今日でないことに気づく（中身が同じなら帯の文を書くだけ）
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')again()});
