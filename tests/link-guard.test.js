@@ -174,9 +174,11 @@ function makeCtx() {
     /* 名簿から新しく取り込む方をサーバーへ送る（2026-10-25・入居者番号の混線の直し）。接続先（apiUrl）を置かない区画では今までどおりの動き */
     extractVar('DC_ID_MIN'), extractFn('_isDcId'), extractFn('hbDcNewId'),
     extractVar('_resImportQ'), extractVar('_resNotMade'), extractVar('_resSrvIds'),
-    extractFn('hbMasterTargetSet'), extractFn('hbResNoteSrv'), extractFn('hbResLocalOnly'), extractFn('hbResHashId'), extractFn('hbResIdFor'),
-    extractFn('hbResPlan'), extractFn('hbResLinkByHash'), extractFn('hbResMake'), extractFn('_resHealRedraw'), extractFn('hbResHeal'), extractFn('hbResAddNotMade'),
-    extractFn('delRes'),
+    extractFn('hbResCommonList'), extractFn('hbMasterTargetSet'), extractFn('hbResRosterInfo'), extractFn('hbResNoteSrv'), extractFn('hbResLocalOnly'),
+    extractFn('hbResHashId'), extractFn('hbResIdFor'), extractFn('_hbDcRoomKey'), extractFn('hbDcKana'), extractFn('_resSimilar'),
+    extractFn('hbResPlan'), extractFn('hbResLinkByHash'), extractFn('_resLinked'), extractFn('hbResLinkCands'), extractFn('hbResMake'), extractFn('_resHealRedraw'),
+    extractFn('hbResHeal'), extractFn('hbResAddNotMade'), extractFn('hbResLinkNotMade'),
+    extractFn('delRes'), extractFn('hbDcLinkOk'), extractFn('hbDcMissing'),
     /* const 宣言は vm の globalThis に載らないため、テストから使うキー名を明示的に公開する */
     'globalThis.K={SU_COMMON_KEY:SU_COMMON_KEY,MASTER_ROSTER_KEY:MASTER_ROSTER_KEY,' +
     'MASTER_ROSTER_TS_KEY:MASTER_ROSTER_TS_KEY,RES_ID_HW_KEY:RES_ID_HW_KEY};',
@@ -580,6 +582,9 @@ const ROSTER_T = ROSTER.map(r => Object.assign({ targetApps: ['excretion'] }, r)
   const a = c.hbResHashId(42), b = makeCtx().hbResHashId('42');
   t('この方の番号は masterId から決まり、専用の幅（10億〜20億）に入る', () => { eq(a, b); ok(a >= 1e9 && a < 2e9); ok(c.hbResHashId(43) !== a); });
   t('作る番号は、使われていなければこの方の番号', () => eq(c.hbResIdFor(42, [], {}), a));
+  t('手元にこの方の番号の記録が残っていれば（入居者マスタの番号の使い回し）、専用の幅の別の番号', () => {
+    const r = makeCtx(); r.D.records = [{ id: 'x', residentId: String(a) }]; const z = r.hbResIdFor(42, [], {}); ok(z !== a && z >= 1e9 && z < 2e9);
+  });
   t('この方の番号が手元かサーバーで使われていれば、専用の幅の別の番号', () => {
     const x = c.hbResIdFor(42, [res({ id: a, name: 'Z' })], {}); ok(x !== a && x >= 1e9 && x < 2e9);
     const y = c.hbResIdFor(42, [], { [a]: 1 }); ok(y !== a && y >= 1e9 && y < 2e9);
@@ -591,12 +596,30 @@ const ROSTER_T = ROSTER.map(r => Object.assign({ targetApps: ['excretion'] }, r)
   /* 照らし合わせの段取り（純関数） */
   const c = makeCtx();
   const q = (mid, name) => ({ c: { masterId: mid, name, room: '1' + mid }, tExc: true });
-  const P = (srv, cands, residents, nc) => c.hbResPlan(srv, cands, residents || [], nc || null);
+  const P = (srv, cands, residents, nc, byMid) => c.hbResPlan(srv, cands, residents || [], nc ? { nameCount: nc, byMid: byMid || {} } : null);
   t('どこにも同じ氏名がいなければ作る', () => eq(P([], [q(1, '入居者A')]).create.length, 1));
   t('もう結ばれている方（表記ゆれで氏名が違っても）は作らない・点検にも出さない', () => { const p = P([], [q(1, '入居者A')], [res({ id: 5, name: '入居者亜', masterId: 1 })]); eq([p.create.length, p.notMade.length], [0, 0]); });
   t('サーバーにこの方の番号で同じ氏名の行がある（よその端末が作った）→ 作らない・点検にも出さない（同姓同名でも）', () => {
     const p = P([{ id: c.hbResHashId(1), name: '入居者A', active: true }], [q(1, '入居者A')], [], { [c._normNameX('入居者A')]: 2 });
     eq([p.create.length, p.notMade.length], [0, 0]);
+  });
+  t('サーバーにこの方の番号で氏名の違う行がある → 作らずに点検（hashName・乱数の2行目を作らない）', () => {
+    const p = P([{ id: c.hbResHashId(7), name: '入居者齊', active: true }], [q(7, '入居者斉')]); eq(p.notMade.map(x => x.why), ['hashName']); eq(p.create.length, 0);
+  });
+  t('居室かふりがなが同じで、入居者マスタと結ばれていない在籍の行（手元）がある → 作らずに点検（similar）', () => {
+    eq(P([], [q(1, '入居者A')], [res({ id: 5, name: '入居者亜', room: '11' })]).notMade.map(x => x.why), ['similar']);
+    eq(P([], [{ c: { masterId: 1, name: '入居者A', room: '999', kana: 'ニュウキョシャエー' } }], [res({ id: 5, name: '入居者亜', room: '1', yomi: 'にゅうきょしゃえー' })]).notMade.map(x => x.why), ['similar']);
+  });
+  t('居室が同じでも、退去の行・名簿の方と結ばれた行は妨げない', () => {
+    eq(P([], [q(1, '入居者A')], [res({ id: 5, name: '入居者亜', room: '11', active: false })]).create.length, 1);
+    eq(P([], [q(1, '入居者A')], [res({ id: 5, name: '入居者亜', room: '11', masterId: 9 })], { x: 1 }, { 9: {} }).create.length, 1);
+  });
+  t('名簿に無い masterId と結ばれた（ずれた）同じ居室の行は、結ばれていない行として扱う', () => {
+    eq(P([], [q(1, '入居者A')], [res({ id: 5, name: '入居者亜', room: '11', masterId: 88 })], { x: 1 }, { 9: {} }).notMade.map(x => x.why), ['similar']);
+  });
+  t('まだ手元に届いていないサーバーの行で居室が同じ → 作らずに点検（similar）', () => {
+    eq(P([{ id: 50, name: '入居者亜', room: '11', active: true }], [q(1, '入居者A')]).notMade.map(x => x.why), ['similar']);
+    eq(P([{ id: 50, name: '入居者亜', room: '11', active: true }], [q(1, '入居者A')], [res({ id: 50, name: '入居者亜', room: '11', masterId: 9 })], { x: 1 }, { 9: {} }).create.length, 1);
   });
   t('サーバーに同じ氏名（空白違い）の在籍の方がいる → 作らない（次の同期で名簿の氏名で結ばれる）・点検に出さない', () => {
     const p = P([{ id: '9', name: '入居者 A', active: 'TRUE' }], [q(1, '入居者A')]); eq([p.create.length, p.notMade.length], [0, 0]);
@@ -630,7 +653,27 @@ const ROSTER_T = ROSTER.map(r => Object.assign({ targetApps: ['excretion'] }, r)
   c.D.residents = [res({ id: 1, name: 'A' }), res({ id: 2, name: 'B' }), res({ id: 3, name: 'C', _seed: true }), res({ id: 4, name: 'D', room: '_staff_' })];
   t('まだ同期していなければ出さない', () => eq(c.hbResLocalOnly(), []));
   c.hbResNoteSrv([{ id: '1' }]);
-  t('前回の同期でサーバーに無かった行の番号を出す（見本・職員の行は除く）', () => eq(c.hbResLocalOnly(), [2]));
+  t('前回の同期でサーバーに無かった行を出す（見本・職員の行は除く）', () => eq(c.hbResLocalOnly().map(r => r.id), [2]));
+  c._resSrvIds = c._resSrvIds; c.apiPush = () => {};
+  c.hbResMake({ c: { masterId: 3, name: 'E', room: '1' } }, {});
+  t('この画面で作って送った行は、この端末にだけある入居者に数えない', () => eq(c.hbResLocalOnly().map(r => r.id), [2]));
+}
+{
+  /* 名簿の人数・デイの〔加える〕との重なり・入居者マスタから開いた方の開き直し */
+  const c = makeCtx();
+  setRoster(c, [{ masterId: 1, name: '入居者A', active: true }, { masterId: 2, name: '入居者 A', active: true }, { masterId: 3, name: '入居者A', active: false }, { masterId: 4, name: '入居者B', active: true }]);
+  const ri = c.hbResRosterInfo();
+  t('同じ氏名の人数は共有名簿の在籍の方で数える（mergeCommonResidents と同じ数え方）', () => { eq(ri.nameCount[c._normNameX('入居者A')], 2); eq(Object.keys(ri.byMid).sort(), ['1', '2', '3', '4']); });
+  const d = makeCtx(); setRoster(d, ROSTER);
+  d._resImportQ['m9'] = { c: { masterId: 'm9', name: '入居者N', room: '909' } };
+  const idx = { byMid: { m9: { masterId: 'm9', name: '入居者N', kana: 'エヌ', room: '909', active: true } }, nameCount: {} };
+  const m = d.hbDcMissing([], { mids: ['m9'] }, idx, () => true);
+  t('デイの〔加える〕: 名簿から取り込んでいる最中の方は加えさせない（二重に足さない）', () => { eq(m.rows[0].act, null); ok(m.rows[0].why.includes('取り込んでいる')); });
+  delete d._resImportQ['m9'];
+  t('取り込みが済めば今までどおり加えられる', () => eq(d.hbDcMissing([], { mids: ['m9'] }, idx, () => true).rows[0].act, 'add'));
+  const e = makeCtx(); let reopened = 0; e.hbMasterPending = 'm1'; e.hbApplyMasterIdParam = (r) => { if (r === true) reopened++; };
+  e._resHealRedraw();
+  t('入居者マスタから開いて「登録されていません」だった方は、加わった・結ばれた後に開き直す', () => eq(reopened, 1));
 }
 async function tAsync(name, fn) {
   try { await fn(); pass++; console.log('  ✓ ' + name); }
@@ -680,6 +723,47 @@ const asyncK = (async () => {
   c._resImportQ['21'] = { c: { masterId: 21, name: '入居者A', room: '121' }, tExc: true };
   await c.hbResHeal();
   await tAsync('作らなかった方は、この画面では照らし合わせ直さない（同期ごとにサーバーを読まない）', async () => { eq(c.gets, 1); eq(Object.keys(c._resImportQ).length, 0); });
+  /* 作らなかった方の行が、ほかの端末で作られて同期で届いた → 次の照らし合わせで番号で結び、点検から外す（確認の反証 1） */
+  {
+    const e = healCtx([]); setRoster(e, [{ masterId: 1, name: '入居者A', room: '101', active: true, targetApps: ['excretion'] }, { masterId: 21, name: '入居者A', room: '121', active: true, targetApps: ['excretion'] }]);
+    e._resNotMade['21'] = { c: { masterId: 21, name: '入居者A', room: '121' }, why: 'multi' };
+    e.D.residents = [res({ id: e.hbResHashId(21), name: '入居者A', room: '121' })];
+    e._resImportQ['21'] = { c: { masterId: 21, name: '入居者A', room: '121' }, tExc: true };
+    await e.hbResHeal();
+    await tAsync('作らなかった方の番号の行が届けば、次の照らし合わせで結び、点検から外す（サーバーは読まない）', async () => {
+      eq(e.D.residents[0].masterId, 21); eq(Object.keys(e._resNotMade).length, 0); eq(e.gets, 0); eq(e.pushes.length, 0);
+    });
+  }
+  {
+    const f = makeCtx(); setRoster(f, ROSTER_T); f.apiUrl = 'https://example.invalid/exec';
+    f._resNotMade['21'] = { c: { masterId: 21, name: '入居者A', room: '121' }, why: 'multi' };
+    f.apiGet = async () => ({ residents: [{ id: f.hbResHashId(21), name: '入居者A', room: '121', active: true }] });
+    await f.hbResAddNotMade('21');
+    await tAsync('〔加える〕: サーバーにこの方の番号の行があれば、2行目を作らない（次の同期で結ぶ）', async () => { eq(f.D.residents.length, 0); eq(f.pushes.length, 0); ok(f.toasts.some(m => m.includes('ほかの端末で作られています'))); });
+    f.D.residents = [res({ id: f.hbResHashId(21), name: '入居者A', room: '121' })];
+    await f.hbResAddNotMade('21');
+    await tAsync('〔加える〕: 手元にこの方の番号の行が届いていれば、作らずに結ぶ', async () => { eq(f.D.residents.map(r => r.masterId), [21]); eq(f.pushes.length, 0); eq(Object.keys(f._resNotMade).length, 0); });
+  }
+  {
+    /* 出口: 〔…と結ぶ〕 */
+    const g = makeCtx(); setRoster(g, ROSTER_T); g.apiUrl = 'https://example.invalid/exec';
+    g._resNotMade['1'] = { c: { masterId: 1, name: '入居者A', room: '101', kana: 'ニュウキョシャエー' }, why: 'similar' };
+    g.D.residents = [res({ id: 5, name: '入居者亜', room: '101' }), res({ id: 6, name: '入居者Q', room: '606' }), res({ id: 7, name: '入居者W', room: '101', masterId: 3 })];
+    await tAsync('〔…と結ぶ〕に出す行: 結ばれていない在籍の行で、同じ氏名・この方の番号・居室かふりがなが同じもの', async () => eq(g.hbResLinkCands(g._resNotMade['1'].c).map(r => r.id), [5]));
+    g.customConfirm = async () => false;
+    await g.hbResLinkNotMade('1', '5');
+    await tAsync('〔…と結ぶ〕を確かめの小窓で取り消すと結ばない', async () => { eq(g.D.residents[0].masterId, undefined); eq(Object.keys(g._resNotMade), ['1']); });
+    let gm = ''; g.customConfirm = async (m) => { gm = m; return true; };
+    await g.hbResLinkNotMade('1', '5');
+    await tAsync('〔…と結ぶ〕: 確かめてから結び、氏名の表記が違えば表記ゆれの印を付ける・点検から外す・記録は送らない', async () => {
+      ok(gm.includes('同じ方であることを確かめてください')); eq([g.D.residents[0].masterId, g.D.residents[0].midAck], [1, true]);
+      eq(Object.keys(g._resNotMade).length, 0); eq(g.pushes.filter(x => x.action !== 'saveRes').length, 0);
+    });
+    const h = makeCtx(); h._resNotMade['1'] = { c: { masterId: 1, name: '入居者A', room: '101' }, why: 'similar' };
+    h.D.residents = [res({ id: 5, name: '入居者亜', room: '101', masterId: 9 })]; let asked2 = 0; h.customConfirm = async () => { asked2++; return true; };
+    await h.hbResLinkNotMade('1', '5');
+    await tAsync('〔…と結ぶ〕: その行がもう別の方と結ばれていれば結ばない（小窓も出さない）', async () => { eq(asked2, 0); eq(h.D.residents[0].masterId, 9); });
+  }
   /* 出口: 〔排泄ケア記録に加える〕 */
   c.customConfirm = async () => false;
   await c.hbResAddNotMade('21');
