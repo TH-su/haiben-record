@@ -138,7 +138,7 @@ head('6. アプリ: 同期の取り込み（消失より復活・新しい方を
 head('7. アプリ: 入居者の保存は padSet を消さない・変えた時だけ専用の送信');
 (function(){
   const f=X.fn('saveRes');
-  ok(/r\.cfg=cfgOv;else delete r\.cfg/.test(f)&&!/delete r\.padSet/.test(f),'しきい値の作り直しは cfg だけ（padSet には触らない）');
+  ok(/if\(Object\.keys\(nc\)\.length\)r\.cfg=nc;else delete r\.cfg/.test(f)&&!/delete r\.padSet/.test(f),'しきい値の作り直しは cfg だけ（padSet には触らない。2026-10-25 から閾値以外の cfg のキーは残す）');
   ok(/if\(resObj&&_psChanged\)resObj\.padSet=\{at:Date\.now\(\),day:_psNew\.day,night:_psNew\.night\}/.test(f),'変えた時だけ at を付けて入れる');
   ok(/apiPush\('saveRes',\{resident:resObj\}\);\s*if\(resObj&&_psChanged\)\{apiPush\('savePadSet'/.test(f),'送る順は saveRes → savePadSet（新しい入居者は行ができてから通る）');
   ok(/psEditLoad\(r\);/.test(X.fn('editRes'))&&/psEditLoad\(null\);/.test(SRC),'編集・追加を開く時に読み込む');
