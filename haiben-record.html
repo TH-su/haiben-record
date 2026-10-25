@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-MHerE5suWeGGhwHLgciigTugzzkHlaiaRWOk4/BJqnM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-127FGoJqQJvQTPv7qFnsL6wWlel2LVhpQ9Nj3GFdsiw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -3508,12 +3508,17 @@ function cleanData(){
      個人情報の保全という消去の趣旨を損なわずに、衝突だけを防ぐための例外。 */
 var RES_ID_HW_KEY='hbcr_res_id_hw';
 function _resIdHw(){try{var v=Number(localStorage.getItem(RES_ID_HW_KEY)||0);return(isFinite(v)&&v>0)?v:0}catch(e){return 0}}
+/* デイから加える方の id の幅（2026-10-25・親の検収 重1の直しの追加の反証）。施設の連番（nextResId）と高水位には数えない。
+   数えると、デイの id が1件でも届いた端末から、施設で足す方の id まで大きな数になる（施設の端末の動きが変わる）。
+   32ビットの整数に収まる幅（ほかのアプリが整数の列で受けても溢れない） */
+var DC_ID_MIN=1000000000,DC_ID_MAX=2000000000;
+function _isDcId(n){return typeof n==='number'&&n>=DC_ID_MIN&&n<DC_ID_MAX}
 function _bumpResIdHw(n){
-  var v=toNum(n);if(v===null||!(v>0))return;
+  var v=toNum(n);if(v===null||!(v>0)||(typeof _isDcId==='function'&&_isDcId(v)))return;
   try{if(v>_resIdHw())localStorage.setItem(RES_ID_HW_KEY,String(v))}catch(e){}
 }
 function nextResId(){
-  var ids=D.residents.map(function(r){return toNum(r.id)}).filter(function(v){return v!==null});
+  var ids=D.residents.map(function(r){return toNum(r.id)}).filter(function(v){return v!==null&&!(typeof _isDcId==='function'&&_isDcId(v))});   // デイの id の幅は数えない
   var mx=ids.length?Math.max.apply(null,ids):0;
   var next=Math.max(mx,_resIdHw())+1;
   _bumpResIdHw(next);
@@ -9045,7 +9050,18 @@ function hbDcRenderBar(){
   var warn=[];
   if(_dc.st==='stale')warn.push('⚠ デイの一覧が今日のものではありません。デイ せせらぎから開き直してください（施設の端末では〔施設の表示に戻す〕を押してください）');
   if(_dcMem)warn.push('⚠ この端末にデイの表示の印を残せませんでした。再読み込みすると施設の表示に戻ります');
+  if(hbDcDupDayOnly(D&&D.residents)>0)warn.push('⚠ デイだけの方に、同じ氏名・同じ居室の行が2つあります。事務所で設定→入居者管理を確かめてください（記録が2行に分かれています）');
   put(w,warn.join('　'));w.hidden=!warn.length;
+}
+/* デイだけの方の在籍の行で、同じ氏名・同じ居室のものが2つ以上ある組の数（2台がほぼ同時に同じ方を加えた時・追加の反証 軽2） */
+function hbDcDupDayOnly(residents){
+  var seen={},dup=0;
+  (residents||[]).forEach(function(r){
+    if(!r||r.active===false||!hbIsDayOnly(r))return;
+    var k=_normNameX(r.name)+'|'+_hbDcRoomKey(r.room);
+    seen[k]=(seen[k]||0)+1;if(seen[k]===2)dup++;
+  });
+  return dup;
 }
 /* 時系列を日中（8:30〜）が見える位置へ横に送る（デイの表示・30分の表示の時だけ。「全体」の24列は1画面に入るので送らない）。
    8時の見出し（th.hr-top）の実測の位置＋半分（:30）を、氏名の列のすぐ右に合わせる（tlNowPlace と同じ測り方） */
@@ -9221,25 +9237,25 @@ function hbDcMissRender(){
 }
 /* 〔デイの記録に加える〕。確かめの小窓に氏名・ふりがな・居室を出し（取り違え防止）、押した後にもう一度二重を確かめてから書く。
    保存は今の入居者の保存と同じ送信（saveRes）。足す行は名簿からの新規の取り込み（mergeCommonResidents）と同じ作り＋cfg.dayOnly */
-/* デイから加える方の id（純関数に近い・時刻と乱数だけを使う）。手元（residents）とサーバー（srvIds）の id と重ならない数。
-   13桁（ミリ秒の時刻＋5桁までの乱数）＝スプレッドシートの数（15桁まで正確）と JS の整数（安全な範囲）に収まる。
-   ぶつかる見込み: 2台が同じミリ秒の近くで、同じ乱数を引いた時だけ。重なれば引き直す */
+/* デイから加える方の id。デイの幅（DC_ID_MIN〜DC_ID_MAX・10億通り）から乱数で選び、手元（residents）とサーバー（srvIds）の id と重ならない数にする。
+   2台が同じ手元の状態から加えても、同じ数を引く見込みは10億分の1。重なれば引き直す */
 function hbDcNewId(residents,srvIds){
   var used={};(residents||[]).forEach(function(r){var n=toNum(r&&r.id);if(n!==null)used[n]=1});
   srvIds=srvIds||{};
   for(var i=0;i<50;i++){
-    var id=Date.now()+Math.floor(Math.random()*100000);
-    if(Number.isSafeInteger(id)&&id<1e14&&!used[id]&&!srvIds[id])return id;
+    var id=DC_ID_MIN+Math.floor(Math.random()*(DC_ID_MAX-DC_ID_MIN));
+    if(_isDcId(id)&&!used[id]&&!srvIds[id])return id;
   }
   return null;
 }
-/* サーバーの入居者に、加えようとしている方（同じ氏名・同じ居室の在籍の方、または同じ masterId）が既にいるか */
+/* サーバーの入居者に、加えようとしている方と同じ氏名（比べ方は _normNameX）の在籍の方が既にいるか。
+   手元の守り（hbDcMissing の「同じ氏名の方がいます」）と同じく居室は問わない（サーバーの Residents に masterId の列は無い） */
 function hbDcSrvDup(srvRes,x){
-  var nx=_normNameX(x&&x.name),rk=_hbDcRoomKey(x&&x.room);
+  var nx=_normNameX(x&&x.name);
+  if(!nx)return false;
   return (srvRes||[]).some(function(z){
     if(!z||z.active===false||z.active==='FALSE')return false;
-    if(z.masterId!=null&&z.masterId!==''&&String(z.masterId)===String(x.mid))return true;
-    return !!nx&&_normNameX(z.name)===nx&&_hbDcRoomKey(z.room)===rk;
+    return _normNameX(z.name)===nx;
   });
 }
 var _dcAddBusy=false;
@@ -9289,7 +9305,6 @@ async function hbDcAdd(mid){
     if(nid===null){showToast('⚠️ 新しい番号を決められませんでした。もう一度押してください');return}
     var r={id:nid,name:c.name||'',room:c.room,gender:g,yomi:c.kana||'',careLevel:c.careLevel||'',
        active:true,masterId:c.masterId,_fromMaster:true,cfg:{dayOnly:true}};
-    try{_bumpResIdHw(nid)}catch(e){}
     if(Object.prototype.hasOwnProperty.call(c,'hospitalized'))r.masterHosp=!!c.hospitalized;
     D.residents.push(r);
     save();apiPush('saveRes',{resident:r});

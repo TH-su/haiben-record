@@ -40,7 +40,7 @@ function head(t) { console.log('\n─── ' + t + ' ───'); }
 /* デイの表示の関数をまとめて評価する箱。store は localStorage の中身、search・hash は URL */
 const DC_FNS = ['hbDcParse', 'hbDcKana', 'hbDcCmp', 'hbDcCount', 'hbDcOn', 'hbDcKeep', 'hbDcLinkOk', 'hbDcOrder', 'hbDcListable',
   'hbDcMarkGet', 'hbDcMarkSet', 'hbDcReadParam', 'hbDcLoad', 'hbDcInit', 'hbDcBind', 'hbDcRenderBar', 'hbDcRefresh', 'hbDcOff', '_dcBackSig', 'hbDcBackNote', 'hbDcBack',
-  'hbIsDayOnly', 'isExcretionTarget', 'hbDayOnlyEff', 'hbListTarget', 'hbDcTag', 'resSortKey', 'resSortAiu', 'hbReadViewParam'];
+  'hbIsDayOnly', 'isExcretionTarget', 'hbDayOnlyEff', 'hbListTarget', 'hbDcTag', 'resSortKey', 'resSortAiu', 'hbReadViewParam', '_normName', '_normNameX', '_hbDcRoomKey', 'hbDcDupDayOnly'];
 function box(opts) {
   opts = opts || {};
   const store = Object.assign({}, opts.store || {});
@@ -93,7 +93,7 @@ function box(opts) {
   loc.set = (h) => calls.go.push(h);
   vm.createContext(b);
   vm.runInContext([
-    X.varDecl('DC_MARK_KEY'), X.varDecl('_dc'), X.varDecl('_dcMem'), X.varDecl('_dcBound'), X.varDecl('DC_BACK_IDLE_MS'), 'var __T=1e6;Date.now=function(){return __T};',
+    _namexDecl(), X.varDecl('DC_MARK_KEY'), X.varDecl('_dc'), X.varDecl('_dcMem'), X.varDecl('_dcBound'), X.varDecl('DC_BACK_IDLE_MS'), 'var __T=1e6;Date.now=function(){return __T};',
     "Object.defineProperty(location,'href',{set:function(h){location.set(h)},get:function(){return ''}});",
     'function today(){return TODAY}',
     DC_FNS.map((n) => X.fn(n)).join('\n')
@@ -471,12 +471,13 @@ head('15 帯の貼り付け（layoutStickyTops を寸法の代役で動かす）
 /* ══════════ (3) デイだけの方（2026-10-25・§9.9） ══════════ */
 const DO_FNS = DC_FNS.concat(['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcAddEnabled', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcAdd']);
 /* 氏名の異体字の表（複数行の宣言）を括弧の対応で切り出す */
-const NAMEX_DECL = (() => { const i = SRC.indexOf('var _NAMEX_MAP='); const o = SRC.indexOf('{', i); return SRC.slice(i, matchBrace(SRC, o) + 1) + ';'; })();
+function _namexDecl() { const i = SRC.indexOf('var _NAMEX_MAP='); const o = SRC.indexOf('{', i); return SRC.slice(i, matchBrace(SRC, o) + 1) + ';'; }
+const NAMEX_DECL = _namexDecl();
 function boxDO(opts) {
   const b = box(opts);
   Object.assign(b, { apiUrl: opts && opts.apiUrl || '', _getLastSyncTs: () => (opts && opts.lastSync != null ? opts.lastSync : 1), ldShow() {}, ldHide() {}, syncFromAPI: async () => (opts && opts.onSync ? opts.onSync(b) : true),
     apiGet: async () => (opts && opts.onGet ? opts.onGet(b) : { residents: [] }), _bumpResIdHw() {} });
-  vm.runInContext([NAMEX_DECL, X.varDecl('_dcAddBusy'), X.varDecl('DC_ADD_OFF_MSG'), ['toNum', '_normName', '_normNameX', '_hbDcRoomKey', 'hbDcAddEnabled', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcNewId', 'hbDcSrvDup', 'hbDcAdd'].map((n) => X.fn(n)).join('\n')].join('\n'), b);
+  vm.runInContext([NAMEX_DECL, X.varDecl('_dcAddBusy'), X.varDecl('DC_ADD_OFF_MSG'), X.varDecl('DC_ID_MIN'), X.fn('_isDcId'), ['toNum', '_normName', '_normNameX', '_hbDcRoomKey', 'hbDcAddEnabled', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcNewId', 'hbDcSrvDup', 'hbDcAdd'].map((n) => X.fn(n)).join('\n')].join('\n'), b);
   if (!(opts && opts.addOff)) b.D.cfg = { dayOnlyOn: 1 };
   return b;
 }
@@ -625,6 +626,31 @@ head('22a 履歴の小窓・帯のボタン（反証 中5・軽6）');
   const h = X.fn('showHist');
   ok(/var _dTag=\(typeof hbDcTag==='function'\)\?hbDcTag\(res\):'',_dOnly=!!_dTag;/.test(h) && /_dOnly\?\(padSetHistHtml\(rid\)\+guideRateHtml\(rid\)\+padUseHtml\(rid\)\)/.test(h) && /if\(_sb&&_dOnly\)\{_sb\.innerHTML=_dOnlyNote\}/.test(h), '履歴の小窓: 札のある方（デイのみ・施設では対象外）は排便のカレンダー・平均間隔・下剤の反応を出さず1行');
   ok(/\.dcbar \.dc-acts \[hidden\]\{display:none\}/.test(HTML), '帯のボタンの hidden が効く（ボタンの display に負けない）');
+}
+
+head('22d デイの id の幅は施設の連番と高水位に数えない（追加の反証 中）');
+{
+  const mkN = (src, res) => { const st = new Map(); const sb = { console, localStorage: { getItem: (k) => (st.has(k) ? st.get(k) : null), setItem: (k, v) => st.set(k, String(v)) }, D: { residents: res } };
+    vm.createContext(sb); const XX = makeExtractor(src); const has = (n) => { try { XX.varDecl(n); return true; } catch (e) { return false; } };
+    vm.runInContext([XX.varDecl('RES_ID_HW_KEY'), has('DC_ID_MIN') ? XX.varDecl('DC_ID_MIN') : '', XX.fn('toNum'), has('DC_ID_MIN') ? XX.fn('_isDcId') : '', XX.fn('_resIdHw'), XX.fn('_bumpResIdHw'), XX.fn('nextResId')].join('\n'), sb); return sb; };
+  const n1 = mkN(SRC, [{ id: 5 }, { id: 1234567890 }, { id: 12 }]);
+  ok(n1.nextResId() === 13, '施設の連番はデイの id（10億台）を数えない（デイの方が居ても次は 13）');
+  const n2 = mkN(SRC, [{ id: 5 }]); n2._bumpResIdHw(1500000000); n2._bumpResIdHw(40);
+  ok(n2._resIdHw() === 40 && n2.nextResId() === 41, '高水位もデイの id を数えない（同期で届いても施設の id は大きくならない）');
+  if (OLD_SRC) {
+    const sets = [[{ id: 1 }, { id: 2 }], [{ id: 7 }, { id: '30' }, { id: null }], []];
+    ok(sets.every((rs) => mkN(OLD_SRC, JSON.parse(JSON.stringify(rs))).nextResId() === mkN(SRC, JSON.parse(JSON.stringify(rs))).nextResId()), 'デイの id が無い時の施設の連番は直す前と同じ');
+  }
+}
+
+head('22e 2台がほぼ同時に同じ方を加えた時の知らせ（追加の反証 軽2）');
+{
+  const two = [DOR({ id: 1500000001, name: '架空六', room: '106' }), DOR({ id: 1500000002, name: '架空 六', room: '106号室' })];
+  const store = { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1'] }) };
+  let b = box({ store, residents: two }); b.hbDcInit(); b.hbDcRenderBar();
+  ok(b.hbDcDupDayOnly(two) === 1 && /同じ氏名・同じ居室の行が2つあります/.test(b.els.dcWarn.textContent) && b.els.dcWarn.hidden === false, 'デイだけの方で同じ氏名・同じ居室の在籍の行が2つあれば、帯に1行出す');
+  b = box({ store, residents: [two[0], Object.assign({}, two[1], { active: false })] }); b.hbDcInit(); b.hbDcRenderBar();
+  ok(b.hbDcDupDayOnly(b.D.residents) === 0 && b.els.dcWarn.hidden === true, '片方が退去なら出さない');
 }
 
 head('22c 一覧表の下剤の反応（確認の反証 中2）');
@@ -829,29 +855,29 @@ const asyncTests = (async () => {
       await bb.hbDcAdd('m6');
       ids.push(bb.D.residents.find((r) => r.masterId === 'm6').id);
     }
-    ok(new Set(ids).size === 3 && ids.every((x) => Number.isSafeInteger(x) && x < 1e14 && x > 1e12), '2台が同じ手元の状態から加えても、乱数が違えば id が重ならない（手元の最大値＋1 を使わない・13桁）', ids);
+    ok(new Set(ids).size === 3 && ids.every((x) => Number.isInteger(x) && x >= 1e9 && x < 2e9), '2台が同じ手元の状態から加えても、乱数が違えば id が重ならない（手元の最大値＋1 を使わない・デイの幅 10億〜20億＝32ビットに収まる）', ids);
     ok(ids.every((x) => x !== 77), 'nextResId（手元の最大値＋1）は使わない');
-    const nb = boxDO({}); vm.runInContext('__T=1761300000000;Math.random=function(){return 0.5}', nb);
-    const want = 1761300000000 + 50000;
+    const nb = boxDO({}); vm.runInContext('Math.random=function(){return 0.5}', nb);
+    const want = 1500000000;
     ok(nb.hbDcNewId([{ id: 1 }], {}) === want && nb.hbDcNewId([{ id: want }], {}) === null && nb.hbDcNewId([], { [want]: 1 }) === null, '手元・サーバーにある id は使わない（同じ数しか引けなければ決めない）');
     let k = 0; vm.runInContext('Math.random=function(){return [0.5,0.6][Math.min(' + 'globalThis.__k++,1)]}', Object.assign(nb, { __k: 0 }));
     const id2 = nb.hbDcNewId([{ id: want }], {});
-    ok(id2 === 1761300000000 + 60000, 'ぶつかったら引き直す', id2);
+    ok(id2 === 1600000000, 'ぶつかったら引き直す', id2);
   }
   // 親の検収 重1(b): 押した直後のサーバーの読み直し
-  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: 999, name: '架空六', room: '106号室', active: true }] }) });
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: 999, name: '架空 六', room: '999', active: true }] }) });
   await b.hbDcAdd('m6');
-  ok(b.pushes.length === 0 && b.D.residents.every((r) => r.masterId !== 'm6') && /ほかの端末でこの方が加えられました/.test(b.calls.toast.join()), 'サーバーに同じ氏名・同じ居室の在籍の方がいれば足さない（確かめの小窓の間にほかの端末が加えた）');
-  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: 999, name: '架空六', room: '106', active: false }] }) });
+  ok(b.pushes.length === 0 && b.D.residents.every((r) => r.masterId !== 'm6') && /ほかの端末でこの方が加えられました/.test(b.calls.toast.join()), 'サーバーに同じ氏名（空白違いも同じ）の在籍の方がいれば、居室を問わず足さない（手元の守りと同じ・確かめの小窓の間にほかの端末が加えた）');
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: 999, name: '架空六', room: '106', active: false }, { id: 998, name: '架空六', room: '106', active: 'FALSE' }] }) });
   await b.hbDcAdd('m6');
-  ok(b.pushes.length === 1, 'サーバーの同じ氏名・居室の方が退去なら妨げない');
+  ok(b.pushes.length === 1, 'サーバーの同じ氏名の方が退去（false・"FALSE"）なら妨げない');
   b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => null });
   await b.hbDcAdd('m6');
   ok(b.pushes.length === 0 && /照らし合わせられませんでした/.test(b.calls.toast.join()), 'サーバーを読み直せなければ足さない');
-  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: 1761300000000 + 50000, name: '架空別', room: '999', active: true }] }) });
-  vm.runInContext('__T=1761300000000;Math.random=(function(){var a=[0.5,0.7],i=0;return function(){return a[Math.min(i++,1)]}})()', b);
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: '1500000000', name: '架空別', room: '999', active: true }] }) });
+  vm.runInContext('Math.random=(function(){var a=[0.5,0.7],i=0;return function(){return a[Math.min(i++,1)]}})()', b);
   await b.hbDcAdd('m6');
-  ok(b.D.residents.find((r) => r.masterId === 'm6').id === 1761300000000 + 70000, 'サーバーにある id とはぶつけない（引き直す）');
+  ok(b.D.residents.find((r) => r.masterId === 'm6').id === 1700000000, 'サーバーにある id（文字で返っても）とはぶつけない（引き直す）');
   // 小窓の中身（hbDcMissRender を動かす）
   b = boxDO({ store: { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m6', 'm99', '<x>'] }) }, residents: [] });
   b.els.mDcMissList = { innerHTML: '', addEventListener() {} }; b._linkIdx = () => idx; b.hbDcInit(); b.hbDcMissRender();
