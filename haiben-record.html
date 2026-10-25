@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-nshlst8xGmVEzBjr5dOyrpTUGdhs7TJ42VZn9eyt6fY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-mwaIt1h5B7GZ4ODh/LjoPZUAfmPxvmZjzBU7ZNEefrM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -56,19 +56,21 @@ html.hb-daycare .dcbar{position:sticky;top:56px;z-index:98;
 .dcbar .dc-acts a,.dcbar .dc-acts button{min-height:44px;display:inline-flex;align-items:center;padding:6px 14px;
   border:1px solid var(--pri-d);border-radius:6px;background:#fff;color:var(--pri-d);font-size:0.9375rem;
   font-weight:700;text-decoration:none;cursor:pointer}
+.dcbar .dc-acts [hidden]{display:none}
 .dcbar .dc-acts a:focus-visible,.dcbar .dc-acts button:focus-visible{outline:2px solid var(--pri-d);outline-offset:1px}
 /* 警告の行は現場端末の注意書き（.hb-field-note）と同じ色（文字 7.8:1。--warn-tx と --warn-bg の組は 3.6:1 で本文に足りない） */
 .dcbar .dc-warn{flex-basis:100%;padding:6px 10px;border:1px solid #ffb74d;border-radius:6px;
   background:#fff3e0;color:#8a2c00;font-weight:700}
 .dcbar .dc-note{flex-basis:100%;font-weight:700}
 /* 居ない方の一覧（2026-10-25・§9.9） */
-.dcm-note{font-size: 0.875rem;color:var(--g7);line-height:1.6;margin-bottom:10px}
+.dcm-note{font-size: 1rem;color:var(--g7);line-height:1.6;margin-bottom:10px}
 .dcm-list{list-style:none;margin:0;padding:0;max-height:60vh;overflow:auto}
 .dcm-row{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--g2)}
 .dcm-nm{font-size: 1rem}
 .dcm-nm b{font-size: 1.0625rem}
-.dcm-sub{color:var(--g7);font-size: 0.875rem;margin-left:6px}
-.dcm-why{color:#8a2c00;font-weight:700;font-size: 0.875rem}
+.dcm-sub{color:var(--g7);font-size: 0.9375rem;margin-left:6px}
+.dcm-why{color:#8a2c00;font-weight:700;font-size: 1rem}
+.dc-only-note{padding:10px 16px;font-size: 1rem;color:var(--g9);line-height:1.6}
 .dcm-add{min-height:44px}
 .dcm-empty{padding:12px 0;font-weight:700}
 @media print{.dcbar{display:none !important}}
@@ -515,7 +517,7 @@ textarea{resize:vertical;min-height:76px}
 .rt-s.rt-w{background:#fff59d;color:#6d5300;border-color:#fbc02d}
 .rt-s.rt-ng{background:var(--ng-l);color:var(--ng);border-color:var(--ng)}
 /* デイだけの方の札（2026-10-25・§9.9）。日数の判定の代わりに出す。色は帯と同じ --pri-l／--pri-d（文字 8.2:1） */
-.dc-only{display:inline-block;padding:1px 7px;border:1px solid var(--pri-d);border-radius:8px;background:var(--pri-l);color:var(--pri-d);font-size: 0.75rem;font-weight:700;white-space:nowrap}
+.dc-only{display:inline-block;padding:1px 7px;border:1px solid var(--pri-d);border-radius:8px;background:var(--pri-l);color:var(--pri-d);font-size: 0.8125rem;font-weight:700;white-space:nowrap}
 .rt-s.rt-dc{background:var(--pri-l);color:var(--pri-d);border-color:var(--pri-d)}
 .res-picked{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .res-picked[hidden]{display:none}
@@ -820,6 +822,7 @@ html.night .frombar button{background:var(--nt-sf)}
 html.night .dcbar{color:var(--nt-pri-tx)}
 html.night .dc-only,html.night .rt-s.rt-dc{color:var(--nt-pri-tx);border-color:var(--nt-pri-tx)}
 html.night .dcm-why{color:var(--warn-tx)}
+html.night .dc-only-note{color:var(--g9)}
 html.night .dcbar .dc-acts a,html.night .dcbar .dc-acts button{background:var(--nt-sf);color:var(--nt-pri-tx);border-color:var(--nt-pri-tx)}
 html.night .dcbar .dc-warn{background:var(--warn-bg);color:var(--warn-tx);border-color:var(--warn-tx)}
 html.night .bnav{background:#181c21;box-shadow:0 -2px 10px rgba(0,0,0,.5)}
@@ -1830,7 +1833,7 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
 
 <!-- デイ せせらぎの方のうち、排泄ケア記録の表に出ていない方（2026-10-25・§9.9）。確かめの小窓（mConf）より前に置く＝重なった時に確かめが上に出る -->
 <div class="mo" id="mDcMiss" role="dialog" aria-modal="true" aria-labelledby="mDcMissT"><div class="md" style="max-width:560px">
-  <div class="md-t" id="mDcMissT">排泄ケア記録に居ない方</div>
+  <div class="md-t" id="mDcMissT" tabindex="-1">排泄ケア記録に居ない方</div>
   <div class="dcm-note">デイ せせらぎの今日の方のうち、排泄ケア記録の表に出ていない方です。〔デイの記録に加える〕を押すと、デイ せせらぎの表示だけに出る方（デイのみ）として加えます。施設の一覧・時系列・帳票には出ません。</div>
   <ul class="dcm-list" id="mDcMissList"></ul>
   <div class="md-f"><button type="button" class="bn bs" id="mDcMissClose">閉じる</button></div>
@@ -6753,14 +6756,18 @@ function padUseHtml(rid){
 }
 function showHist(rid){const res=D.residents.find(r=>r.id===rid);if(!res)return;
   curHistRid=rid;
-  if($('mHistExtra')){try{$('mHistExtra').innerHTML=padSetHistHtml(rid)+stoolCalHtml(rid)+laxHistHtml(rid)+guideRateHtml(rid)+padUseHtml(rid)}catch(e){console.error('[hbcr] 排便カレンダーの作成に失敗:',e);$('mHistExtra').innerHTML=''}}
+  /* デイだけの方（§9.9）はデイの日の記録だけ＝排便のカレンダーの色・平均間隔・下剤の反応の判定が誤るので出さず、その旨を1行出す（反証 中5） */
+  var _dOnly=(typeof hbDayOnlyEff==='function')&&hbDayOnlyEff(res);
+  var _dOnlyNote='<div class="dc-only-note"><span class="dc-only">デイのみ</span> デイ せせらぎの日の記録だけです。排便のカレンダーの色・平均間隔・下剤の反応の判定は出しません。</div>';
+  if($('mHistExtra')){try{$('mHistExtra').innerHTML=_dOnly?(padSetHistHtml(rid)+guideRateHtml(rid)+padUseHtml(rid)):(padSetHistHtml(rid)+stoolCalHtml(rid)+laxHistHtml(rid)+guideRateHtml(rid)+padUseHtml(rid))}catch(e){console.error('[hbcr] 排便カレンダーの作成に失敗:',e);$('mHistExtra').innerHTML=''}}
   if($('mHistInput'))$('mHistInput').style.display=(res.active===false)?'none':'';
   if($('mHistLax'))$('mHistLax').style.display=(res.active===false)?'none':'';
   $('mHistT').textContent='📋 '+res.name+'（'+res.room+'号室）— 排泄履歴';
   // 平均間隔バー（過去3ヶ月・排尿／排便／下剤）。記録0件でも「—」で出す。
   // 値は太字・意味色、ラベルは通常の文字色（色は補助。ラベル文字だけでも読み分けられる）
   var _sb=$('mHistStats');
-  if(_sb){
+  if(_sb&&_dOnly){_sb.innerHTML=_dOnlyNote}
+  else if(_sb){
     var _st=intervalStats(rid);
     var _ivHtml=function(label,color,o){
       return '<span style="display:inline-flex;align-items:baseline;gap:5px">'+
@@ -9118,12 +9125,18 @@ function hbDcMissing(residents,dc,idx,listable){
     else if(!x.room)x.why='入居者マスタに居室がありません';
     else if((idx.nameCount&&idx.nameCount[_normNameX(x.name)]||0)>1)x.why='入居者マスタに同じ氏名の方が2人以上います';
     else if((residents||[]).some(function(r){return r&&isUserRes(r)&&r.active!==false&&_normNameX(r.name)===_normNameX(x.name)}))x.why='排泄ケア記録に同じ氏名の方がいます（設定→マスタ連携の点検で紐づけを確かめてください）';
+    /* 氏名の表記が名簿と違う（異体字・通称・旧姓・入力の違い）まま入居者マスタと結ばれていない行が、同じ方かもしれない。
+       居室かふりがなが同じ未連携の在籍の行があれば足さない（足すと同じ人の2行目ができ、記録が割れる） */
+    else if((residents||[]).some(function(r){return r&&isUserRes(r)&&r.active!==false&&(r.masterId==null||r.masterId==='')&&
+      ((x.room&&_hbDcRoomKey(r.room)===_hbDcRoomKey(x.room))||(x.kana&&String(r.yomi||'').trim()&&hbDcKana({yomi:r.yomi})===hbDcKana({yomi:x.kana})))}))
+      x.why='排泄ケア記録に居室かふりがなが同じで、入居者マスタと結ばれていない方がいます（設定→マスタ連携の点検で結んでください）';
     else x.act='add';
     rows.push(x);
   });
   rows.sort(function(a,b){if(!a.name!==!b.name)return a.name?-1:1;return hbDcKana({yomi:a.kana,name:a.name}).localeCompare(hbDcKana({yomi:b.kana,name:b.name}),'ja')});   // 氏名のわからない方は後ろ
   return {rows:rows,badN:(dc&&dc.badN)||0};
 }
+function _hbDcRoomKey(v){var s=String(v==null?'':v);try{s=s.normalize('NFKC')}catch(e){}return s.replace(/\s+/g,'').replace(/号室$/,'')}
 function hbDcMissFind(mid){
   if(!hbDcOn())return null;
   var m=hbDcMissing(D&&D.residents,_dc,_linkIdx(),hbDcListable);
@@ -9150,8 +9163,21 @@ async function hbDcAdd(mid){
   if(_dcAddBusy)return;
   var x=hbDcMissFind(mid);
   if(!x||!x.act){showToast('⚠️ この方は加えられません'+(x&&x.why?'（'+x.why+'）':''));hbDcMissRender();return}
+  /* 同期の関門（反証 中4）: 手元の写しが古い・空のまま足すと、ほかの端末が足した同じ方と2行になる。
+     一度も同期できていない・送れていない書き込みがある時は止め、足す前にサーバーと1回照らし合わせてから確かめ直す */
+  if(apiUrl){
+    if(!(_getLastSyncTs()>0)){showToast('⚠️ まだサーバーと同期できていません。電波を確かめてから加えてください');return}
+    if(_unsentCount()>0){showToast('⚠️ 送れていない記録があります。送り終えてから加えてください');return}
+  }
   _dcAddBusy=true;
   try{
+    if(apiUrl){
+      var synced=false;
+      try{ldShow('サーバーと照らし合わせています...');synced=await syncFromAPI(false)}catch(e){synced=false}finally{try{ldHide()}catch(e){}}
+      if(!synced){showToast('⚠️ サーバーと照らし合わせられませんでした。電波を確かめてから、もう一度押してください');return}
+      x=hbDcMissFind(mid);
+      if(!x||!x.act){showToast('⚠️ この方は加えられません'+(x&&x.why?'（'+x.why+'）':'（ほかの端末で加わった可能性があります）'));hbDcRerender();hbDcMissRender();return}
+    }
     var ok=await customConfirm('デイの記録に加えます。\n\n氏名: '+x.name+(x.kana?'（'+x.kana+'）':'')+'\n居室: '+x.room+'号室\n\nデイ せせらぎの表示だけに出ます（施設の一覧・時系列・帳票には出ません）。\nこの方で間違いありませんか？');
     if(!ok)return;
     var y=hbDcMissFind(mid);   // 確かめている間に同期で変わっていないか、もう一度（二重に足さない）
@@ -9179,8 +9205,11 @@ function hbDcBind(){
   _dcBound=true;
   var off=$('dcOff');if(off)off.addEventListener('click',hbDcOff);
   var bk=$('dcBack');if(bk)bk.addEventListener('click',hbDcBack);
-  var ms=$('dcMiss');if(ms)ms.addEventListener('click',function(){hbDcMissRender();var m=$('mDcMiss');if(m)m.classList.add('on')});
-  var mc=$('mDcMissClose');if(mc)mc.addEventListener('click',function(){var m=$('mDcMiss');if(m)m.classList.remove('on')});
+  /* 小窓は開いたら見出しへ焦点を移し、閉じたら〔居ない方の一覧〕へ戻す。Esc でも閉じる（確かめの小窓が上に出ている時は閉じない） */
+  var closeMiss=function(){var m=$('mDcMiss');if(!m||!m.classList.contains('on'))return;m.classList.remove('on');var b=$('dcMiss');if(b&&!b.hidden)try{b.focus()}catch(e){}};
+  var ms=$('dcMiss');if(ms)ms.addEventListener('click',function(){hbDcMissRender();var m=$('mDcMiss');if(m)m.classList.add('on');var t=$('mDcMissT');if(t)try{t.focus()}catch(e){}});
+  var mc=$('mDcMissClose');if(mc)mc.addEventListener('click',closeMiss);
+  document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;var cf=$('mConf');if(cf&&cf.classList.contains('on'))return;closeMiss()});
   var ml=$('mDcMissList');if(ml)ml.addEventListener('click',function(e){var b=e.target&&e.target.closest?e.target.closest('.dcm-add'):null;if(b)hbDcAdd(b.dataset.mid)});
   var again=function(){try{hbDcRefresh()}catch(e){console.warn('[hbcr] デイの一覧の読み直しをスキップ:',e)}};
   setInterval(again,60*1000);   // 画面を出したまま日付をまたいだ時も今日でないことに気づく（中身が同じなら帯の文を書くだけ）

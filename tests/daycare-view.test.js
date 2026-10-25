@@ -467,12 +467,13 @@ head('15 帯の貼り付け（layoutStickyTops を寸法の代役で動かす）
 
 
 /* ══════════ (3) デイだけの方（2026-10-25・§9.9） ══════════ */
-const DO_FNS = DC_FNS.concat(['_normName', '_normNameX', 'hbDcMissing', 'hbDcMissFind', 'hbDcAdd']);
+const DO_FNS = DC_FNS.concat(['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcAdd']);
 /* 氏名の異体字の表（複数行の宣言）を括弧の対応で切り出す */
 const NAMEX_DECL = (() => { const i = SRC.indexOf('var _NAMEX_MAP='); const o = SRC.indexOf('{', i); return SRC.slice(i, matchBrace(SRC, o) + 1) + ';'; })();
 function boxDO(opts) {
   const b = box(opts);
-  vm.runInContext([NAMEX_DECL, X.varDecl('_dcAddBusy'), ['_normName', '_normNameX', 'hbDcMissing', 'hbDcMissFind', 'hbDcAdd'].map((n) => X.fn(n)).join('\n')].join('\n'), b);
+  Object.assign(b, { apiUrl: opts && opts.apiUrl || '', _getLastSyncTs: () => (opts && opts.lastSync != null ? opts.lastSync : 1), ldShow() {}, ldHide() {}, syncFromAPI: async () => (opts && opts.onSync ? opts.onSync(b) : true) });
+  vm.runInContext([NAMEX_DECL, X.varDecl('_dcAddBusy'), ['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcAdd'].map((n) => X.fn(n)).join('\n')].join('\n'), b);
   return b;
 }
 const DOR = (o) => Object.assign({ cfg: { dayOnly: true } }, o);
@@ -603,6 +604,20 @@ head('20 居ない方の一覧（hbDcMissing・純関数）');
   const m2 = b.hbDcMissing(resid, b._dc, null, b.hbDcListable);
   const by2 = {}; m2.rows.forEach((x) => { by2[x.mid] = x; });
   ok(by2.m6 && !by2.m6.act && /名簿がありません/.test(by2.m6.why) && by2.m2.act === 'mark', 'この端末に名簿が無い時は新しく足さない（既にある行への mark はできる）');
+  // 反証 重大1: 名簿と表記の違う未連携の行（同じ居室・同じふりがな）
+  const v1 = b.hbDcMissing(resid.concat([{ id: 70, name: '架空ロク', room: '１０６号室' }]), b._dc, idx, b.hbDcListable).rows.find((x) => x.mid === 'm6');
+  ok(v1 && !v1.act && /居室かふりがなが同じ/.test(v1.why), '居室が同じ（全角・「号室」つきでも）で結ばれていない在籍の行があれば足さない', v1);
+  const v2 = b.hbDcMissing(resid.concat([{ id: 71, name: '架空ろく', room: '999', yomi: 'かくうろく' }]), b._dc, idx, b.hbDcListable).rows.find((x) => x.mid === 'm6');
+  ok(v2 && !v2.act && /居室かふりがなが同じ/.test(v2.why), 'ふりがなが同じ（ひらがな・カタカナの違いは同じ）で結ばれていない在籍の行があれば足さない', v2);
+  const v3 = b.hbDcMissing(resid.concat([{ id: 72, name: '架空ロク', room: '106', masterId: 'm77' }, { id: 73, name: '架空ロク', room: '106', active: false }]), b._dc, idx, b.hbDcListable).rows.find((x) => x.mid === 'm6');
+  ok(v3 && v3.act === 'add', '同じ居室でも、別の方と結ばれている行・退去の行は妨げない（相部屋・前の入居者）', v3);
+}
+
+head('22a 履歴の小窓・帯のボタン（反証 中5・軽6）');
+{
+  const h = X.fn('showHist');
+  ok(/var _dOnly=\(typeof hbDayOnlyEff==='function'\)&&hbDayOnlyEff\(res\);/.test(h) && /_dOnly\?\(padSetHistHtml\(rid\)\+guideRateHtml\(rid\)\+padUseHtml\(rid\)\)/.test(h) && /if\(_sb&&_dOnly\)\{_sb\.innerHTML=_dOnlyNote\}/.test(h), '履歴の小窓: デイだけの方は排便のカレンダー・平均間隔・下剤の反応を出さず「デイのみ」の1行');
+  ok(/\.dcbar \.dc-acts \[hidden\]\{display:none\}/.test(HTML), '帯のボタンの hidden が効く（ボタンの display に負けない）');
 }
 
 head('22 入居者マスタが後から排泄の対象にしたら dayOnly を外す（親の追加の決まり・mergeCommonResidents を動かす）');
@@ -694,6 +709,27 @@ const asyncTests = (async () => {
   b = mk({ confirmYes: true, store: { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m99'] }) } });
   await b.hbDcAdd('m99');
   ok(b.pushes.length === 0 && b.calls.confirm.length === 0 && /加えられません/.test(b.calls.toast.join()), '加えられない方（名簿に無い）は確かめも出さず理由を出す');
+  // 反証 中4: 同期の関門
+  b = mk({ confirmYes: true, apiUrl: 'https://x', lastSync: 0 });
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 0 && b.calls.confirm.length === 0 && /まだサーバーと同期できていません/.test(b.calls.toast.join()), '一度も同期できていない端末では加えない');
+  b = mk({ confirmYes: true, apiUrl: 'https://x' }); b.unsent = 2;
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 0 && /送れていない記録があります/.test(b.calls.toast.join()), '送れていない書き込みがある時は加えない');
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onSync: () => false });
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 0 && b.calls.confirm.length === 0 && /照らし合わせられませんでした/.test(b.calls.toast.join()), '足す前の同期に失敗したら加えない（確かめも出さない）');
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onSync: (bb) => { bb.D.residents.push(DOR({ id: 60, name: '架空六', room: '106', masterId: 'm6' })); return true; } });
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 0 && b.calls.confirm.length === 0 && b.D.residents.filter((r) => r.masterId === 'm6').length === 1, '同期でほかの端末が足した同じ方が入ってきたら、確かめを出さずに止める（2行にしない）');
+  b = mk({ confirmYes: true, apiUrl: 'https://x' });
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 1 && b.calls.confirm.length === 1, '同期できていれば、照らし合わせてから確かめて加える');
+  // 小窓の中身（hbDcMissRender を動かす）
+  b = boxDO({ store: { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m6', 'm99', '<x>'] }) }, residents: [] });
+  b.els.mDcMissList = { innerHTML: '', addEventListener() {} }; b._linkIdx = () => idx; b.hbDcInit(); b.hbDcMissRender();
+  const li = b.els.mDcMissList.innerHTML;
+  ok(/<b>架空六<\/b><span class="dcm-sub">カクウロク<\/span><span class="dcm-sub">106号室<\/span><\/div><button type="button" class="bn bp dcm-add" data-mid="m6">デイの記録に加える<\/button>/.test(li) && /<b>氏名がわからない方<\/b><\/div><div class="dcm-why">⚠ 入居者マスタの名簿に見つかりません/.test(li) && /形の違う値が 1件/.test(li) && li.indexOf('架空六') < li.indexOf('氏名がわからない方'), '小窓: 氏名・ふりがな・居室と〔加える〕、名簿に無い方は理由（後ろ）、形の違う値は数', li);
   // 帯の〔居ない方の一覧〕
   b = mk(); b.els.dcMiss = { hidden: true }; b.hbDcRenderBar();
   ok(b.els.dcMiss.hidden === false, '居ない方がいる時は〔居ない方の一覧〕を出す');
