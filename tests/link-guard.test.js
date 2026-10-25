@@ -113,6 +113,13 @@ function makeCtx() {
   sandbox.save = function () { sandbox.saveCount++; };
   sandbox.apiPush = function (action, data) { sandbox.pushes.push({ action, data }); };
   sandbox.showToast = function (m) { sandbox.toasts.push(m); };
+  /* 送信の列・未送信の控え（待たせ・捨ての試験用の最小の写し） */
+  sandbox._writeQ = []; sandbox._pqFlushing = false; sandbox._pq = [];
+  sandbox._wqPersist = function () {};
+  sandbox.loadPendingQueue = function () { return sandbox._pq.slice(); };
+  sandbox.savePendingQueue = function (q) { sandbox._pq = q.slice(); };
+  sandbox.hbFieldDeny = function () { return false; };
+  sandbox.renderLinkAudit = function () {};
   sandbox.globalThis = sandbox;
   const ctx = vm.createContext(sandbox);
 
@@ -169,10 +176,15 @@ function makeCtx() {
     extractVar('DC_ID_MIN'), extractFn('_isDcId'), extractFn('hbDcNewId'),
     extractVar('_resImportQ'), extractVar('RES_HEAL_EXISTING'),
     extractFn('hbMasterTargetSet'), extractFn('hbResNeedsSend'), extractFn('hbResCollides'), extractFn('hbResPlan'),
-    extractFn('hbResHeal'), extractFn('hbResIssueAdd'),
+    extractFn('hbResHeal'), extractFn('hbResIssueAdd'), extractFn('hbResIdFor'),
+    extractVar('RES_ISSUE_KEY'), extractFn('hbResIssueLoad'), extractFn('hbResIssueSave'), extractFn('hbResIssueKey'),
+    extractFn('hbResIssueHasId'), extractFn('hbResIssueHasMid'), extractFn('hbResIssueDismiss'),
+    extractFn('hbResTombLoad'), extractFn('hbResTombAdd'), extractFn('hbResTombHas'),
+    extractVar('RES_PURGED_KEY'), extractVar('_resPurged'), extractFn('_resItemTarget'),
+    extractFn('hbResHoldItem'), extractFn('hbResDropItem'), extractFn('hbResPurgeQueued'),
     /* const 宣言は vm の globalThis に載らないため、テストから使うキー名を明示的に公開する */
     'globalThis.K={SU_COMMON_KEY:SU_COMMON_KEY,MASTER_ROSTER_KEY:MASTER_ROSTER_KEY,' +
-    'MASTER_ROSTER_TS_KEY:MASTER_ROSTER_TS_KEY,RES_ID_HW_KEY:RES_ID_HW_KEY};',
+    'MASTER_ROSTER_TS_KEY:MASTER_ROSTER_TS_KEY,RES_ID_HW_KEY:RES_ID_HW_KEY,RES_ISSUE_KEY:RES_ISSUE_KEY,RES_PURGED_KEY:RES_PURGED_KEY};',
   ];
   vm.runInContext(parts.join('\n\n'), ctx, { filename: 'haiben-extracted.js' });
   return ctx;
@@ -610,16 +622,89 @@ const ROSTER_T = ROSTER.map(r => Object.assign({ targetApps: ['excretion'] }, r)
   /* 同期のマージ: サーバーにある行に印・番号のぶつかりを点検に出す */
   const c = makeCtx(); setRoster(c, ROSTER);
   c.save = () => {};
+  c._pq = [{ action: 'saveSched', data: { id: 5 }, at: 1 }, { action: 'savePadSet', data: { id: 5 }, at: 2 }, { action: 'addRecord', data: { resId: 5 }, at: 3 }];
+  c._writeQ.push({ action: 'saveRes', data: { resident: { id: 5 } } });
   const merged = c.__syncTransplant([res({ id: 5, name: '入居者B', room: '202' }), res({ id: 6, name: '入居者C', room: '303' })],
     [res({ id: 5, name: '入居者A', room: '101', masterId: 1, _fromMaster: true }), res({ id: 6, name: '入居者C改', room: '303', masterId: 3, _fromMaster: true, _srvSeen: true }), res({ id: 9, name: '入居者Z', room: '909' })]);
+  const iss = () => c.hbResIssueLoad().list;
   t('サーバーの行には _srvSeen の印が付く（手元だけの行には付かない）', () => eq(merged.map(r => [r.id, !!r._srvSeen]), [[5, true], [6, true]]));
-  t('取り込んだだけの行と同じ番号の別の方がサーバーにいる → 点検に idTaken（名簿の氏名と手元の行が合う時だけ）', () => eq((c.D._resIssues || []).map(x => [x.kind, x.id, x.masterId, x.name]), [['idTaken', 5, 1, '入居者A']]));
-  t('一度サーバーにあった行の名前の直し（_srvSeen あり）は点検に出さない', () => ok(!(c.D._resIssues || []).some(x => x.id === 6)));
+  t('取り込んだだけの行と同じ番号の別の方がサーバーにいる → 点検に idTaken', () => eq(iss().map(x => [x.kind, x.id, x.masterId]), [['idTaken', 5, 1]]));
+  t('その番号の予定・おむつ・登録内容の送信待ちを外す（記録は外さない）・外した数を点検に残す', () => {
+    eq(c._pq.map(x => x.action), ['addRecord']); eq(c._writeQ.length, 0); eq(iss()[0].dropped, 3);
+  });
+  t('点検の控えに氏名を残さない（番号と時刻だけ）・知らせを出す', () => {
+    const raw = c._store.get(c.K.RES_ISSUE_KEY); ok(raw && !raw.includes('入居者')); ok(c.toasts.some(m => m.includes('確かめが要る')));
+  });
+  t('一度サーバーにあった行の名前の直し（_srvSeen あり）は点検に出さない', () => ok(!iss().some(x => x.id === 6)));
   const c3 = makeCtx(); setRoster(c3, ROSTER); c3.save = () => {};
-  c3.__syncTransplant([res({ id: 5, name: '入居者A2', room: '101' })], [res({ id: 5, name: '入居者A', room: '101', masterId: 9, _fromMaster: true })]);
-  t('名簿に無い masterId（判断できない）は点検に出さない（名前の直しを取り違えて騒がない）', () => eq((c3.D._resIssues || []).length, 0));
-  c3.hbResIssueAdd('idTaken', { id: 5, masterId: 9, name: 'x', room: '1' }); c3.hbResIssueAdd('idTaken', { id: 5, masterId: 9, name: 'x', room: '1' });
-  t('同じ点検は二重に積まない', () => eq(c3.D._resIssues.length, 1));
+  c3.__syncTransplant([res({ id: 5, name: '入居者A2', room: '101', masterId: 9 })], [res({ id: 5, name: '入居者A', room: '101', masterId: 9, _fromMaster: true })]);
+  t('サーバーの行が同じ masterId（よその端末での名前の直し）なら点検に出さない', () => eq(c3.hbResIssueLoad().list.length, 0));
+  const c4 = makeCtx(); c4.save = () => {};
+  c4.__syncTransplant([res({ id: 5, name: '入居者Q', room: '101' })], [res({ id: 5, name: '入居者A', room: '101', masterId: 9, _fromMaster: true })]);
+  t('名簿に無い方でも、氏名も masterId も違えば点検に出す（別の方の行へ書かないため）', () => eq(c4.hbResIssueLoad().list.map(x => x.kind), ['idTaken']));
+  c3.hbResIssueAdd('idTaken', { id: 5, masterId: 9 }); c3.hbResIssueAdd('idTaken', { id: 5, masterId: 9 }, { dropped: 2 });
+  t('同じ点検は二重に積まない（外した数だけ足す）', () => { eq(c3.hbResIssueLoad().list.length, 1); eq(c3.hbResIssueLoad().list[0].dropped, 2); });
+  c3.hbResIssueDismiss(c3.hbResIssueLoad().list[0].key);
+  t('確認した点検は一覧から消え、同じ点検は出し直さない（反証 M1）', () => {
+    eq(c3.hbResIssueLoad().list.length, 0); eq(c3.hbResIssueAdd('idTaken', { id: 5, masterId: 9 }), false); eq(c3.hbResIssueLoad().list.length, 0);
+  });
+  t('点検に出した番号（確認済みも含む）は既存の行として送り直さない', () => {
+    eq(c3.hbResNeedsSend(res({ id: 5, name: 'A', room: '1', masterId: 9, _fromMaster: true }), { 9: 1 }), false);
+    eq(c3.hbResNeedsSend(res({ id: 7, name: 'A', room: '1', masterId: 9, _fromMaster: true }), { 9: 1 }), true);
+  });
+}
+{
+  /* 送信の待たせ・捨て（反証 H1） */
+  const c = makeCtx();
+  c.D.residents = [res({ id: 5, name: 'A', _fromMaster: true }), res({ id: 6, name: 'B', _fromMaster: true, _srvSeen: true }), res({ id: 7, name: 'C' }),
+    res({ id: 8, name: 'D', _fromMaster: true, cfg: { dayOnly: true } })];
+  c.hbIsDayOnly = (r) => !!(r.cfg && r.cfg.dayOnly === true);
+  const it = (a, id) => (a === 'saveRes' ? { action: a, data: { resident: { id } } } : { action: a, data: { id } });
+  t('取り込んだだけで一度もサーバーで確かめていない方への予定・おむつ・登録内容の送信は待たせる', () => {
+    eq(c.hbResHoldItem(it('saveSched', 5)), true); eq(c.hbResHoldItem(it('savePadSet', '5')), true); eq(c.hbResHoldItem(it('saveRes', 5)), true);
+  });
+  t('記録の送信は待たせない', () => eq(c.hbResHoldItem({ action: 'addRecord', data: { id: 'r1', resId: 5 } }), false));
+  t('サーバーにある方・手で足した方・デイだけの方・いない番号は待たせない', () => {
+    eq(c.hbResHoldItem(it('saveSched', 6)), false); eq(c.hbResHoldItem(it('saveSched', 7)), false);
+    eq(c.hbResHoldItem(it('saveSched', 8)), false); eq(c.hbResHoldItem(it('saveSched', 99)), false);
+  });
+  t('照らし合わせで送った方は待たせない', () => { c._resHealSent['5'] = 1; eq(c.hbResHoldItem(it('saveSched', 5)), false); delete c._resHealSent['5']; });
+  c._pq = [Object.assign(it('saveSched', 5), { at: 10 }), Object.assign(it('saveSched', 6), { at: 10 })];
+  c._writeQ.push(it('savePadSet', 5), it('saveSched', 6));
+  vm.runInContext('Date.now=function(){return 100}', c);
+  const n = c.hbResPurgeQueued(5);
+  t('ぶつかった番号の送信待ちを、送信の列と未送信の控えから外して数を返す', () => { eq(n, 2); eq(c._pq.map(x => x.data.id), [6]); eq(c._writeQ.map(x => x.data.id), [6]); });
+  t('外した番号と時刻は端末に残る（再読み込みしても捨て続ける）', () => eq(JSON.parse(c._store.get(c.K.RES_PURGED_KEY)), { 5: 100 }));
+  t('外す前に控えへ積まれた分は捨て、後の分（サーバーの方への正しい送信）は捨てない', () => {
+    eq(c.hbResDropItem(Object.assign(it('saveSched', 5), { at: 50 })), true);
+    eq(c.hbResDropItem(Object.assign(it('saveSched', 5), { at: 150 })), false);
+    eq(c.hbResDropItem(it('saveSched', 5)), false);
+    eq(c.hbResDropItem(Object.assign(it('saveSched', 6), { at: 50 })), false);
+  });
+  const f = makeCtx(); f.D.residents = c.D.residents; f._pqFlushing = true; f._pq = [Object.assign(it('saveSched', 5), { at: 10 })];
+  t('再送の途中は控えを書き換えない（数だけ返す・後で再送の中で捨てる）', () => { eq(f.hbResPurgeQueued(5), 1); eq(f._pq.length, 1); });
+  t('再読み込みの後も、外した番号の古い控えを捨てる', () => {
+    const h = makeCtx(); h._store.set(h.K.RES_PURGED_KEY, '{"5":100}');
+    vm.runInContext('_resPurged=' + h._store.get(h.K.RES_PURGED_KEY), h);
+    eq(h.hbResDropItem(Object.assign(it('saveSched', 5), { at: 50 })), true);
+  });
+}
+{
+  /* 高水位（反証 H2）・番号の決め方（反証 M5）・削除の印（反証 M4） */
+  const c = makeCtx();
+  c._store.set(c.K.RES_ID_HW_KEY, '1500000000');
+  t('高水位が専用の幅の値なら数えない（nextResId が同じ番号を返し続けない）', () => { eq(c._resIdHw(), 0); c.D.residents = [res({ id: 3, name: 'A' })]; eq(c.nextResId(), 4); });
+  const a = c.hbResIdFor(42, [], {}), b = makeCtx().hbResIdFor('42', [], {});
+  t('取り込む方の番号は masterId から決まる（2台が同時に取り込んでも同じ番号＝1行にまとまる）', () => { eq(a, b); ok(a >= 1e9 && a < 2e9); });
+  t('その番号が手元かサーバーで使われていれば別の番号にする', () => {
+    const x = c.hbResIdFor(42, [res({ id: a, name: 'Z' })], {}); ok(x !== a && x >= 1e9 && x < 2e9);
+    const y = c.hbResIdFor(42, [], { [a]: 1 }); ok(y !== a);
+  });
+  c.hbResTombAdd(3);
+  t('削除の印のある masterId は既存の行として送らない', () => eq(c.hbResNeedsSend(res({ id: 9, name: 'A', room: '1', masterId: 3, _fromMaster: true }), { 3: 1 }), false));
+  const m = makeCtx(); setRoster(m, ROSTER_T); m.apiUrl = 'https://example.invalid/exec'; m.hbResHealSoon = () => {};
+  m.hbResTombAdd(2); m.mergeCommonResidents();
+  t('削除の印のある方は名簿から取り込み直さない', () => eq(Object.keys(m._resImportQ).sort(), ['1', '3']));
 }
 const asyncK = (async () => {
   function healCtx(srvRes) {
@@ -653,7 +738,39 @@ const asyncK = (async () => {
   c = healCtx([{ id: 4, name: '入居者Q', room: '999', active: true }]);
   c.D.residents = [res({ id: 4, name: '入居者C', room: '303', masterId: 3, _fromMaster: true })];
   await c.hbResHeal();
-  await tAsync('既存の行と同じ番号の別の方がサーバーにいる → 送らず点検に出す', async () => { eq(c.pushes.length, 0); eq(c.D._resIssues.map(x => x.kind), ['idTaken']); });
+  await tAsync('既存の行と同じ番号の別の方がサーバーにいる → 送らず点検に出す', async () => { eq(c.pushes.length, 0); eq(c.hbResIssueLoad().list.map(x => x.kind), ['idTaken']); });
+  c = healCtx([{ id: 4, name: '入居者C改', room: '303', masterId: 3, active: true }]);
+  c.D.residents = [res({ id: 4, name: '入居者C', room: '303', masterId: 3, _fromMaster: true })];
+  await c.hbResHeal();
+  await tAsync('同じ番号で同じ masterId（よその端末で名前を直した）なら送らず点検にも出さない', async () => { eq(c.pushes.length, 0); eq(c.hbResIssueLoad().list.length, 0); });
+  c = healCtx([]); c._locked = false;
+  c.D.residents = [res({ id: 4, name: '入居者C', room: '303', masterId: 3, _fromMaster: true })];
+  c.apiGet = async () => { c._locked = true; return { residents: [] }; };
+  await c.hbResHeal();
+  await tAsync('待っている間に自動ロックが掛かったら何もしない（反証 L1）', async () => eq(c.pushes.length, 0));
+  c = healCtx([]);
+  c.D.residents = [res({ id: 4, name: '入居者C', room: '303', masterId: 3, _fromMaster: true })];
+  c.apiGet = async () => { c.D.residents = []; return { residents: [] }; };
+  await c.hbResHeal();
+  await tAsync('待っている間に消された行は送らない（反証 L1）', async () => eq(c.pushes.length, 0));
+  c = healCtx([{ id: 8, name: '入居者A', room: '101', active: true }]);
+  setRoster(c, [{ masterId: 1, name: '入居者A', room: '101', active: true, targetApps: ['excretion'] }, { masterId: 21, name: '入居者A', room: '121', active: true, targetApps: ['excretion'] }]);
+  c._resImportQ['21'] = { c: { masterId: 21, name: '入居者A', room: '121' }, tExc: true };
+  await c.hbResHeal();
+  await tAsync('名簿に同じ氏名が2人いて作らなかった方は点検に出す（反証 M3）', async () => { eq(c.D.residents.length, 0); eq(c.hbResIssueLoad().list.map(x => [x.kind, x.masterId]), [['notMade', 21]]); });
+  c._resImportQ['21'] = { c: { masterId: 21, name: '入居者A', room: '121' }, tExc: true };
+  const n2 = c.pushes.length; await c.hbResHeal();
+  await tAsync('点検に出した方は、次の照らし合わせで候補から外す（同じ点検を繰り返さない）', async () => { eq(c.pushes.length, n2); eq(c.hbResIssueLoad().list.length, 1); });
+  c = healCtx([]);
+  c.D.residents = [res({ id: 30, name: '入居者B', room: '202', masterId: 99 })];
+  c._resImportQ['2'] = { c: ROSTER_T[1], tExc: true };
+  await c.hbResHeal();
+  await tAsync('手元の同じ氏名の行が別の方と結ばれていれば作らず点検に出す（反証 M3）', async () => eq(c.hbResIssueLoad().list.map(x => x.kind), ['notMade']));
+  c = healCtx([{ id: 4, name: '入居者Q', room: '999', active: true }]);
+  c.D.residents = [res({ id: 4, name: '入居者C', room: '303', masterId: 3, _fromMaster: true })];
+  c._pq = [{ action: 'saveSched', data: { id: 4 }, at: 1 }];
+  await c.hbResHeal();
+  await tAsync('照らし合わせで番号のぶつかりが分かった方の送信待ちも外す（反証 H1）', async () => { eq(c._pq.length, 0); eq(c.hbResIssueLoad().list[0].dropped, 1); });
   c = healCtx([]); c.apiUrl = '';
   c._resImportQ['1'] = { c: ROSTER_T[0], tExc: true };
   await c.hbResHeal();
