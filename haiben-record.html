@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-MOgqm6QdNQYwI6JnzWEG+5Im7U7ZfQEp+hvh11xE4qA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-MHerE5suWeGGhwHLgciigTugzzkHlaiaRWOk4/BJqnM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -2837,10 +2837,14 @@ async function syncFromAPI(showLoader,opts){
     D.residents=mergedRes;
     if(typeof padSetHeal==='function'){try{padSetHeal(_psHealList)}catch(e){}}
     D.records=mergedRec;
+    /* この端末で切り替えたばかり（送った設定がまだサーバーに届いていない見込み）の dayOnlyOn は、同期の応答で書き換えない（親の検収 軽3）。
+       切り替える前に始まった同期の応答は古い値（無い・逆の値）を持っていて、重ねると入れた直後に切れる（その後の保存で Config から消える） */
+    var _dcKeepOn=(typeof hbDcCfgFresh==='function'&&hbDcCfgFresh()&&D.cfg&&Object.prototype.hasOwnProperty.call(D.cfg,'dayOnlyOn'))?{v:D.cfg.dayOnlyOn}:null;
     D.cfg=json.cfg?Object.assign({},D.cfg||{},json.cfg):(D.cfg||{urineWarnH:6,urineDangerH:8,stoolWarnD:2,stoolDangerD:3});
     /* デイだけの方の切り替え（dayOnlyOn・2026-10-25）はサーバーが正本。サーバーの設定に無ければ手元の値も消す（無い＝切の安全側）。
        重ねるだけだと、旧い画面の保存でサーバーから消えた後も手元の 1 が残り、次の保存で書き戻される */
-    if(json.cfg&&typeof json.cfg==='object'&&D.cfg&&!Object.prototype.hasOwnProperty.call(json.cfg,'dayOnlyOn'))delete D.cfg.dayOnlyOn;
+    if(_dcKeepOn)D.cfg.dayOnlyOn=_dcKeepOn.v;
+    else if(json.cfg&&typeof json.cfg==='object'&&D.cfg&&!Object.prototype.hasOwnProperty.call(json.cfg,'dayOnlyOn'))delete D.cfg.dayOnlyOn;
     try{renderPadCard()}catch(e){}   // 品目がほかの端末で変わっていれば入力欄に映す
     /* 旧版の端末が「設定を保存」すると Config が書き直され、品目（padKinds）がサーバーから消える（旧版は品目を送らない）。
        サーバーの設定に品目が無く、この端末が品目を持っていれば、サーバーの値（いま重ねた後の D.cfg）＋手元の品目で書き戻す。
@@ -9119,6 +9123,18 @@ function hbDcBack(ev){
    古い画面の端末が残っていると、加えた方がその端末の施設の一覧に出たり、その端末で直した時に印が消えたりするため */
 var DC_ADD_OFF_MSG='加えるには、事務所の端末の設定（入居者管理）で「デイだけの方を加えられるようにする」を入れてください';
 function hbDcAddEnabled(){return !!(D&&D.cfg&&Number(D.cfg.dayOnlyOn)===1)}
+/* 切り替えたばかりか: 切り替えから2分以内、または送る設定（saveCfg）が送信待ち・送信中・未送信の控えに残っている間 */
+var _dcCfgSetAt=0,DC_CFG_FRESH_MS=120000;
+function hbDcCfgFresh(){
+  if(!(_dcCfgSetAt>0))return false;
+  if(Date.now()-_dcCfgSetAt<DC_CFG_FRESH_MS)return true;
+  try{
+    if((_writeQ||[]).some(function(q){return q&&q.action==='saveCfg'}))return true;
+    if(_wqCurrent&&_wqCurrent.action==='saveCfg')return true;
+    if((loadPendingQueue()||[]).some(function(q){return q&&q.action==='saveCfg'}))return true;
+  }catch(e){}
+  return false;
+}
 async function hbDcAddToggle(cb){
   if(!cb)return;
   var on=!!cb.checked;
@@ -9129,6 +9145,7 @@ async function hbDcAddToggle(cb){
   }
   /* 消すのではなく 0 を書く: 同期は手元の設定にサーバーの設定を重ねるだけなので、キーを消してもほかの端末の 1 が残る */
   D.cfg=Object.assign({},D.cfg||{},{dayOnlyOn:on?1:0});
+  _dcCfgSetAt=Date.now();   // しばらくは同期の古い応答で書き換えない（hbDcCfgFresh）
   cb.checked=on;   // 確かめている間に設定の画面が描き直されても、書いた値に合わせる
   save();apiPush('saveCfg',{cfg:cfgSendPayload()});
   showToast(on?'✅ デイだけの方を加えられるようにしました':'デイだけの方を加える操作を止めました（加えた方はそのまま）');
@@ -9204,6 +9221,27 @@ function hbDcMissRender(){
 }
 /* 〔デイの記録に加える〕。確かめの小窓に氏名・ふりがな・居室を出し（取り違え防止）、押した後にもう一度二重を確かめてから書く。
    保存は今の入居者の保存と同じ送信（saveRes）。足す行は名簿からの新規の取り込み（mergeCommonResidents）と同じ作り＋cfg.dayOnly */
+/* デイから加える方の id（純関数に近い・時刻と乱数だけを使う）。手元（residents）とサーバー（srvIds）の id と重ならない数。
+   13桁（ミリ秒の時刻＋5桁までの乱数）＝スプレッドシートの数（15桁まで正確）と JS の整数（安全な範囲）に収まる。
+   ぶつかる見込み: 2台が同じミリ秒の近くで、同じ乱数を引いた時だけ。重なれば引き直す */
+function hbDcNewId(residents,srvIds){
+  var used={};(residents||[]).forEach(function(r){var n=toNum(r&&r.id);if(n!==null)used[n]=1});
+  srvIds=srvIds||{};
+  for(var i=0;i<50;i++){
+    var id=Date.now()+Math.floor(Math.random()*100000);
+    if(Number.isSafeInteger(id)&&id<1e14&&!used[id]&&!srvIds[id])return id;
+  }
+  return null;
+}
+/* サーバーの入居者に、加えようとしている方（同じ氏名・同じ居室の在籍の方、または同じ masterId）が既にいるか */
+function hbDcSrvDup(srvRes,x){
+  var nx=_normNameX(x&&x.name),rk=_hbDcRoomKey(x&&x.room);
+  return (srvRes||[]).some(function(z){
+    if(!z||z.active===false||z.active==='FALSE')return false;
+    if(z.masterId!=null&&z.masterId!==''&&String(z.masterId)===String(x.mid))return true;
+    return !!nx&&_normNameX(z.name)===nx&&_hbDcRoomKey(z.room)===rk;
+  });
+}
 var _dcAddBusy=false;
 async function hbDcAdd(mid){
   if(_dcAddBusy){showToast('サーバーと照らし合わせています。少し待ってください');return}
@@ -9231,10 +9269,27 @@ async function hbDcAdd(mid){
     if(!ok)return;
     var y=hbDcMissFind(mid);   // 確かめている間に同期で変わっていないか、もう一度（二重に足さない）
     if(!y||y.act!==x.act||String(y.rid)!==String(x.rid)){showToast('⚠️ 状態が変わったため加えませんでした。一覧を見直してください');hbDcMissRender();return}
+    /* 押した直後にサーバーの入居者を読み直す（親の検収 重1(b)）。確かめの小窓を開いている間に、ほかの端末が同じ方を加えていれば足さない。
+       あわせてサーバーにある id を集め、新しい id がぶつからないようにする。読めなければ足さない */
+    var srvIds={};
+    if(apiUrl){
+      var sv=null;
+      try{ldShow('サーバーと照らし合わせています...');sv=await apiGet({since:Date.now(),heal:false})}catch(e){sv=null}finally{try{ldHide()}catch(e){}}
+      if(!sv||sv.error||!Array.isArray(sv.residents)){showToast('⚠️ サーバーと照らし合わせられませんでした。電波を確かめてから、もう一度押してください');return}
+      var dup=hbDcSrvDup(sv.residents,y);
+      sv.residents.forEach(function(z){var n=toNum(z&&z.id);if(n!==null)srvIds[n]=1});
+      if(dup){showToast('⚠️ ほかの端末でこの方が加えられました。〔更新〕で読み直してください');hbDcMissRender();return}
+    }
     var idx=_linkIdx(),c=idx&&idx.byMid?idx.byMid[String(mid)]:null;if(!c||y.act!=='add')return;
     var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
-    var r={id:nextResId(),name:c.name||'',room:c.room,gender:g,yomi:c.kana||'',careLevel:c.careLevel||'',
+    /* id は「手元の最大値＋1」（nextResId）を使わない（親の検収 重1(a)）。デイのタブレット2台が同じ手元の状態から加えると
+       同じ id になり、GAS の saveRes（id で行を探して丸ごと書き直す）で別人の行に上書きされ、記録が別人に付け替わる。
+       時刻と乱数から作り、手元にもサーバーにも無いことを確かめる */
+    var nid=hbDcNewId(D.residents,srvIds);
+    if(nid===null){showToast('⚠️ 新しい番号を決められませんでした。もう一度押してください');return}
+    var r={id:nid,name:c.name||'',room:c.room,gender:g,yomi:c.kana||'',careLevel:c.careLevel||'',
        active:true,masterId:c.masterId,_fromMaster:true,cfg:{dayOnly:true}};
+    try{_bumpResIdHw(nid)}catch(e){}
     if(Object.prototype.hasOwnProperty.call(c,'hospitalized'))r.masterHosp=!!c.hospitalized;
     D.residents.push(r);
     save();apiPush('saveRes',{resident:r});

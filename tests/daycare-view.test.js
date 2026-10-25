@@ -474,8 +474,9 @@ const DO_FNS = DC_FNS.concat(['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcAd
 const NAMEX_DECL = (() => { const i = SRC.indexOf('var _NAMEX_MAP='); const o = SRC.indexOf('{', i); return SRC.slice(i, matchBrace(SRC, o) + 1) + ';'; })();
 function boxDO(opts) {
   const b = box(opts);
-  Object.assign(b, { apiUrl: opts && opts.apiUrl || '', _getLastSyncTs: () => (opts && opts.lastSync != null ? opts.lastSync : 1), ldShow() {}, ldHide() {}, syncFromAPI: async () => (opts && opts.onSync ? opts.onSync(b) : true) });
-  vm.runInContext([NAMEX_DECL, X.varDecl('_dcAddBusy'), X.varDecl('DC_ADD_OFF_MSG'), ['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcAddEnabled', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcAdd'].map((n) => X.fn(n)).join('\n')].join('\n'), b);
+  Object.assign(b, { apiUrl: opts && opts.apiUrl || '', _getLastSyncTs: () => (opts && opts.lastSync != null ? opts.lastSync : 1), ldShow() {}, ldHide() {}, syncFromAPI: async () => (opts && opts.onSync ? opts.onSync(b) : true),
+    apiGet: async () => (opts && opts.onGet ? opts.onGet(b) : { residents: [] }), _bumpResIdHw() {} });
+  vm.runInContext([NAMEX_DECL, X.varDecl('_dcAddBusy'), X.varDecl('DC_ADD_OFF_MSG'), ['toNum', '_normName', '_normNameX', '_hbDcRoomKey', 'hbDcAddEnabled', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcNewId', 'hbDcSrvDup', 'hbDcAdd'].map((n) => X.fn(n)).join('\n')].join('\n'), b);
   if (!(opts && opts.addOff)) b.D.cfg = { dayOnlyOn: 1 };
   return b;
 }
@@ -718,14 +719,24 @@ head('22b 設定の切り替え「デイだけの方を加えられるように�
   // 確認の反証 中1: サーバーの設定に dayOnlyOn が無ければ手元も消す（取り込みの1行を動かす）
   {
     const sync = X.fn('syncFromAPI');
-    const i = sync.indexOf("    D.cfg=json.cfg?Object.assign");
+    const i = sync.indexOf("    var _dcKeepOn=");
     const j = sync.indexOf("delete D.cfg.dayOnlyOn;", i);
     ok(i > 0 && j > i, '同期の取り込みに dayOnlyOn の消し方がある');
     const code = sync.slice(i, j + 'delete D.cfg.dayOnlyOn;'.length);
-    const run2 = (local, server) => { const sb = { D: { cfg: local }, json: { cfg: server } }; vm.createContext(sb); vm.runInContext(code, sb); return sb.D.cfg; };
+    const run2 = (local, server, fresh) => { const sb = { D: { cfg: local }, json: { cfg: server }, hbDcCfgFresh: () => !!fresh }; vm.createContext(sb); vm.runInContext(code, sb); return sb.D.cfg; };
     ok(run2({ urineWarnH: 6, dayOnlyOn: 1 }, { urineWarnH: 6 }).dayOnlyOn === undefined, 'サーバーに無い（旧い画面の保存で消えた）→ 手元の 1 も消す＝切');
     ok(run2({ dayOnlyOn: 1 }, { dayOnlyOn: 0 }).dayOnlyOn === 0 && run2({}, { dayOnlyOn: 1 }).dayOnlyOn === 1, 'サーバーの 0・1 はそのまま手元へ');
     ok(JSON.stringify(run2({ urineWarnH: 6, padKinds: 'a' }, { urineWarnH: 7 })) === JSON.stringify({ urineWarnH: 7, padKinds: 'a' }), 'dayOnlyOn を持たない端末の設定の重ね方は今までどおり');
+    ok(run2({ dayOnlyOn: 1 }, { urineWarnH: 6 }, true).dayOnlyOn === 1 && run2({ dayOnlyOn: 0 }, { dayOnlyOn: 1 }, true).dayOnlyOn === 0, '切り替えたばかりの間は、同期の古い応答（無い・逆の値）で手元の値を書き換えない（親の検収 軽3）');
+    // hbDcCfgFresh
+    const fb = { console, Date, _writeQ: [], _wqCurrent: null, loadPendingQueue: () => fb.pq || [] };
+    vm.createContext(fb); vm.runInContext([X.varDecl('_dcCfgSetAt'), X.fn('hbDcCfgFresh')].join('\n'), fb);
+    const fresh = () => fb.hbDcCfgFresh();
+    ok(fresh() === false, '切り替えていなければ「切り替えたばかり」ではない');
+    vm.runInContext('_dcCfgSetAt=Date.now()-1000', fb); ok(fresh() === true, '切り替えから2分以内は「切り替えたばかり」');
+    vm.runInContext('_dcCfgSetAt=Date.now()-300000', fb); ok(fresh() === false, '2分を過ぎて送り終えていれば、サーバーが正本に戻る');
+    fb.pq = [{ action: 'saveCfg' }]; ok(fresh() === true, '2分を過ぎても、設定の送信が未送信の控えに残っている間は「切り替えたばかり」');
+    fb.pq = []; vm.runInContext('_writeQ=[{action:"saveCfg"}]', fb); ok(fresh() === true, '送信待ちの間も同じ');
   }
   // hbDcAddToggle
   async function tog(on, yes, field) {
@@ -759,7 +770,7 @@ const asyncTests = (async () => {
   };
   let b = mk({ confirmYes: true });
   await b.hbDcAdd('m6');
-  const nr = b.D.residents.find((r) => r.id === 77);
+  const nr = b.D.residents.find((r) => r.masterId === 'm6');
   ok(!!nr && nr.name === '架空六' && nr.yomi === 'カクウロク' && nr.room === '106' && nr.gender === '女性' && nr.careLevel === '要介護1' && nr.active === true && nr.masterId === 'm6' && nr._fromMaster === true && JSON.stringify(nr.cfg) === JSON.stringify({ dayOnly: true }) && nr.masterHosp === false && nr.targetExcretion === undefined, '加える: 名簿からの新規の取り込みと同じ作り＋cfg.dayOnly だけ（targetExcretion・加えた時刻は付けない）', nr);
   ok(b.pushes.length === 1 && b.pushes[0][0] === 'saveRes' && b.pushes[0][1].resident.cfg.dayOnly === true && b.calls.rerender === 1, '保存は今の入居者の保存と同じ送信（saveRes）を1回・描き直す');
   ok(/氏名: 架空六（カクウロク）/.test(b.calls.confirm[0]) && /居室: 106号室/.test(b.calls.confirm[0]) && /施設の一覧・時系列・帳票には出ません/.test(b.calls.confirm[0]), '確かめの小窓に氏名・ふりがな・居室を出す（取り違え防止）', b.calls.confirm[0]);
@@ -809,6 +820,38 @@ const asyncTests = (async () => {
   b = mk({ confirmYes: true, apiUrl: 'https://x', onSync: async (bb) => { await bb.hbDcAdd('m6'); return true; } });
   await b.hbDcAdd('m6');
   ok(b.pushes.length === 1 && /照らし合わせています/.test(b.calls.toast.join()), '照らし合わせの間にもう一度押したら「照らし合わせています」と出す（二重にしない）');
+  // 親の検収 重1: id のぶつかり
+  {
+    const ids = [];
+    for (const rnd of [0.1, 0.2, 0.3]) {
+      const bb = mk({ confirmYes: true, apiUrl: 'https://x' });
+      vm.runInContext('__T=1761300000000;Math.random=function(){return ' + rnd + '}', bb);
+      await bb.hbDcAdd('m6');
+      ids.push(bb.D.residents.find((r) => r.masterId === 'm6').id);
+    }
+    ok(new Set(ids).size === 3 && ids.every((x) => Number.isSafeInteger(x) && x < 1e14 && x > 1e12), '2台が同じ手元の状態から加えても、乱数が違えば id が重ならない（手元の最大値＋1 を使わない・13桁）', ids);
+    ok(ids.every((x) => x !== 77), 'nextResId（手元の最大値＋1）は使わない');
+    const nb = boxDO({}); vm.runInContext('__T=1761300000000;Math.random=function(){return 0.5}', nb);
+    const want = 1761300000000 + 50000;
+    ok(nb.hbDcNewId([{ id: 1 }], {}) === want && nb.hbDcNewId([{ id: want }], {}) === null && nb.hbDcNewId([], { [want]: 1 }) === null, '手元・サーバーにある id は使わない（同じ数しか引けなければ決めない）');
+    let k = 0; vm.runInContext('Math.random=function(){return [0.5,0.6][Math.min(' + 'globalThis.__k++,1)]}', Object.assign(nb, { __k: 0 }));
+    const id2 = nb.hbDcNewId([{ id: want }], {});
+    ok(id2 === 1761300000000 + 60000, 'ぶつかったら引き直す', id2);
+  }
+  // 親の検収 重1(b): 押した直後のサーバーの読み直し
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: 999, name: '架空六', room: '106号室', active: true }] }) });
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 0 && b.D.residents.every((r) => r.masterId !== 'm6') && /ほかの端末でこの方が加えられました/.test(b.calls.toast.join()), 'サーバーに同じ氏名・同じ居室の在籍の方がいれば足さない（確かめの小窓の間にほかの端末が加えた）');
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: 999, name: '架空六', room: '106', active: false }] }) });
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 1, 'サーバーの同じ氏名・居室の方が退去なら妨げない');
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => null });
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 0 && /照らし合わせられませんでした/.test(b.calls.toast.join()), 'サーバーを読み直せなければ足さない');
+  b = mk({ confirmYes: true, apiUrl: 'https://x', onGet: () => ({ residents: [{ id: 1761300000000 + 50000, name: '架空別', room: '999', active: true }] }) });
+  vm.runInContext('__T=1761300000000;Math.random=(function(){var a=[0.5,0.7],i=0;return function(){return a[Math.min(i++,1)]}})()', b);
+  await b.hbDcAdd('m6');
+  ok(b.D.residents.find((r) => r.masterId === 'm6').id === 1761300000000 + 70000, 'サーバーにある id とはぶつけない（引き直す）');
   // 小窓の中身（hbDcMissRender を動かす）
   b = boxDO({ store: { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m6', 'm99', '<x>'] }) }, residents: [] });
   b.els.mDcMissList = { innerHTML: '', addEventListener() {} }; b._linkIdx = () => idx; b.hbDcInit(); b.hbDcMissRender();
