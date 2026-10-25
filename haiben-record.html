@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-bSPHN/brVgV1El2ByBdcWMDLuQkhX7H+cbatRgLreDQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-sALohyShzQEUqtqPF5xUtSrg+XjzHoDe5pBEECcQF2s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -1439,6 +1439,8 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
     </div>
     <div id="linkAuditSum" style="font-size: 0.78125rem;color:var(--g7);line-height:1.7"></div>
     <div id="linkAuditList" style="margin-top:8px"></div>
+    <!-- サーバーへ送れなかった入居者（2026-10-25・入居者番号の混線の直し）。人が判断して〔確認した〕で消す -->
+    <div id="resSendIssues" style="margin-top:8px"></div>
     <div id="linkAuditActs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
   </div>
   <div class="cd">
@@ -2724,7 +2726,17 @@ async function syncFromAPI(showLoader,opts){
     // APIを先に入れる（勝者）
     apiRes.forEach(function(r){if(r&&r.id!=null){var k=toNum(r.id);if(k!==null&&!seenResId[k]){
       var lr=localResById[k];
-      if(lr){
+      /* 番号のぶつかり（2026-10-25・入居者番号の混線の直し）: 取り込んだだけで一度もサーバーに無かった手元の行と、同じ番号の別の方がサーバーにいる。
+         サーバーの行が勝つのは今までどおり（手元の方はこの端末から見えなくなる）。点検に出して人の判断に回す（記録の付け替えはしない）。
+         ★引き継ぎ（予定・入院歴・cfg・おむつ・紐づけ）より先に見る。ぶつかった時は手元の方の値をサーバーの別の方の行へ写さない（確認の反証 2） */
+      var _coll=!!(lr&&lr._fromMaster===true&&!lr._srvSeen&&typeof hbResCollides==='function'&&hbResCollides(lr,r));
+      if(_coll){
+        if(typeof _locSched==='object'&&_locSched)delete _locSched[k];   // 予定の移行で手元の方の予定を足さない
+        if(lr.masterId!=null&&lr.masterId!=='')_linkDropN++;   // 氏名が違うので紐づけを引き継がなかった（今までと同じ数え方）
+        /* この番号の送信待ち（予定・おむつ・登録内容）は手元の方のもの＝サーバーの別の方の行へ書かないよう外す（反証 H1） */
+        var _dropN=(typeof hbResPurgeQueued==='function')?hbResPurgeQueued(lr.id):0;
+        if(typeof hbResIssueAdd==='function')hbResIssueAdd('idTaken',lr,{dropped:_dropN});
+      }else if(lr){
         clientOnly.forEach(function(f){if(r[f]==null&&lr[f]!=null)r[f]=lr[f]});
         if(typeof padSetMerge==='function'){var _psSrvHas=!!r.padSet,_psm=padSetMerge(r.padSet,lr.padSet,padSetPending(k));if(_psm)r.padSet=_psm;else delete r.padSet;if(_psm&&!_psSrvHas)_psHealList.push(r)}
         if(_normNameX(r.name)===_normNameX(lr.name)){
@@ -2733,6 +2745,9 @@ async function syncFromAPI(showLoader,opts){
           _linkDropN++;   // 氏名が違うので紐づけを引き継がなかった（点検パネルに件数で出す）
         }
       }
+      /* サーバーにある行の印（2026-10-25）。端末の中だけの値（GAS は列の無い値を書かない）。サーバーから消えた行（削除）を送り直して生き返らせないため、
+         「一度でもサーバーにあった行」を見分ける（hbResNeedsSend） */
+      r._srvSeen=true;
       mergedRes.push(r);seenResId[k]=true}}});
     // ローカルのみのID（未送信・サンプルデータ以外）を追加
     localRes.forEach(function(r){if(r&&r.id!=null&&!r._seed){var k=toNum(r.id);if(k!==null&&!seenResId[k]){mergedRes.push(r);seenResId[k]=true}}});
@@ -2866,6 +2881,8 @@ async function syncFromAPI(showLoader,opts){
     // 職員リストの同期は「職員タブ → 全員を受信」または UI 操作（追加/編集/削除）時のみ。
     // 入居者マスタの共通情報を同期後にも反映（master を正として居室等を更新）
     if(typeof mergeCommonResidents==='function')mergeCommonResidents();
+    /* 取り込んだ入居者をサーバーへ送る（2026-10-25・入居者番号の混線の直し）。候補の作成と、端末の中だけの既存の行の送信 */
+    if(typeof hbResHealSoon==='function')hbResHealSoon();
     // 入居者マスタ名簿をサーバー経由でも更新（非同期・await しない＝記録同期の完了を待たせない。
     // 失敗しても false を返すだけで、ここまでの同期結果には影響しない）
     if(typeof syncMasterRoster==='function')syncMasterRoster();
@@ -3194,6 +3211,9 @@ function flushPendingQueue(done){
       if(_drained&&q.length>0)showToast('✅ 未送信データを同期しました');
       _pqFlushing=false;_fin(_drained);return}
     var item=q[i++];
+    /* 取り込んだだけの入居者に向けた送信は待たせる・番号のぶつかりが分かった送信は捨てる（2026-10-25・反証 H1。_writeDrain と同じ） */
+    if(typeof hbResDropItem==='function'&&hbResDropItem(item)){next();return}
+    if(typeof hbResHoldItem==='function'&&hbResHoldItem(item)){remain.push(item);next();return}
     apiPost(item.action,item.data||{})
       .then(function(r){
         /* 既にキューへ入っている setMasterState も、旧GASに当たったら残さず捨てる
@@ -3221,6 +3241,10 @@ function _writeDrain(){
   if(_writeSending)return;
   var item=_writeQ.shift();
   if(!item){ _wqCurrent=null; _wqPersist(); flushPendingQueue(); return; } // キューが空いたら未送信分を再送
+  /* 取り込んだだけで一度もサーバーで確かめていない入居者に向けた送信は、照らし合わせで送るまで未送信の控えで待たせる（2026-10-25・反証 H1）。
+     その番号のサーバーの行が別の方だった時に、予定・おむつ・入居者の中身を別の方の行へ書かないため。番号のぶつかりが分かった送信は捨てる */
+  if(typeof hbResDropItem==='function'&&hbResDropItem(item)){ _wqPersist(); _writeDrain(); return; }
+  if(typeof hbResHoldItem==='function'&&(hbResHoldItem(item)||hbResKeepOrder(item))){ enqueuePending(item.action,item.data); _wqPersist(); _writeDrain(); return; }
   _writeSending=true;
   _wqCurrent=item; _wqPersist();   // 送信中の1件も永続側に残す（途中でタブが消えても回収できる）
   apiSetStatus('sy');
@@ -3507,7 +3531,8 @@ function cleanData(){
      若い id とぶつかる（＝紐づけが別人へ移る混線の再発経路）。
      個人情報の保全という消去の趣旨を損なわずに、衝突だけを防ぐための例外。 */
 var RES_ID_HW_KEY='hbcr_res_id_hw';
-function _resIdHw(){try{var v=Number(localStorage.getItem(RES_ID_HW_KEY)||0);return(isFinite(v)&&v>0)?v:0}catch(e){return 0}}
+/* 高水位がデイ・取り込みの専用の幅の値（旧い画面が入れた値）なら数えない（反証 H2）。数えると、幅の値を超えて進めず nextResId が毎回同じ番号を返す */
+function _resIdHw(){try{var v=Number(localStorage.getItem(RES_ID_HW_KEY)||0);if(typeof _isDcId==='function'&&_isDcId(v))return 0;return(isFinite(v)&&v>0)?v:0}catch(e){return 0}}
 /* デイから加える方の id の幅（2026-10-25・親の検収 重1の直しの追加の反証）。施設の連番（nextResId）と高水位には数えない。
    数えると、デイの id が1件でも届いた端末から、施設で足す方の id まで大きな数になる（施設の端末の動きが変わる）。
    32ビットの整数に収まる幅（ほかのアプリが整数の列で受けても溢れない） */
@@ -4301,6 +4326,7 @@ function mergeCommonResidents(srcList, opts){
     listNameCnt[nx]=(listNameCnt[nx]||0)+1;
   });
   var changed=0;
+  var _resQueued=false;    // 取り込みの候補に置いた方がいるか（同期の後の照らし合わせを呼ぶ）
   var _leftN=0,_backN=0;   // C5 鏡映の件数（トーストは最後に1回だけ出す）
   var _freezeN=0;          // 誤リンクを検出して適用を見送った件数
   list.forEach(function(c){
@@ -4379,6 +4405,15 @@ function mergeCommonResidents(srcList, opts){
       if(opts.noAdd)return;   // サーバー由来の名簿は対象アプリ情報を持たないため新規追加はしない（既存者の更新のみ）
       if(tExc===false)return; // 排泄対象外の master 入居者は当アプリに取り込まない
       if(!c.room)return;      // 居室なしは isValidRes で除外されるため取り込まない
+      /* 接続先のある端末では、ここでは作らずに「取り込みの候補」に置く（2026-10-25・入居者番号の混線の直し）。
+         同期の後の照らし合わせ（hbResHeal）がサーバーを読み直してから作り、すぐサーバーへ送る。
+         ここで nextResId（手元の最大＋1）で作って送らずにいると、2台が別の方に同じ番号を付け、記録が別の方に混ざっていた。
+         接続先の無い端末は今までどおり（下でその場で作る） */
+      if(typeof apiUrl==='string'&&apiUrl&&typeof _resImportQ==='object'&&_resImportQ){
+        if(typeof hbResTombHas==='function'&&hbResTombHas(c.masterId))return;   // 排泄ケア記録で削除した方は取り込み直さない（反証 M4）
+        _resImportQ[String(c.masterId)]={c:c,tExc:tExc,hosp:(Object.prototype.hasOwnProperty.call(c,'hospitalized')&&!_hospStale)?!!c.hospitalized:undefined};
+        _resQueued=true;return;
+      }
       var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
       var nr={id:nextResId(),name:c.name||'',room:c.room,gender:g,
         yomi:c.kana||'',careLevel:c.careLevel||'',active:true,masterId:c.masterId,_fromMaster:true,
@@ -4393,6 +4428,7 @@ function mergeCommonResidents(srcList, opts){
      0 件になったら点検パネルの警告も自動で消える＝直ったことが画面で分かる。 */
   _linkFreezeN=_freezeN;
   _invalidateLinkIdx();   // 名簿・紐づけが動いた可能性があるので判定索引を作り直させる
+  if(_resQueued&&typeof hbResHealSoon==='function')hbResHealSoon();   // 候補はサーバーを読み直してから作る
   if(changed){_recIdx=null;save();}
   // 在籍状態を自動で切り替えたことは黙って行わず、1回のトーストでまとめて知らせる（氏名は出さない）
   if((_leftN||_backN)&&typeof showToast==='function'){
@@ -4402,6 +4438,250 @@ function mergeCommonResidents(srcList, opts){
     try{showToast('🔄 入居者マスタに合わせて'+_msg.join('・')+'を反映しました（記録は保持されています）')}catch(e){}
   }
   return changed>0;
+}
+
+/* ══════════ 取り込んだ入居者をサーバーへ送る（2026-10-25・入居者番号の混線の直し・代表者「推奨どおり」案A） ══════════
+   なぜ: 入居者マスタの名簿から取り込んだ入居者は、端末ごとの nextResId（手元の最大＋1）で番号を付け、サーバーへ送っていなかった。
+     その方の記録は番号のままサーバーへ届くので、2台が別の方に同じ番号を付けると記録が別の方に混ざり、
+     番号の行が無い端末（現場のタブレット）では記録が見えなかった。予定（saveSched）も「resident not found」で送り直しを繰り返した。
+   何をする（同期の後・GAS は変えない）:
+     1. 新しく取り込む方（mergeCommonResidents が候補に置いた方）: サーバーの入居者を読み直し、同じ氏名の在籍の方がいれば作らない
+        （次の同期で届き、名簿の氏名での結び付けが結ぶ）。いなければ専用の幅（10億〜20億・nextResId と高水位に数えない）の乱数で番号を付けて作り、すぐ saveRes で送る
+     2. 端末の中だけにある既存の行（取り込んだ印あり・一度もサーバーに無い・入居者マスタで今も在籍で排泄の対象の方）:
+        サーバーに同じ番号の別の方がいる・同じ氏名の在籍の方が別の番号でいる時は送らずに点検に出す。それ以外は番号のまま saveRes で送る
+   ★記録の付け替えはしない。★一度サーバーにあった行（その後サーバーで消された行）は送り直さない（削除を生き返らせない）
+   ★接続先の無い端末では動かない（今までどおり） */
+var _resImportQ={},_resHealBusy=false,_resHealSent={},_resHealTimer=0;
+var _resHealChecked={};   // 照らし合わせて送らなかった行（dupName）の番号 → その時の氏名（この画面の間だけ・氏名が変われば照らし合わせ直す）
+var _resHealFirst={};     // 照らし合わせが送る saveRes（待たせた送信より先に出す・一度きり）
+var RES_HEAL_EXISTING=true;   // 2. を行うか（親の確かめの結果で既存の行の扱いを変える時に、1. と分けて止められるようにしてある）
+function hbResHealSoon(){
+  if(_resHealTimer||typeof setTimeout!=='function')return;
+  _resHealTimer=setTimeout(function(){_resHealTimer=0;try{hbResHeal()}catch(e){console.warn('[hbcr] 入居者の送信をスキップ:',e)}},500);
+}
+/* 入居者マスタの共有名簿（su_residents_common）で、今も在籍・排泄の対象の方の masterId の集まり。名簿が無い・読めなければ null（判断しない） */
+function hbMasterTargetSet(){
+  try{
+    var raw=localStorage.getItem(SU_COMMON_KEY);if(!raw)return null;
+    var d=JSON.parse(raw);if(!d||!Array.isArray(d.residents))return null;
+    var s={};
+    d.residents.forEach(function(c){
+      if(!c||c.masterId==null||c.masterId===''||c.active===false)return;
+      if(Array.isArray(c.targetApps)&&c.targetApps.indexOf('excretion')<0)return;
+      s[String(c.masterId)]=1;
+    });
+    return s;
+  }catch(e){return null}
+}
+/* 送るべき既存の行か: 取り込んだ印あり・一度もサーバーに無い・氏名あり・デイだけの方でない・この画面でまだ送っていない・
+   番号のぶつかりの点検に出していない・この画面で同じ氏名のまま照らし合わせて送らなかった行でない（同じ氏名の方がサーバーにいた＝dupName）・削除の印が無い。
+   在籍・非表示・居室・名簿の対象かは問わない（確認の反証 1: 待たせた送信が解けずに残らないよう、待たせる行と送る行を揃える。旧版も編集のたびに saveRes を送っていた） */
+function hbResNeedsSend(r){
+  return !!(r&&isUserRes(r)&&!r._seed&&r._fromMaster===true&&!r._srvSeen&&r.name&&!(typeof hbIsDayOnly==='function'&&hbIsDayOnly(r))&&
+    !_resHealSent[String(r.id)]&&_resHealChecked[String(r.id)]!==_normNameX(r.name)&&!hbResIssueHasId(r.id,'idTaken')&&!hbResTombHas(r.masterId));
+}
+/* 同じ番号の手元の行（取り込んだだけ）とサーバーの行が別の方か。氏名（_normNameX）が違えば真。
+   取り込みの印（_fromMaster）は同期でサーバーの行に置き換わると消える（引き継がない）。印が残る行は、どの同期でもサーバーに無かった行なので、
+   同じ番号のサーバーの行は、よその端末が別の方に振った番号と見てよい。例外は「この端末の送信が届いた後、次の同期までに、よその端末が名前を直した」時だけ
+   （その時も外すのは送信待ちだけで、別の方へは書かない）。名簿の有無には頼らない（名簿から外れた方でも、別の方の行へ書かないため・反証 H1）。
+   masterId の比べは、サーバーの Residents に masterId の列ができた時のため（今は返らないので働かない） */
+function hbResCollides(lr,srvRow){
+  if(!lr||!srvRow)return false;
+  var a=_normNameX(lr.name),b=_normNameX(srvRow.name);
+  if(!a||!b||a===b)return false;
+  if(srvRow.masterId!=null&&srvRow.masterId!==''&&lr.masterId!=null&&lr.masterId!==''&&String(srvRow.masterId)===String(lr.masterId))return false;
+  return true;
+}
+/* 照らし合わせの段取り（純関数）。srv: サーバーの入居者（読み直した生の応答）／local: 送る候補の既存の行／cands: 新しく取り込む候補／residents: 手元の入居者／
+   nameCount: 入居者マスタの名簿の氏名ごとの在籍の人数（同姓同名を見分ける・無ければ判断しない）
+   → send: 送る行／create: 作る候補／issues: 点検に出すもの [{kind:'idTaken'|'dupName'|'notMade', r}] */
+function hbResPlan(srv,local,cands,residents,nameCount){
+  var byId={},byName={};
+  (srv||[]).forEach(function(z){
+    if(!z)return;
+    var id=toNum(z.id);if(id!==null)byId[id]=z;
+    var act=!(z.active===false||z.active==='FALSE');
+    var nx=_normNameX(z.name);if(act&&nx)(byName[nx]=byName[nx]||[]).push(z);
+  });
+  var out={send:[],create:[],issues:[]};
+  (local||[]).forEach(function(r){
+    var id=toNum(r.id),nx=_normNameX(r.name),z=(id!==null)?byId[id]:null;
+    if(z){if(hbResCollides(r,z))out.issues.push({kind:'idTaken',r:r});return}   // 同じ番号で同じ方（名前の直しを含む）なら、もう載っている
+    if((byName[nx]||[]).some(function(w){return toNum(w.id)!==id})){out.issues.push({kind:'dupName',r:r});return}   // 送ると同じ方の2行目になる
+    out.send.push(r);
+  });
+  (cands||[]).forEach(function(q){
+    var c=q&&q.c;if(!c||c.masterId==null)return;
+    var mid=String(c.masterId),nx=_normNameX(c.name);
+    if((residents||[]).some(function(r){return r&&r.masterId!=null&&String(r.masterId)===mid}))return;   // もう結ばれている
+    var srvSame=!!(nx&&byName[nx]&&byName[nx].length);
+    var locSame=(residents||[]).filter(function(r){return r&&isUserRes(r)&&r.active!==false&&nx&&_normNameX(r.name)===nx});
+    if(srvSame||locSame.length){
+      /* 同じ氏名の在籍の方がいる＝作らない。名簿に同じ氏名が2人以上いる・手元の同じ氏名の行が別の方と結ばれている時は、
+         結び付けもされないので黙って作らないままになる＝点検に出す（反証 M3）。それ以外は次の同期で届き、名簿の氏名での結び付けが結ぶ */
+      var amb=(nameCount&&nx&&(nameCount[nx]||0)>1)||locSame.some(function(r){return r.masterId!=null&&r.masterId!==''&&String(r.masterId)!==mid});
+      if(amb)out.issues.push({kind:'notMade',r:{id:'',masterId:c.masterId,name:c.name,room:c.room}});
+      return;
+    }
+    out.create.push(q);
+  });
+  return out;
+}
+/* 取り込む方の番号（反証 M5）。masterId から決まる専用の幅の数にする＝2台がほぼ同時に同じ方を取り込んでも同じ番号になり、saveRes の上書きで1行にまとまる。
+   その数が手元かサーバーで別の行に使われていれば、乱数（hbDcNewId）にする */
+function hbResIdFor(masterId,residents,srvIds){
+  var s=String(masterId),h=2166136261;
+  for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}
+  var id=DC_ID_MIN+(h%(DC_ID_MAX-DC_ID_MIN));
+  var used=(residents||[]).some(function(r){return r&&toNum(r.id)===id});
+  if(!used&&!(srvIds&&srvIds[id]))return id;
+  return hbDcNewId(residents,srvIds);
+}
+async function hbResHeal(){
+  if(_resHealBusy||typeof apiUrl!=='string'||!apiUrl||(typeof _locked!=='undefined'&&_locked))return;
+  var local=RES_HEAL_EXISTING?(D.residents||[]).filter(function(r){return hbResNeedsSend(r)}):[];
+  var cands=Object.keys(_resImportQ).map(function(k){return _resImportQ[k]}).filter(function(q){return q&&q.c&&!hbResIssueHasMid('notMade',q.c.masterId)});
+  if(!local.length&&!cands.length)return;
+  _resHealBusy=true;
+  try{
+    var sv=null;
+    try{sv=await apiGet({since:Date.now(),heal:false})}catch(e){sv=null}
+    if(!sv||sv.error||!Array.isArray(sv.residents))return;   // 読めなければ何もしない（候補は残し、次の同期でやり直す）
+    /* 待っている間に自動ロック・削除・同期が起きていれば、その後の状態で選び直す（反証 L1） */
+    if(typeof _locked!=='undefined'&&_locked)return;
+    local=local.filter(function(r){return D.residents.indexOf(r)>=0&&hbResNeedsSend(r)});
+    var idx=(typeof _linkIdx==='function')?_linkIdx():null;
+    var p=hbResPlan(sv.residents,local,cands,D.residents,idx&&idx.nameCount);
+    var srvIds={};sv.residents.forEach(function(z){var n=toNum(z&&z.id);if(n!==null)srvIds[n]=1});
+    var changed=0;
+    /* 送ったことにしてから送る（_writeDrain の待たせる決まり hbResHoldItem がこの送信を止めないように） */
+    p.send.forEach(function(r){_resHealSent[String(r.id)]=1;_resHealFirst[String(r.id)]=1;apiPush('saveRes',{resident:r})});
+    p.create.forEach(function(q){
+      var c=q.c,id=hbResIdFor(c.masterId,D.residents,srvIds);if(id===null)return;
+      var g=(c.gender==='男')?'男性':(c.gender==='女')?'女性':(c.gender||'');
+      var nr={id:id,name:c.name||'',room:c.room,gender:g,yomi:c.kana||'',careLevel:c.careLevel||'',active:true,masterId:c.masterId,_fromMaster:true,
+        targetExcretion:(q.tExc===undefined?true:q.tExc)};
+      if(typeof q.hosp==='boolean')nr.masterHosp=q.hosp;
+      D.residents.push(nr);srvIds[id]=1;changed++;
+      _resHealSent[String(id)]=1;_resHealFirst[String(id)]=1;apiPush('saveRes',{resident:nr});
+    });
+    /* 候補は今回で外す（作った・結ばれていた・サーバーに同じ氏名がいた、のどれでも）。まだ要る方は次の同期の突き合わせで置き直される */
+    cands.forEach(function(q){if(q&&q.c)delete _resImportQ[String(q.c.masterId)]});
+    /* 番号がぶつかった方の送信待ちは、別の方の行へ書かないよう外す（反証 H1）。外した数を点検に出す */
+    p.issues.forEach(function(x){
+      if(x.kind==='dupName'&&x.r&&x.r.id!=null)_resHealChecked[String(x.r.id)]=_normNameX(x.r.name);   // 同じ氏名のままなら、この画面では照らし合わせ直さない
+      var n=(x.kind==='idTaken')?hbResPurgeQueued(x.r.id):0;hbResIssueAdd(x.kind,x.r,{dropped:n});
+    });
+    if(changed){
+      _recIdx=null;try{_invalidateLinkIdx()}catch(e){}
+      save();try{buildResSel()}catch(e){}
+      var sc=document.querySelector('.scr.on');
+      try{if(sc&&sc.id==='sc-board')renderBoard();if(sc&&sc.id==='sc-tl')tlRenderKeepScroll()}catch(e){}
+    }
+    try{if(typeof renderLinkAudit==='function')renderLinkAudit()}catch(e){}
+  }finally{_resHealBusy=false}
+}
+/* ── 送れなかった入居者の控え・確認済み・削除の印（2026-10-25・反証 M1・M2・M4） ──
+   種類・番号・masterId・時刻だけを端末に残す（氏名は残さない＝自動ロックの消去でも消さない。DELREC_KEY と同じ扱い）。
+   画面に出す氏名・居室は、その時の手元の入居者か入居者マスタの名簿から引く */
+var RES_ISSUE_KEY='hbcr_res_issues',RES_TOMB_KEY='hbcr_res_tomb';
+function hbResIssueLoad(){
+  try{var d=JSON.parse(localStorage.getItem(RES_ISSUE_KEY)||'null');if(d&&Array.isArray(d.list)&&d.ack&&typeof d.ack==='object')return d}catch(e){}
+  return {list:[],ack:{}};
+}
+function hbResIssueSave(d){try{localStorage.setItem(RES_ISSUE_KEY,JSON.stringify(d))}catch(e){}}
+function hbResIssueKey(kind,id,mid){return kind+'|'+String(id==null?'':id)+'|'+String(mid==null?'':mid)}
+function hbResIssueAdd(kind,r,extra){
+  if(!r)return false;
+  var d=hbResIssueLoad(),key=hbResIssueKey(kind,r.id,r.masterId);
+  if(d.ack[key])return false;
+  var ex=d.list.find(function(x){return x&&x.key===key});
+  if(ex){if(extra&&extra.dropped){ex.dropped=(ex.dropped||0)+extra.dropped;hbResIssueSave(d)}return false}   // 同じ点検は二重に積まない（外した数だけ足す）
+  d.list.push({key:key,kind:kind,id:(r.id==null?'':r.id),masterId:(r.masterId==null?'':r.masterId),at:Date.now(),dropped:(extra&&extra.dropped)||0});
+  hbResIssueSave(d);
+  try{showToast('⚠️ 入居者の登録で確かめが要る方がいます。設定→マスタ連携の点検を見てください')}catch(e){}
+  return true;
+}
+/* その番号の点検（確認済みも含む）があるか。kind を渡せばその種類だけ */
+function hbResIssueHasId(id,kind){
+  if(id==null||id==='')return false;
+  var d=hbResIssueLoad(),k=String(id);
+  var hit=function(key){var p=String(key).split('|');return(kind?p[0]===kind:p[0]!=='notMade')&&p[1]===k};
+  return d.list.some(function(x){return x&&hit(x.key)})||Object.keys(d.ack).some(hit);
+}
+function hbResIssueHasMid(kind,mid){
+  if(mid==null||mid==='')return false;
+  var d=hbResIssueLoad(),m=String(mid);
+  var hit=function(key){var p=String(key).split('|');return p[0]===kind&&p[2]===m};
+  return d.list.some(function(x){return x&&hit(x.key)})||Object.keys(d.ack).some(hit);
+}
+function hbResIssueDismiss(key){
+  if(hbFieldDeny())return;
+  var d=hbResIssueLoad();
+  d.list=d.list.filter(function(x){return x&&x.key!==key});
+  d.ack[key]=1;   // 確認した印は残す（同じ点検を出し直さない・反証 M1）
+  hbResIssueSave(d);renderLinkAudit();
+}
+function hbResTombLoad(){try{var a=JSON.parse(localStorage.getItem(RES_TOMB_KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return[]}}
+function hbResTombAdd(mid){var a=hbResTombLoad(),m=String(mid);if(a.indexOf(m)<0){a.push(m);if(a.length>500)a=a.slice(-500);try{localStorage.setItem(RES_TOMB_KEY,JSON.stringify(a))}catch(e){}}}
+function hbResTombHas(mid){return mid!=null&&mid!==''&&hbResTombLoad().indexOf(String(mid))>=0}
+/* ── 送信の待たせ・捨て（反証 H1） ── */
+/* 番号のぶつかりが分かった番号 → 分かった時刻（それより前に積まれた未送信の控えは捨てる）。番号と時刻だけを端末に残す
+   （再送の途中で控えが書き戻され、そのまま再読み込みされても、別の方の行へ送らないため） */
+var RES_PURGED_KEY='hbcr_res_purged';
+var _resPurged=(function(){try{var o=JSON.parse(localStorage.getItem(RES_PURGED_KEY)||'null');return(o&&typeof o==='object'&&!Array.isArray(o))?o:{}}catch(e){return{}}})();
+function _resItemTarget(item){
+  if(!item||!item.data)return null;
+  var a=item.action;
+  if(a!=='saveSched'&&a!=='savePadSet'&&a!=='saveRes')return null;
+  var t=(a==='saveRes')?(item.data.resident&&item.data.resident.id):item.data.id;
+  var k=toNum(t);return k===null?null:k;
+}
+/* 待たせるか: 宛先の入居者が、取り込んだだけで一度もサーバーで確かめていない行で、照らし合わせでまだ送っていない（デイだけの方は除く） */
+function hbResHoldItem(item){
+  var k=_resItemTarget(item);if(k===null)return false;
+  var r=(D&&Array.isArray(D.residents))?D.residents.find(function(x){return x&&toNum(x.id)===k}):null;
+  if(!r)return false;
+  var sent=(typeof _resHealSent==='object'&&_resHealSent)?_resHealSent[String(r.id)]:false;   // 起動の途中（宣言の前）に呼ばれても止まらない
+  return r._fromMaster===true&&!r._srvSeen&&!sent&&!(typeof hbIsDayOnly==='function'&&hbIsDayOnly(r));
+}
+/* 順を守るか（確認の反証 4）: 取り込んだ印の残る方（まだ同期でサーバーの行を見ていない）に向けた送信で、その番号の待たせた送信が未送信の控えに残っている。
+   残っている間は、新しい送信も控えの後ろに積む（待たせた古い予定が、後の新しい予定の後に届いて巻き戻さないため）。
+   照らし合わせが送る saveRes だけは先に出す（待たせた予定・おむつより前にサーバーへ行を作る）。施設の既存の方（印なし）には働かない */
+function hbResKeepOrder(item){
+  var k=_resItemTarget(item);if(k===null)return false;
+  var first=(typeof _resHealFirst==='object'&&_resHealFirst)?_resHealFirst:null;
+  if(item.action==='saveRes'&&first&&first[String(k)]){delete first[String(k)];return false}
+  var r=(D&&Array.isArray(D.residents))?D.residents.find(function(x){return x&&toNum(x.id)===k}):null;
+  if(!r||r._fromMaster!==true)return false;
+  return loadPendingQueue().some(function(it){return _resItemTarget(it)===k});
+}
+/* 捨てるか: 番号のぶつかりが分かった番号に向けて、分かる前に未送信の控えへ積まれた送信。
+   送信の列（_writeQ）の分は at を持たない＝分かった時に列から外し済みなので、残っているのは分かった後の送信（サーバーの方への正しい送信）＝捨てない */
+function hbResDropItem(item){
+  var k=_resItemTarget(item);if(k===null||!item||item.at==null)return false;
+  var at=(typeof _resPurged==='object'&&_resPurged)?_resPurged[String(k)]:0;if(!at)return false;
+  return item.at<=at;
+}
+/* 番号のぶつかりが分かった時、その番号の送信待ち（送信の列と未送信の控え）から、予定・おむつ・入居者の中身を外す。外した数を返す */
+function hbResPurgeQueued(id){
+  var k=toNum(id);if(k===null)return 0;
+  _resPurged[String(k)]=Date.now();
+  try{
+    var ks=Object.keys(_resPurged);
+    if(ks.length>200)ks.sort(function(a,b){return _resPurged[a]-_resPurged[b]}).slice(0,ks.length-200).forEach(function(x){delete _resPurged[x]});
+    localStorage.setItem(RES_PURGED_KEY,JSON.stringify(_resPurged));
+  }catch(e){}
+  var n=0;
+  try{var b=_writeQ.length;_writeQ=_writeQ.filter(function(it){return _resItemTarget(it)!==k});n+=b-_writeQ.length;if(n)_wqPersist()}catch(e){}
+  try{
+    var q=loadPendingQueue(),q2=q.filter(function(it){return _resItemTarget(it)!==k});
+    n+=q.length-q2.length;
+    /* 再送の途中は控えを書き換えない（再送は「後ろに足された分」を数で見分けて合流させるため、減らすと足された分を消してしまう）。
+       途中の分は再送の中で hbResDropItem が捨てる */
+    if(q2.length!==q.length&&!_pqFlushing)savePendingQueue(q2);
+  }catch(e){}
+  return n;
 }
 
 /* ── 入居者マスタ名簿のサーバー取得（2026-07-22 追加） ──
@@ -7092,13 +7372,16 @@ function renderLinkAudit(){
   var card=$('cdLinkAudit');if(!card)return;
   var a=auditResLinks();
   var hasAnyLink=(a.ok+a.items.length)>0;
-  if(!hasAnyLink&&!_linkFreezeN&&!_linkDropN){card.style.display='none';return}
+  var _iss=(typeof hbResIssueLoad==='function')?hbResIssueLoad().list:[];
+  var _qN=(typeof _resImportQ==='object'&&_resImportQ)?Object.keys(_resImportQ).length:0;
+  if(!hasAnyLink&&!_linkFreezeN&&!_linkDropN&&!_iss.length&&!_qN){card.style.display='none';return}
   card.style.display='';
   var fresh=(a.idx&&a.idx.freshAt)?new Date(a.idx.freshAt).toLocaleString('ja-JP'):'—';
   var sum='在籍 '+a.total+'名 ／ 正常 '+a.ok+' ／ <b style="color:'+(a.items.length?'#c62828':'var(--g7)')+'">要修復 '+a.items.length+'</b> ／ 未連携 '+a.none+'<br>'
         +'<span style="font-size: 0.71875rem">名簿の取得: '+escapeHtmlText(fresh)+(a.idx?('（'+a.idx.size+'名）'):'（取得できていません）')+'</span>';
   if(_linkFreezeN)sum+='<br><span style="font-size: 0.71875rem;color:#c62828">紐づけのずれを検出したため、'+_linkFreezeN+'名の居室・フリガナの自動更新を止めています</span>';
   if(_linkDropN)sum+='<br><span style="font-size: 0.71875rem;color:var(--g7)">同期時に氏名が合わず引き継がなかった紐づけ: '+_linkDropN+'件</span>';
+  if(_qN)sum+='<br><span style="font-size: 0.71875rem;color:var(--g7)">名簿から取り込む方 '+_qN+'名を、サーバーと照らし合わせています（次の同期で済みます）</span>';   // 反証 L3
   $('linkAuditSum').innerHTML=sum;
 
   $('linkAuditList').innerHTML=!a.items.length?'':a.items.map(function(x,i){
@@ -7119,6 +7402,38 @@ function renderLinkAudit(){
       +'</div></div>';
   }).join('');
 
+  /* サーバーへ送れなかった入居者（2026-10-25）。記録の付け替えはしない＝人の判断に回す。
+     控えは番号だけなので、氏名・居室はその時の入居者マスタの名簿か手元の入居者から引く（番号がぶつかった方は番号では引かない＝サーバーの別の方になっているため） */
+  var _ib=$('resSendIssues');
+  if(_ib)_ib.innerHTML=!_iss.length?'':'<div style="font-size: 0.9375rem;font-weight:700;color:#c62828;margin:6px 0">⚠️ 登録の確かめが要る入居者 '+_iss.length+'件（記録の付け替えはしていません）</div>'+
+    _iss.map(function(x){
+      var mid=(x.masterId==null||x.masterId==='')?null:String(x.masterId);
+      var ix=(typeof _linkIdx==='function')?_linkIdx():null;
+      var c=(mid&&ix&&ix.byMid)?ix.byMid[mid]:null;
+      var lr=mid?(D.residents||[]).find(function(r){return r&&r.masterId!=null&&String(r.masterId)===mid}):null;
+      if(!lr&&x.kind==='dupName')lr=(D.residents||[]).find(function(r){return r&&toNum(r.id)===toNum(x.id)});
+      var nm=(c&&c.name)||(lr&&lr.name)||'（氏名を引けません）',rm=(c&&c.room)||(lr&&lr.room)||'';
+      var why,next;
+      if(x.kind==='idTaken'){
+        why='この端末で取り込んだ方の番号（'+escapeHtmlText(x.id)+'）が、サーバーでは別の方に使われていました。この方は新しい番号で作り直します（すぐ、または次の同期で）。この端末で前の番号に付けた記録は、サーバーの方の記録として見えています。'
+          +(x.dropped?'この方の排泄予定・おむつ・登録内容の送信待ち '+x.dropped+'件は、別の方の行へ書かないよう送らずに外しました。':'');
+        next='前の番号に付いた記録がどなたのものかを確かめてください。'+(x.dropped?'外した排泄予定・おむつは、作り直した方にもう一度入れてください。':'');
+      }else if(x.kind==='dupName'){
+        /* この端末の行に向けて送らずに止めている変更（予定・おむつ・登録内容）の数。行を消すまで解けない（確認の反証 1） */
+        var _held=0;try{var _k=toNum(x.id);_held=loadPendingQueue().filter(function(it){return _resItemTarget(it)===_k}).length}catch(e){}
+        why='同じ氏名の在籍の方が、サーバーに別の番号でいます。この端末の行（番号 '+escapeHtmlText(x.id)+'）は送っていません。記録が2つの番号に分かれています。'
+          +(_held?'この行への変更 '+_held+'件を送らずに止めています。':'');
+        next='同じ方なら、設定の入居者でこの端末の行（番号 '+escapeHtmlText(x.id)+'）を削除してください（記録は残ります'+(_held?'。止めている変更 '+_held+'件は消えます':'')+'）。サーバーの方の行で記録を続けられます。別の方（同姓同名）なら、代表者に知らせてください。';
+      }else{
+        why='入居者マスタに同じ氏名の方が2人以上いる、またはこの端末の同じ氏名の行が別の方と結ばれているため、この端末では新しく作っていません。';
+        next='設定の入居者で、どの行がこの方かを確かめてください。';
+      }
+      return '<div style="border:1px solid #c62828;border-radius:8px;padding:8px 10px;margin-bottom:6px">'
+        +'<div><b>'+escapeHtmlText(nm)+'</b> <span style="font-size: 0.9375rem;color:var(--g7)">'+(rm?escapeHtmlText(rm)+'号室':'')+'</span></div>'
+        +'<div style="font-size: 0.9375rem;color:var(--g9);line-height:1.6;margin-top:2px">'+why+'</div>'
+        +'<div style="font-size: 0.9375rem;color:var(--g9);line-height:1.6;margin-top:2px"><b>次にすること:</b> '+next+'</div>'
+        +'<div style="margin-top:6px"><button class="bn bs bsm res-iss-ok" data-key="'+escapeHtmlText(x.key)+'" style="min-height:44px">確認した（一覧から消す）</button></div></div>';
+    }).join('');
   var acts=[];
   if(a.fixable)acts.push('<button class="bn bp bsm" id="btnLinkFix" style="min-height:44px">🔧 紐づけを修復（'+a.fixable+'名）</button>');
   acts.push('<button class="bn bs bsm" id="btnLinkCopy" style="min-height:44px">📋 診断サマリをコピー</button>');
@@ -7127,6 +7442,7 @@ function renderLinkAudit(){
   $('linkAuditActs').innerHTML=acts.join('');
 
   $$('.link-ack').forEach(function(b){b.addEventListener('click',function(){linkAck(parseInt(this.dataset.id))})});
+  $$('.res-iss-ok').forEach(function(b){b.addEventListener('click',function(){hbResIssueDismiss(this.dataset.key)})});
   $$('.link-unlink').forEach(function(b){b.addEventListener('click',function(){linkUnlink(parseInt(this.dataset.id))})});
   if($('btnLinkFix'))$('btnLinkFix').addEventListener('click',repairResLinks);
   if($('btnLinkCopy'))$('btnLinkCopy').addEventListener('click',copyLinkAudit);
@@ -8369,10 +8685,19 @@ function renderHospList(r){
 }
 
 async function delRes(id){if(hbFieldDeny())return;var r=D.residents.find(function(x){return x.id===id});if(!r)return;
-  var ok=await customConfirm(r.name+' を削除しますか？\n（記録データは保持されます）');
+  /* 入居者マスタで排泄の対象のままの方は、ほかの事務所の端末が名簿から取り込み直すことがある（削除の印はこの端末にしか無い・2026-10-25 確認の反証 5） */
+  var _tg=null;try{_tg=(r.masterId!=null&&r.masterId!==''&&typeof apiUrl==='string'&&apiUrl&&typeof hbMasterTargetSet==='function')?hbMasterTargetSet():null}catch(e){_tg=null}
+  var _tgNote=(_tg&&_tg[String(r.masterId)])?'\n\n入居者マスタでは排泄の対象のままです。ほかの事務所の端末が取り込み直すことがあります。先に入居者マスタで対象から外してください。':'';
+  var ok=await customConfirm(r.name+' を削除しますか？\n（記録データは保持されます）'+_tgNote);
   if(!ok)return;
   D.residents=D.residents.filter(function(x){return x.id!==id});save();
-  apiPush('delRes',{id:id});
+  /* 入居者マスタで結ばれていた方は、名簿から取り込み直さない印を残す（2026-10-25・反証 M4。番号だけ・氏名は残さない） */
+  if(r.masterId!=null&&r.masterId!==''&&typeof hbResTombAdd==='function')hbResTombAdd(r.masterId);
+  /* 一度もサーバーで確かめていない取り込みの行（デイだけの方を除く）なら、待たせていた送信を外し、サーバーへの削除も送らない。
+     その番号がサーバーで別の方になっていれば、その方の行を消してしまうため（サーバーに同じ方がいれば次の同期で戻る＝消えるより戻る側） */
+  var _neverSrv=r._fromMaster===true&&!r._srvSeen&&!(typeof _resHealSent==='object'&&_resHealSent[String(r.id)])&&!(typeof hbIsDayOnly==='function'&&hbIsDayOnly(r));
+  if(_neverSrv&&typeof hbResPurgeQueued==='function')hbResPurgeQueued(r.id);
+  if(!_neverSrv)apiPush('delRes',{id:id});
   renderCfg();buildResSel();showToast('🗑️ 削除しました')}
 var RES_CFG_KEYS=['urineWarnH','urineDangerH','stoolWarnD','stoolDangerD'];   // 入居者を直す画面で入れ直す cfg のキー（閾値）
 function saveRes(){if(hbFieldDeny())return;const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$('mRG').value;
