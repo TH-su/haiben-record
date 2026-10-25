@@ -33,13 +33,14 @@ let OLD_SRC = null;
 try { OLD_SRC = scriptOf(cp.execFileSync('git', ['-C', ROOT, 'show', OLD_SHA + ':haiben-record.html'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 })); } catch (e) { OLD_SRC = null; }
 
 let pass = 0, fail = 0;
+const PENDING = [];
 function ok(c, m, extra) { if (c) { pass++; console.log('  ✅ ' + m); } else { fail++; console.log('  ❌ ' + m + (extra !== undefined ? '  → ' + JSON.stringify(extra).slice(0, 400) : '')); } }
 function head(t) { console.log('\n─── ' + t + ' ───'); }
 
 /* デイの表示の関数をまとめて評価する箱。store は localStorage の中身、search・hash は URL */
 const DC_FNS = ['hbDcParse', 'hbDcKana', 'hbDcCmp', 'hbDcCount', 'hbDcOn', 'hbDcKeep', 'hbDcLinkOk', 'hbDcOrder', 'hbDcListable',
   'hbDcMarkGet', 'hbDcMarkSet', 'hbDcReadParam', 'hbDcLoad', 'hbDcInit', 'hbDcBind', 'hbDcRenderBar', 'hbDcRefresh', 'hbDcOff', '_dcBackSig', 'hbDcBackNote', 'hbDcBack',
-  'hbIsDayOnly', 'isExcretionTarget', 'hbDayOnlyEff', 'hbListTarget', 'resSortKey', 'resSortAiu', 'hbReadViewParam'];
+  'hbIsDayOnly', 'isExcretionTarget', 'hbDayOnlyEff', 'hbListTarget', 'hbDcTag', 'resSortKey', 'resSortAiu', 'hbReadViewParam'];
 function box(opts) {
   opts = opts || {};
   const store = Object.assign({}, opts.store || {});
@@ -212,14 +213,15 @@ head('5 デイの表示（印＋今日のキー）');
   ok(b._dc && b._dc.st === 'ok' && b.hbDcOn() && b.cls.has('hb-daycare'), '印とキーがあればデイの表示（html に hb-daycare）');
   ok(b.listeners.indexOf('document:visibilitychange') >= 0 && b.listeners.indexOf('window:focus') >= 0 && b.listeners.indexOf('window:pageshow') >= 0, '画面が前に出るたびにキーを読み直す（visibilitychange・focus・pageshow）', b.listeners);
   const tl = run(b, exprOf(SRC, 'renderTL', RE_RES), 'res');
-  ok(tl === '11,12,19,10,13', '時系列: デイの方だけ・五十音（あいう・いろは・かきく・わをん・架空Ｄ（ふりがな無し＝氏名・漢字はかなの後））。対象外・隠した方は出ない', tl);
+  ok(tl === '11,12,19,15,10,13', '時系列: デイの方だけ・五十音（あいう・いろは・かきく・さしす・わをん・架空Ｄ（ふりがな無し＝氏名・漢字はかなの後））。施設では対象外の方も出る（B1）・隠した方は出ない', tl);
   ok(run(b, exprOf(SRC, 'renderBoard', RE_RES), 'res') === tl, '一覧表も同じ対象・並び');
   ok(run(b, exprOf(SRC, 'buildResSel', RE_A), 'a') === tl, '入力の選択肢も同じ対象・並び');
-  ok(run(b, exprOf(SRC, 'buildResSel', RE_A), 'a', null, 14) === '11,12,14,19,10,13', '選んでいる方（デイの方でない）は今の決まりどおり選択肢に残す（?masterId= で開いた方を選べる）');
+  ok(run(b, exprOf(SRC, 'buildResSel', RE_A), 'a', null, 14) === '11,12,14,19,15,10,13', '選んでいる方（デイの方でない）は今の決まりどおり選択肢に残す（?masterId= で開いた方を選べる）');
   vm.runInContext('onlyAttn=true', b);
   ok(run(b, exprOf(SRC, 'renderTL', RE_RES), 'res') === '19,13', '「要注意だけ」はデイの方の中で効く');
   vm.runInContext('onlyAttn=false;showNonTargets=true', b);
-  ok(run(b, exprOf(SRC, 'renderTL', RE_RES), 'res') === '11,12,19,15,10,13', '「対象外も表示」はデイの方の中の対象外の方を出す');
+  ok(run(b, exprOf(SRC, 'renderTL', RE_RES), 'res') === '11,12,19,15,10,13', '「対象外も表示」を入れても同じ（デイの表示では対象外の方もいつも出る・B1）');
+  ok(b.hbDcTag(RES.find((r) => r.id === 15)) === '施設では対象外' && b.hbDcTag(RES.find((r) => r.id === 11)) === '', 'デイの表示の中の施設では対象外の方には「施設では対象外」の札（日数の判定を出さない）');
   /* 中身が同じなら描き直さない・変われば描き直す */
   ok(b.hbDcLoad() === false, '同じキーを読み直しても「変わった」にしない（押している最中に表を差し替えない）');
   b.store[HANDOFF] = key({ v: 1, day: '2026-10-24', mids: ['m10'] });
@@ -288,10 +290,10 @@ head('9 帯の文（hbDcRenderBar を動かす）');
   const RES9 = [{ id: 1, name: '架空一', masterId: 'm1' }, { id: 2, name: '架空二', masterId: 'm2' }, { id: 3, name: '架空三', masterId: 'm3', targetExcretion: false }];
   const mk = (store, o) => { const b = box(Object.assign({ store, residents: RES9 }, o || {})); b.hbDcInit(); b.hbDcRenderBar(); return b; };
   let b = mk({ hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1', 'm2', 'm3', 'm9'] }) });
-  ok(/デイ せせらぎ<\/b>　今日 4名　<span class="dc-miss">排泄ケア記録に居ない方 2名<\/span>/.test(b.els.dcBarTxt.innerHTML) && b.els.dcWarn.hidden === true, '今日: 「今日 4名・排泄ケア記録に居ない方 2名」（対象外と結べない方）・警告なし', b.els.dcBarTxt.innerHTML);
+  ok(/デイ せせらぎ<\/b>　今日 4名　<span class="dc-miss">排泄ケア記録に居ない方 1名<\/span>/.test(b.els.dcBarTxt.innerHTML) && b.els.dcWarn.hidden === true, '今日: 「今日 4名・排泄ケア記録に居ない方 1名」（結べない方。施設では対象外の方は表に出るので数えない・B1）・警告なし', b.els.dcBarTxt.innerHTML);
   ok(!/架空/.test(b.els.dcBarTxt.innerHTML), '帯に氏名を出さない');
   b = mk({ hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m1', 'm2', 'm3'] }) }, { showNonTargets: true });
-  ok(/今日 3名/.test(b.els.dcBarTxt.innerHTML) && !/居ない方/.test(b.els.dcBarTxt.innerHTML), '「対象外も表示」の時は対象外の方を数えない（全員出ている時は「居ない方」を出さない）', b.els.dcBarTxt.innerHTML);
+  ok(/今日 3名/.test(b.els.dcBarTxt.innerHTML) && !/居ない方/.test(b.els.dcBarTxt.innerHTML), '全員出ている時は「居ない方」を出さない（対象外の方も表に出る）', b.els.dcBarTxt.innerHTML);
   b = mk({ hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-23', mids: ['m1'] }) });
   ok(/10\/23 1名/.test(b.els.dcBarTxt.innerHTML) && b.els.dcWarn.hidden === false && b.els.dcWarn.textContent.indexOf('デイの一覧が今日のものではありません。デイ せせらぎから開き直してください') >= 0 && /施設の端末では〔施設の表示に戻す〕を押してください/.test(b.els.dcWarn.textContent), '今日でない: 一覧の日付と、§9.7 の警告＋施設の端末向けの出口', [b.els.dcBarTxt.innerHTML, b.els.dcWarn.textContent]);
   b = mk({ hbcr_daycare: '1' });
@@ -416,7 +418,7 @@ head('14 入力のタイル（renderResTiles）: 施設の端末は直す前と�
       $: (id) => elsT[id] || null, escapeHtmlText: (x) => String(x), syncResPick: () => {},
       lastR: (rid, t) => (rid % 2 ? { date: '2026-10-22' } : null), elH: () => 30, badgeCls: (h, t, rid) => (rid === 3 ? 'eb-ng' : 'eb-ok'),
       dayDiff: (a, b2) => 2, today: () => '2026-10-24', padSetFor: (r) => ({ list: r.id === 2 ? [{ n: '見本パッド' }] : [] }), Date,
-      hbDcOn: () => dcOn, DC_EMPTY_MSG: 'EMPTY', hbDayOnlyEff: (r) => !!r.dOnly
+      hbDcOn: () => dcOn, DC_EMPTY_MSG: 'EMPTY', hbDcTag: (r) => (r.dOnly ? 'デイのみ' : '')
     };
     vm.createContext(sb);
     vm.runInContext(['_roomNum', 'roomToFloor', 'floorLabel', 'renderResTiles'].map((n) => XX.fn(n)).join('\n'), sb);
@@ -467,13 +469,14 @@ head('15 帯の貼り付け（layoutStickyTops を寸法の代役で動かす）
 
 
 /* ══════════ (3) デイだけの方（2026-10-25・§9.9） ══════════ */
-const DO_FNS = DC_FNS.concat(['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcAdd']);
+const DO_FNS = DC_FNS.concat(['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcAddEnabled', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcAdd']);
 /* 氏名の異体字の表（複数行の宣言）を括弧の対応で切り出す */
 const NAMEX_DECL = (() => { const i = SRC.indexOf('var _NAMEX_MAP='); const o = SRC.indexOf('{', i); return SRC.slice(i, matchBrace(SRC, o) + 1) + ';'; })();
 function boxDO(opts) {
   const b = box(opts);
   Object.assign(b, { apiUrl: opts && opts.apiUrl || '', _getLastSyncTs: () => (opts && opts.lastSync != null ? opts.lastSync : 1), ldShow() {}, ldHide() {}, syncFromAPI: async () => (opts && opts.onSync ? opts.onSync(b) : true) });
-  vm.runInContext([NAMEX_DECL, X.varDecl('_dcAddBusy'), ['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcAdd'].map((n) => X.fn(n)).join('\n')].join('\n'), b);
+  vm.runInContext([NAMEX_DECL, X.varDecl('_dcAddBusy'), X.varDecl('DC_ADD_OFF_MSG'), ['_normName', '_normNameX', '_hbDcRoomKey', 'hbDcAddEnabled', 'hbDcMissing', 'hbDcMissFind', 'hbDcMissRender', 'hbDcAdd'].map((n) => X.fn(n)).join('\n')].join('\n'), b);
+  if (!(opts && opts.addOff)) b.D.cfg = { dayOnlyOn: 1 };
   return b;
 }
 const DOR = (o) => Object.assign({ cfg: { dayOnly: true } }, o);
@@ -519,7 +522,8 @@ head('17 施設の端末: デイだけの方が名簿に増えても、一覧・
   // 要注意
   const ab = { console, isFullHospDay: () => false, lastR: () => null, elH: () => null, badgeCls: () => 'eb-ng', today: () => '2026-10-24', tlOvdForRes: () => [], _tlNowMin: () => 600 };
   vm.createContext(ab);
-  vm.runInContext([X.fn('hbIsDayOnly'), X.fn('isExcretionTarget'), X.fn('hbDayOnlyEff'), X.fn('isAttnRes')].join('\n'), ab);
+  ab.hbDcOn = () => false;
+  vm.runInContext([X.fn('hbIsDayOnly'), X.fn('isExcretionTarget'), X.fn('hbDayOnlyEff'), X.fn('hbDcTag'), X.fn('isAttnRes')].join('\n'), ab);
   ok(ab.isAttnRes(DOR({ id: 40 }), '2026-10-24') === false && ab.isAttnRes({ id: 1 }, '2026-10-24') === true, '要注意: デイだけの方は要注意にしない（記録が無くても）・ほかの方は今までどおり');
   ok(/hbListTarget\(re\)&&hbDcKeep\(re\)&&tlOvdForRes/.test(X.fn('tlOvdRefresh')), '1分ごとの更新（期限切れの判定）も同じ対象の決まり');
 }
@@ -593,7 +597,7 @@ head('20 居ない方の一覧（hbDcMissing・純関数）');
   const m = b.hbDcMissing(resid, b._dc, idx, b.hbDcListable);
   const by = {}; m.rows.forEach((x) => { by[x.mid] = x; });
   ok(!by.m1 && !by.m12, '表に出ている方（施設の対象・デイだけの方）は一覧に出ない');
-  ok(by.m2 && by.m2.act === 'mark' && by.m2.rid === 2 && by.m2.name === '架空二' && by.m2.room === '102', '同じ masterId の対象外の行は、新しく足さずにその行へ dayOnly を足す（mark）');
+  ok(!by.m2 && m.rows.every((x) => x.act !== 'mark'), '同じ masterId の施設では対象外の行は、デイの表示で表に出る＝一覧に出ず、印も書かない（B1・mark をやめた）');
   ok(by.m3 && !by.m3.act && /非表示/.test(by.m3.why), '非表示の行: 加えず理由');
   ok(by.m4 && !by.m4.act && /退去/.test(by.m4.why), '退去の行: 加えず理由');
   ok(by.m5 && !by.m5.act && /紐づけがずれて/.test(by.m5.why), '紐づけのずれ: 加えず理由');
@@ -603,7 +607,7 @@ head('20 居ない方の一覧（hbDcMissing・純関数）');
   ok(m.badN === 1, '形の違う値は数だけ');
   const m2 = b.hbDcMissing(resid, b._dc, null, b.hbDcListable);
   const by2 = {}; m2.rows.forEach((x) => { by2[x.mid] = x; });
-  ok(by2.m6 && !by2.m6.act && /名簿がありません/.test(by2.m6.why) && by2.m2.act === 'mark', 'この端末に名簿が無い時は新しく足さない（既にある行への mark はできる）');
+  ok(by2.m6 && !by2.m6.act && /名簿がありません/.test(by2.m6.why) && !by2.m2, 'この端末に名簿が無い時は新しく足さない（既にある行の方は表に出る）');
   // 反証 重大1: 名簿と表記の違う未連携の行（同じ居室・同じふりがな）
   const v1 = b.hbDcMissing(resid.concat([{ id: 70, name: '架空ロク', room: '１０６号室' }]), b._dc, idx, b.hbDcListable).rows.find((x) => x.mid === 'm6');
   ok(v1 && !v1.act && /居室かふりがなが同じ/.test(v1.why), '居室が同じ（全角・「号室」つきでも）で結ばれていない在籍の行があれば足さない', v1);
@@ -616,7 +620,7 @@ head('20 居ない方の一覧（hbDcMissing・純関数）');
 head('22a 履歴の小窓・帯のボタン（反証 中5・軽6）');
 {
   const h = X.fn('showHist');
-  ok(/var _dOnly=\(typeof hbDayOnlyEff==='function'\)&&hbDayOnlyEff\(res\);/.test(h) && /_dOnly\?\(padSetHistHtml\(rid\)\+guideRateHtml\(rid\)\+padUseHtml\(rid\)\)/.test(h) && /if\(_sb&&_dOnly\)\{_sb\.innerHTML=_dOnlyNote\}/.test(h), '履歴の小窓: デイだけの方は排便のカレンダー・平均間隔・下剤の反応を出さず「デイのみ」の1行');
+  ok(/var _dTag=\(typeof hbDcTag==='function'\)\?hbDcTag\(res\):'',_dOnly=!!_dTag;/.test(h) && /_dOnly\?\(padSetHistHtml\(rid\)\+guideRateHtml\(rid\)\+padUseHtml\(rid\)\)/.test(h) && /if\(_sb&&_dOnly\)\{_sb\.innerHTML=_dOnlyNote\}/.test(h), '履歴の小窓: 札のある方（デイのみ・施設では対象外）は排便のカレンダー・平均間隔・下剤の反応を出さず1行');
   ok(/\.dcbar \.dc-acts \[hidden\]\{display:none\}/.test(HTML), '帯のボタンの hidden が効く（ボタンの display に負けない）');
 }
 
@@ -641,38 +645,81 @@ function mergeBox(src) {
 }
 {
   const row = (o) => Object.assign({ id: 1, name: '架空一', room: '101', active: true, masterId: 'm1' }, o);
-  const ros = (apps) => [Object.assign({ masterId: 'm1', name: '架空一', room: '101', active: true }, apps === undefined ? {} : { targetApps: apps })];
+  /* 共有名簿（su_residents_common）からの突き合わせ＝targetApps が届く経路（代理名簿には targetApps が無い） */
+  const common = (b, apps, at) => b.localStorage.setItem('su_residents_common', JSON.stringify(Object.assign({ residents: [Object.assign({ masterId: 'm1', name: '架空一', room: '101', active: true }, apps === undefined ? {} : { targetApps: apps })] }, at ? { updatedAt: new Date(at).toISOString() } : {})));
+  const T0 = Date.parse('2026-10-25T00:00:00Z');
   let b = mergeBox(SRC);
-  b.D.residents = [row({ cfg: { dayOnly: true, stoolWarnD: 3 } })];
-  b.mergeCommonResidents(ros(['excretion']), { noAdd: true });
+  b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0, stoolWarnD: 3 } })];
+  common(b, ['excretion'], T0 + 60000);
+  b.mergeCommonResidents(null, { noAdd: true });
   let r = b.D.residents[0];
-  ok(JSON.stringify(r.cfg) === JSON.stringify({ stoolWarnD: 3 }) && r.targetExcretion === true && b.isExcretionTarget(r) === true, '対象になったら dayOnly が外れ、ほかのキー（閾値）は残る・施設の対象になる', r.cfg);
+  ok(JSON.stringify(r.cfg) === JSON.stringify({ stoolWarnD: 3 }) && r.targetExcretion === true && b.isExcretionTarget(r) === true, '加えた後の共有名簿で対象になったら、dayOnly と dayOnlyAt が外れ、ほかのキー（閾値）は残る・施設の対象になる', r.cfg);
   ok(b.pushes.length === 1 && b.pushes[0][0] === 'saveRes' && JSON.stringify(b.pushes[0][1].resident.cfg) === JSON.stringify({ stoolWarnD: 3 }), 'saveRes で dayOnly の無い cfg をサーバーへ送る（退去の解除と同じ送り方）', b.pushes);
-  b.mergeCommonResidents(ros(['excretion']), { noAdd: true });
+  b.mergeCommonResidents(null, { noAdd: true });
   ok(b.pushes.length === 1, 'もう一度突き合わせても、二度は送らない');
   b = mergeBox(SRC);
-  b.D.residents = [row({ cfg: { dayOnly: true } })];
-  b.mergeCommonResidents(ros(['excretion']), { noAdd: true });
-  ok(b.D.residents[0].cfg === undefined && b.pushes.length === 1 && b.pushes[0][1].resident.cfg === undefined, 'dayOnly だけの cfg は cfg ごと消して送る（GAS の列は空になる）');
-  for (const [lbl, apps] of [['対象外（targetApps に excretion が無い）', ['weight']], ['名簿に targetApps が無い（代理名簿）', undefined]]) {
+  b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0 } })];
+  common(b, ['excretion'], T0 + 60000);
+  b.mergeCommonResidents(null, { noAdd: true });
+  ok(b.D.residents[0].cfg === undefined && b.pushes.length === 1 && b.pushes[0][1].resident.cfg === undefined, '印だけの cfg は cfg ごと消して送る（GAS の列は空になる）');
+  // B2: 名簿の新しさの関門
+  for (const [lbl, at] of [['加えた時刻より古い共有名簿', T0 - 60000], ['更新時刻の無い共有名簿', 0]]) {
     b = mergeBox(SRC);
-    b.D.residents = [row({ cfg: { dayOnly: true, stoolWarnD: 3 } })];
-    b.mergeCommonResidents(ros(apps), { noAdd: true });
+    b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0, stoolWarnD: 3 } })];
+    common(b, ['excretion'], at);
+    b.mergeCommonResidents(null, { noAdd: true });
+    ok(b.D.residents[0].cfg.dayOnly === true && b.pushes.length === 0, lbl + 'の「対象」では外さない（足しては外される往復をしない・B2）');
+  }
+  for (const [lbl, apps] of [['対象外（targetApps に excretion が無い）', ['weight']], ['名簿に targetApps が無い', undefined]]) {
+    b = mergeBox(SRC);
+    b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0, stoolWarnD: 3 } })];
+    common(b, apps, T0 + 60000);
+    b.mergeCommonResidents(null, { noAdd: true });
     r = b.D.residents[0];
     ok(r.cfg.dayOnly === true && r.cfg.stoolWarnD === 3 && b.pushes.length === 0 && b.isExcretionTarget(r) === false, lbl + ': dayOnly は外れない・何も送らない');
   }
+  b = mergeBox(SRC);
+  b.D.residents = [row({ cfg: { dayOnly: true, dayOnlyAt: T0 } })];
+  b.mergeCommonResidents([{ masterId: 'm1', name: '架空一', room: '101', active: true, targetApps: ['excretion'] }], { noAdd: true });
+  ok(b.D.residents[0].cfg.dayOnly === true && b.pushes.length === 0, '代理名簿（配列で渡す経路）の突き合わせでは外さない（新しさが代理名簿の時刻になるため）');
   // 2台が同時に外しても同じ中身
-  const pay = [0, 1].map(() => { const x = mergeBox(SRC); x.D.residents = [row({ cfg: { stoolWarnD: 3, dayOnly: true, other: 'k' } })]; x.mergeCommonResidents(ros(['excretion']), { noAdd: true }); return JSON.stringify(x.pushes); });
+  const pay = [0, 1].map(() => { const x = mergeBox(SRC); x.D.residents = [row({ cfg: { stoolWarnD: 3, dayOnly: true, dayOnlyAt: T0, other: 'k' } })]; common(x, ['excretion'], T0 + 60000); x.mergeCommonResidents(null, { noAdd: true }); return JSON.stringify(x.pushes); });
   ok(pay[0] === pay[1] && /"other":"k"/.test(pay[0]) && !/dayOnly/.test(pay[0]), '2台が同時に外しても、送る中身は同じ（dayOnly の無い cfg）');
   // dayOnly の無い方の突き合わせは直す前と同じ
   if (OLD_SRC) {
     const same = [['excretion'], ['weight'], undefined].every((apps) => {
       const o = mergeBox(OLD_SRC), n = mergeBox(SRC);
-      for (const x of [o, n]) { x.D.residents = [row({ cfg: { stoolWarnD: 3 } })]; x.mergeCommonResidents(ros(apps), { noAdd: true }); }
+      for (const x of [o, n]) { x.D.residents = [row({ cfg: { stoolWarnD: 3 } })]; common(x, apps, T0); x.mergeCommonResidents(null, { noAdd: true }); }
       return JSON.stringify(o.D.residents) === JSON.stringify(n.D.residents) && JSON.stringify(o.pushes) === JSON.stringify(n.pushes);
     });
     ok(same, 'dayOnly の無い方の名簿の突き合わせ（結果の行・送る中身）は直す前の版と同じ');
   }
+}
+
+head('22b 設定の切り替え「デイだけの方を加えられるようにする」（B3）');
+{
+  // cfgSendPayload: dayOnlyOn を送る（Config は全行の書き直し）
+  const cs = { console, D: { cfg: { urineWarnH: 6, dayOnlyOn: 1 } } };
+  vm.createContext(cs); vm.runInContext(X.fn('cfgSendPayload'), cs);
+  const p1 = cs.cfgSendPayload();
+  vm.runInContext('D.cfg.dayOnlyOn=0', cs); const p0 = cs.cfgSendPayload();
+  vm.runInContext('delete D.cfg.dayOnlyOn', cs); const pn = cs.cfgSendPayload();
+  ok(p1.dayOnlyOn === 1 && p0.dayOnlyOn === 0 && !('dayOnlyOn' in pn) && p1.urineWarnH === 6, '設定を送る時に dayOnlyOn（1・0）も送る（送らないとサーバーから消える）・持っていなければ送らない', [p1, p0, pn]);
+  ok(/_send\.dayOnlyOn=Number\(D\.cfg\.dayOnlyOn\)/.test(X.src), '〔設定を保存〕（閾値の保存）でも dayOnlyOn を消さない');
+  // hbDcAddToggle
+  async function tog(on, yes, field) {
+    const pushes = [], toasts = [], cb = { checked: on };
+    const sb = { console, D: { cfg: {} }, hbFieldDeny: () => !!field, customConfirm: async () => !!yes, save() {}, apiPush: (a, d) => pushes.push([a, d]), showToast: (m) => toasts.push(m), _dc: null, hbDcRerender() {} };
+    vm.createContext(sb); vm.runInContext([X.fn('cfgSendPayload'), X.fn('hbDcAddEnabled'), X.fn('hbDcAddToggle')].join('\n'), sb);
+    await sb.hbDcAddToggle(cb);
+    return { cb, pushes, toasts, cfg: sb.D.cfg, enabled: sb.hbDcAddEnabled() };
+  }
+  PENDING.push(Promise.all([tog(true, true), tog(true, false), tog(false, true), tog(true, true, true)]).then(([a, c, d, f]) => {
+    ok(a.cfg.dayOnlyOn === 1 && a.enabled && a.pushes.length === 1 && a.pushes[0][0] === 'saveCfg' && a.pushes[0][1].cfg.dayOnlyOn === 1, '入れる: 確かめて dayOnlyOn=1 を saveCfg で送る');
+    ok(c.cb.checked === false && c.pushes.length === 0 && !('dayOnlyOn' in c.cfg), '確かめで「キャンセル」なら入れない');
+    ok(d.cfg.dayOnlyOn === 0 && d.pushes[0][1].cfg.dayOnlyOn === 0 && !d.enabled, '切る: 消すのではなく 0 を送る（ほかの端末の 1 を確実に上書きする）');
+    ok(f.cb.checked === false && f.pushes.length === 0, '現場の端末では切り替えられない（hbFieldDeny）');
+  }));
 }
 
 head('21 〔デイの記録に加える〕（hbDcAdd を動かす）');
@@ -691,7 +738,7 @@ const asyncTests = (async () => {
   let b = mk({ confirmYes: true });
   await b.hbDcAdd('m6');
   const nr = b.D.residents.find((r) => r.id === 77);
-  ok(!!nr && nr.name === '架空六' && nr.yomi === 'カクウロク' && nr.room === '106' && nr.gender === '女性' && nr.careLevel === '要介護1' && nr.active === true && nr.masterId === 'm6' && nr._fromMaster === true && nr.cfg.dayOnly === true && nr.masterHosp === false && nr.targetExcretion === undefined, '加える: 名簿からの新規の取り込みと同じ作り＋cfg.dayOnly（targetExcretion は付けない）', nr);
+  ok(!!nr && nr.name === '架空六' && nr.yomi === 'カクウロク' && nr.room === '106' && nr.gender === '女性' && nr.careLevel === '要介護1' && nr.active === true && nr.masterId === 'm6' && nr._fromMaster === true && nr.cfg.dayOnly === true && nr.cfg.dayOnlyAt > 0 && Object.keys(nr.cfg).length === 2 && nr.masterHosp === false && nr.targetExcretion === undefined, '加える: 名簿からの新規の取り込みと同じ作り＋cfg.dayOnly と加えた時刻 dayOnlyAt（targetExcretion は付けない）', nr);
   ok(b.pushes.length === 1 && b.pushes[0][0] === 'saveRes' && b.pushes[0][1].resident.cfg.dayOnly === true && b.calls.rerender === 1, '保存は今の入居者の保存と同じ送信（saveRes）を1回・描き直す');
   ok(/氏名: 架空六（カクウロク）/.test(b.calls.confirm[0]) && /居室: 106号室/.test(b.calls.confirm[0]) && /施設の一覧・時系列・帳票には出ません/.test(b.calls.confirm[0]), '確かめの小窓に氏名・ふりがな・居室を出す（取り違え防止）', b.calls.confirm[0]);
   await b.hbDcAdd('m6');
@@ -699,7 +746,11 @@ const asyncTests = (async () => {
   b = mk({ confirmYes: true });
   await b.hbDcAdd('m2');
   const r2 = b.D.residents.find((r) => r.id === 2);
-  ok(b.D.residents.length === 1 && JSON.stringify(r2.cfg) === JSON.stringify({ stoolWarnD: 3, dayOnly: true }) && b.pushes.length === 1, '既にある対象外の行: 新しく足さず、今の cfg（閾値）を残して dayOnly だけ足す（親の補足）', r2.cfg);
+  ok(b.D.residents.length === 1 && JSON.stringify(r2.cfg) === JSON.stringify({ stoolWarnD: 3 }) && b.pushes.length === 0 && b.calls.confirm.length === 0, '既にある施設では対象外の行には印を書かない（B1・その方はデイの表示で表に出ている）', r2.cfg);
+  // B3: 切り替えが入っていない時
+  b = mk({ confirmYes: true, addOff: true });
+  await b.hbDcAdd('m6');
+  ok(b.pushes.length === 0 && b.calls.confirm.length === 0 && /設定（入居者管理）で「デイだけの方を加えられるようにする」/.test(b.calls.toast.join()), '設定の切り替え（dayOnlyOn）が入っていない時は加えない（B3）');
   b = mk({ confirmYes: false });
   await b.hbDcAdd('m6');
   ok(b.D.residents.length === 1 && b.pushes.length === 0, '「キャンセル」なら何も書かない');
@@ -730,6 +781,9 @@ const asyncTests = (async () => {
   b.els.mDcMissList = { innerHTML: '', addEventListener() {} }; b._linkIdx = () => idx; b.hbDcInit(); b.hbDcMissRender();
   const li = b.els.mDcMissList.innerHTML;
   ok(/<b>架空六<\/b><span class="dcm-sub">カクウロク<\/span><span class="dcm-sub">106号室<\/span><\/div><button type="button" class="bn bp dcm-add" data-mid="m6">デイの記録に加える<\/button>/.test(li) && /<b>氏名がわからない方<\/b><\/div><div class="dcm-why">⚠ 入居者マスタの名簿に見つかりません/.test(li) && /形の違う値が 1件/.test(li) && li.indexOf('架空六') < li.indexOf('氏名がわからない方'), '小窓: 氏名・ふりがな・居室と〔加える〕、名簿に無い方は理由（後ろ）、形の違う値は数', li);
+  b = boxDO({ store: { hbcr_daycare: '1', [HANDOFF]: key({ v: 1, day: '2026-10-24', mids: ['m6'] }) }, residents: [], addOff: true });
+  b.els.mDcMissList = { innerHTML: '', addEventListener() {} }; b._linkIdx = () => idx; b.hbDcInit(); b.hbDcMissRender();
+  ok(!/dcm-add/.test(b.els.mDcMissList.innerHTML) && /「デイだけの方を加えられるようにする」を入れてください/.test(b.els.mDcMissList.innerHTML) && /架空六/.test(b.els.mDcMissList.innerHTML), '切り替えが入っていない時は、小窓に氏名と「設定で入れてください」を出し、ボタンは出さない（B3）');
   // 帯の〔居ない方の一覧〕
   b = mk(); b.els.dcMiss = { hidden: true }; b.hbDcRenderBar();
   ok(b.els.dcMiss.hidden === false, '居ない方がいる時は〔居ない方の一覧〕を出す');
@@ -738,7 +792,7 @@ const asyncTests = (async () => {
   ok(!/hbFieldDeny/.test(X.fn('hbDcAdd')), '（決め）デイの表示から加える操作は現場端末の守り（hbFieldDeny）では止めない＝デイのタブレットで使う操作のため');
 })();
 
-asyncTests.then(() => {
+Promise.all([asyncTests].concat(PENDING)).then(() => {
   console.log('\n══════════════════════════════════');
   console.log('  合格 ' + pass + ' / 不合格 ' + fail);
   process.exit(fail ? 1 : 0);
