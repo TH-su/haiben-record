@@ -605,6 +605,61 @@ head('20 居ない方の一覧（hbDcMissing・純関数）');
   ok(by2.m6 && !by2.m6.act && /名簿がありません/.test(by2.m6.why) && by2.m2.act === 'mark', 'この端末に名簿が無い時は新しく足さない（既にある行への mark はできる）');
 }
 
+head('22 入居者マスタが後から排泄の対象にしたら dayOnly を外す（親の追加の決まり・mergeCommonResidents を動かす）');
+function mergeBox(src) {
+  const XX = makeExtractor(src);
+  const nameMap = (() => { const i = src.indexOf('var _NAMEX_MAP='); const o = src.indexOf('{', i); return src.slice(i, matchBrace(src, o) + 1) + ';'; })();
+  const store = new Map();
+  const sb = {
+    console, Date, Math, JSON, String, Number, Array, Object, isFinite, parseInt, parseFloat,
+    localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
+    pushes: [], toasts: [], _recIdx: null, D: { residents: [], records: [], cfg: {} }
+  };
+  sb.save = () => {}; sb.apiPush = (a, d) => sb.pushes.push([a, JSON.parse(JSON.stringify(d))]); sb.showToast = (m) => sb.toasts.push(m);
+  vm.createContext(sb);
+  const vars = ['SU_COMMON_KEY', 'MASTER_ROSTER_KEY', 'MASTER_ROSTER_TS_KEY', 'RES_ID_HW_KEY', 'SYS_STAFF_ROOM', 'SYS_STAFF_ROOM_LEGACY', 'LEGACY_SYS_RID', 'LEGACY_SYS_NAME_PREFIX', '_linkFreezeN', '_linkDropN', '_linkIdxCache'];
+  const fns = ['toNum', '_isStaffRes', 'isUserRes', 'isValidRes', '_normName', '_normNameX', '_rosterFreshness', 'loadStoredMasterRoster', 'buildRosterIndex', 'checkResLink', '_midNameOk',
+    '_invalidateLinkIdx', '_linkIdx', '_linkStateOf', '_resIdHw', '_bumpResIdHw', 'nextResId', 'getActiveHospAt', 'isCurrentlyHospitalized', 'isHospNow', 'pushMasterHospState', 'mergeCommonResidents'];
+  const has = (n) => { try { XX.fn(n); return true; } catch (e) { return false; } };
+  vm.runInContext(vars.map((v) => XX.varDecl(v)).concat([nameMap]).concat(fns.map((f) => XX.fn(f))).concat(has('hbIsDayOnly') ? [XX.fn('hbIsDayOnly'), XX.fn('isExcretionTarget')] : []).join('\n'), sb);
+  return sb;
+}
+{
+  const row = (o) => Object.assign({ id: 1, name: '架空一', room: '101', active: true, masterId: 'm1' }, o);
+  const ros = (apps) => [Object.assign({ masterId: 'm1', name: '架空一', room: '101', active: true }, apps === undefined ? {} : { targetApps: apps })];
+  let b = mergeBox(SRC);
+  b.D.residents = [row({ cfg: { dayOnly: true, stoolWarnD: 3 } })];
+  b.mergeCommonResidents(ros(['excretion']), { noAdd: true });
+  let r = b.D.residents[0];
+  ok(JSON.stringify(r.cfg) === JSON.stringify({ stoolWarnD: 3 }) && r.targetExcretion === true && b.isExcretionTarget(r) === true, '対象になったら dayOnly が外れ、ほかのキー（閾値）は残る・施設の対象になる', r.cfg);
+  ok(b.pushes.length === 1 && b.pushes[0][0] === 'saveRes' && JSON.stringify(b.pushes[0][1].resident.cfg) === JSON.stringify({ stoolWarnD: 3 }), 'saveRes で dayOnly の無い cfg をサーバーへ送る（退去の解除と同じ送り方）', b.pushes);
+  b.mergeCommonResidents(ros(['excretion']), { noAdd: true });
+  ok(b.pushes.length === 1, 'もう一度突き合わせても、二度は送らない');
+  b = mergeBox(SRC);
+  b.D.residents = [row({ cfg: { dayOnly: true } })];
+  b.mergeCommonResidents(ros(['excretion']), { noAdd: true });
+  ok(b.D.residents[0].cfg === undefined && b.pushes.length === 1 && b.pushes[0][1].resident.cfg === undefined, 'dayOnly だけの cfg は cfg ごと消して送る（GAS の列は空になる）');
+  for (const [lbl, apps] of [['対象外（targetApps に excretion が無い）', ['weight']], ['名簿に targetApps が無い（代理名簿）', undefined]]) {
+    b = mergeBox(SRC);
+    b.D.residents = [row({ cfg: { dayOnly: true, stoolWarnD: 3 } })];
+    b.mergeCommonResidents(ros(apps), { noAdd: true });
+    r = b.D.residents[0];
+    ok(r.cfg.dayOnly === true && r.cfg.stoolWarnD === 3 && b.pushes.length === 0 && b.isExcretionTarget(r) === false, lbl + ': dayOnly は外れない・何も送らない');
+  }
+  // 2台が同時に外しても同じ中身
+  const pay = [0, 1].map(() => { const x = mergeBox(SRC); x.D.residents = [row({ cfg: { stoolWarnD: 3, dayOnly: true, other: 'k' } })]; x.mergeCommonResidents(ros(['excretion']), { noAdd: true }); return JSON.stringify(x.pushes); });
+  ok(pay[0] === pay[1] && /"other":"k"/.test(pay[0]) && !/dayOnly/.test(pay[0]), '2台が同時に外しても、送る中身は同じ（dayOnly の無い cfg）');
+  // dayOnly の無い方の突き合わせは直す前と同じ
+  if (OLD_SRC) {
+    const same = [['excretion'], ['weight'], undefined].every((apps) => {
+      const o = mergeBox(OLD_SRC), n = mergeBox(SRC);
+      for (const x of [o, n]) { x.D.residents = [row({ cfg: { stoolWarnD: 3 } })]; x.mergeCommonResidents(ros(apps), { noAdd: true }); }
+      return JSON.stringify(o.D.residents) === JSON.stringify(n.D.residents) && JSON.stringify(o.pushes) === JSON.stringify(n.pushes);
+    });
+    ok(same, 'dayOnly の無い方の名簿の突き合わせ（結果の行・送る中身）は直す前の版と同じ');
+  }
+}
+
 head('21 〔デイの記録に加える〕（hbDcAdd を動かす）');
 const asyncTests = (async () => {
   const ro = { m6: { masterId: 'm6', name: '架空六', kana: 'カクウロク', room: '106', gender: '女', careLevel: '要介護1', active: true, hospitalized: false } };

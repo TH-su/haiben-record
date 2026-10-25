@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-p1d2rcmOWbnok/RFihz+kCPDusFLBX5Mjj2lHdkveuM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-nshlst8xGmVEzBjr5dOyrpTUGdhs7TJ42VZn9eyt6fY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -4324,6 +4324,16 @@ function mergeCommonResidents(srcList, opts){
          （訂正はこの画面のフリガナ欄で行う＝mRY はロック対象外）。空白だけの値は空欄として扱う。 */
       if(c.kana&&!String(tgt.yomi||'').trim()){tgt.yomi=c.kana;changed++;}
       if(tExc!==undefined&&tgt.targetExcretion!==tExc){tgt.targetExcretion=tExc;changed++;}
+      /* デイだけの方（§9.9）を入居者マスタが後から排泄の対象にしたら、dayOnly の印を外してサーバーへ送る（2026-10-25・親の追加の決まり）。
+         care-log は cfg.dayOnly だけを見て今日の要注意から外すため、印が残ると施設で記録を始めた後も「施設では記録していません」と出続ける。
+         外すのは dayOnly のキーだけ（閾値などほかのキーは残す・全部無くなれば cfg ごと消す）。送り方は下の退去の解除と同じ。
+         何台が同時に外しても、送る中身は同じ（dayOnly の無い cfg）になる */
+      if(tExc===true&&typeof hbIsDayOnly==='function'&&hbIsDayOnly(tgt)){
+        var _ncf={};Object.keys(tgt.cfg).forEach(function(k){if(k!=='dayOnly')_ncf[k]=tgt.cfg[k]});
+        if(Object.keys(_ncf).length)tgt.cfg=_ncf;else delete tgt.cfg;
+        changed++;
+        if(typeof apiPush==='function')apiPush('saveRes',{resident:tgt});
+      }
       // C5: マスタが在籍 → 当アプリの退去フラグを解除（復帰）。記録はそのまま残る
       if(tgt.active===false){
         tgt.active=true;changed++;_backN++;
