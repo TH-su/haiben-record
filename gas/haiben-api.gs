@@ -43,8 +43,12 @@ const BAK_DAYS = 90;   // 削除の印（Deleted）と同じく、90日より古
 const DEL_KEEP_DAYS = 90;
 const DEL_TRIM_AT = 3000;            // 印がこれを超えたら古いものを間引く
 const DELETED_CACHE_KEY = 'deleted_v1';
-const DIGEST_MAX_DAYS = 200;         // digest で返す日数の上限（端末は既定180日）
-const GETDAYS_MAX = 7;               // getDays 1回で受ける日数の上限
+const DIGEST_MAX_DAYS = 740;         // digest で返す日数の上限（端末の保持日数は既定180日・設定は最大730日。2026-10-28 に 200 から上げた）
+/* getDays 1回で受ける日数の上限。2026-10-28 に 7 → 31（全件の取得をやめ、記録0件の端末も getDays で180日分を受け取るため。
+   1本の費用は日数より「判定の4列を全行読む」が大きいので、刻みを大きくして本数＝Sheets の読み取り回数を減らす）。
+   端末は digest の getDaysMax を見て刻みを決める（返らない旧版には 7 で送る） */
+const GETDAYS_MAX = 31;
+const GETDAYS_GAP = 30;              // getDays: この行数以下のすき間はつないで1つのまとまりで読む（読んだ後で絞る）
 
 /** ============ 認証（2026-07-18 追加） ============
  * スクリプトプロパティ HAIBEN_TOKEN に合言葉を設定すると、全リクエスト（doGet/doPost）で
@@ -820,7 +824,9 @@ function digestResponse_(rb){
     }
     const keys = Object.keys(days).sort();
     if(keys.length > DIGEST_MAX_DAYS) keys.splice(0, keys.length - DIGEST_MAX_DAYS).forEach(k => { delete days[k]; });
-    return json({ok:true, from: from, days: days, readMs: Date.now() - t0, serverTime: Date.now()});
+    /* getDaysMax・syncCursor は 2026-10-28 に足した（足すだけ・旧版の端末は見ない）。
+       syncCursor＝読み始めの時刻。差分の基準が無い端末は、これ（のりしろを引いた値）を次の差分の基準にする */
+    return json({ok:true, from: from, days: days, readMs: Date.now() - t0, serverTime: Date.now(), getDaysMax: GETDAYS_MAX, syncCursor: t0});
   }catch(err){
     console.error('digest error:', err);
     return json({ok:false, error:SERVER_ERR_MSG});
@@ -832,36 +838,47 @@ function getDaysResponse_(rb){
     if(!want.length) return json({ok:false, error:'days が空です'});
     if(want.length > GETDAYS_MAX) return json({ok:false, error:'days は1回 '+GETDAYS_MAX+' 日まで'});
     const set = {}; want.forEach(d => { set[d] = 1; });
+    /* sys:true（2026-10-28）＝id が「sys_」で始まる行（職員の一覧の控え等）も日付に関係なく足す。
+       全件の取得をやめた端末が、職員の一覧を受け取るため。応答に sysVer:1 を足す（旧版は返さない＝端末は全件に戻る） */
+    const wantSys = !!(rb && rb.sys === true);
     const cols = _readDigestCols_();
     const rows = [];
     for(let r = 1; r < cols.n; r++){
       const id = cols.at('id', r);
       if(id == null || id === '') continue;
+      if(wantSys && /^sys_/.test(String(id))){ rows.push(r + 1); continue; }
       const d = _normYmd_(cellFromSerial_('date', cols.at('date', r)));
       if(set[d]) rows.push(r + 1);       // シート行番号（1始まり・ヘッダーが1行目）
     }
     let records = [];
     if(rows.length){
-      const rr = [];
-      let s0 = rows[0], p = rows[0];
-      for(let i = 1; i < rows.length; i++){ if(rows[i] === p + 1){ p = rows[i]; continue; } rr.push([s0, p]); s0 = p = rows[i]; }
-      rr.push([s0, p]);
-      if(rr.length > 200){
-        // まとまりが多すぎる＝全件を読んで絞る（行の読み取りを分けるほうが高くつく）
-        records = readRecords_().filter(r => r && set[_normYmd_(r.date)]);
-      }else{
-        const lastA1 = _colA1_(cols.headers.length);
-        const rres = Sheets.Spreadsheets.Values.batchGet(SS.getId(), {
-          ranges: rr.map(x => 'Records!A' + x[0] + ':' + lastA1 + x[1]),
-          valueRenderOption:'UNFORMATTED_VALUE', dateTimeRenderOption:'SERIAL_NUMBER'});
-        (rres.valueRanges || []).forEach(vr => {
-          (vr.values || []).forEach(row => {
-            const o = {};
-            for(let i = 0; i < cols.headers.length; i++){ const h = cols.headers[i]; if(h) o[h] = cellFromSerial_(h, row[i]); }
-            if(o.id != null && o.id !== '') records.push(o);
-          });
+      /* 読むまとまりを作る（2026-10-28）。GETDAYS_GAP 行以下のすき間はつないで読み、読んだ後で要る行だけ残す。
+         それでも200を超える時は、つなぐすき間を倍々に広げてから読んで絞る。
+         ★直す前は200を超えると全件を読んでいた（readRecords_）。31日分を頼むと超えやすく、全件の取得と同じ重さに戻るため */
+      const keep = {}; rows.forEach(n => { keep[n] = 1; });
+      const group = gap => {
+        const out = [];
+        let s0 = rows[0], p = rows[0];
+        for(let i = 1; i < rows.length; i++){ if(rows[i] <= p + 1 + gap){ p = rows[i]; continue; } out.push([s0, p]); s0 = p = rows[i]; }
+        out.push([s0, p]);
+        return out;
+      };
+      // 200を超える時は、つなぐすき間を倍々に広げる（余分に読む行をなるべく少なくする。最後は最初の行から最後の行までの1つになる）
+      let gap = GETDAYS_GAP, rr = group(gap);
+      while(rr.length > 200){ gap *= 2; rr = group(gap); }
+      const lastA1 = _colA1_(cols.headers.length);
+      const rres = Sheets.Spreadsheets.Values.batchGet(SS.getId(), {
+        ranges: rr.map(x => 'Records!A' + x[0] + ':' + lastA1 + x[1]),
+        valueRenderOption:'UNFORMATTED_VALUE', dateTimeRenderOption:'SERIAL_NUMBER'});
+      (rres.valueRanges || []).forEach((vr, k) => {
+        const base = rr[k] ? rr[k][0] : 0;
+        (vr.values || []).forEach((row, j) => {
+          if(!keep[base + j]) return;     // つないだすき間の行（頼まれていない日）は返さない
+          const o = {};
+          for(let i = 0; i < cols.headers.length; i++){ const h = cols.headers[i]; if(h) o[h] = cellFromSerial_(h, row[i]); }
+          if(o.id != null && o.id !== '') records.push(o);
         });
-      }
+      });
     }
     records.forEach(r => { if(r && r.date) r.date = _normYmd_(r.date) || r.date; });   // getAll の出口と同じ正規化
     return json({ok:true,
@@ -873,7 +890,8 @@ function getDaysResponse_(rb){
       padSetVer: 1,
       days: want,
       deleted: readDeletedIds_(0),
-      serverTime: Date.now()
+      serverTime: Date.now(),
+      sysVer: wantSys ? 1 : undefined
       /* ★syncCursor は返さない＝端末の差分同期の基準時刻を動かさない（日を指定した読み取りは「いつ時点」を表さない） */
     });
   }catch(err){
