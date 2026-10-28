@@ -181,9 +181,19 @@ function orderOk(E){
 /* ══════════════ 0. 前提 ══════════════ */
 head('0. 前提（本体と直す前の版を読めたか）');
 {
-  const code=SRC_NEW.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\/\/[^\n]*/g,'');
-  ok((code.match(/SpreadsheetApp\.flush\(\)/g)||[]).length===1,'flush を呼ぶのは1か所だけ（flushBeforeRelease_ の中）');
-  ok((code.match(/lock\.releaseLock\(\)/g)||[]).length===1,'ロックを外すのは doPost の finally の1か所だけ');
+  /* 2026-10-28: 古い記録を控えへ移す処理（archiveRun_・_archiveChunk_）は doPost とは別の入口（代表者がエディタ・時間の引き金で実行）で、
+     自分でロックを取り、写した後と消した後に確定する。doPost の経路の決まり（1か所だけ）はそれを除いて数える */
+  const XG=require('./_extract').makeExtractor(SRC_NEW);
+  let rest=SRC_NEW;
+  ['archiveRun_','_archiveChunk_'].forEach(n=>{try{rest=rest.replace(XG.fn(n),'')}catch(e){}});
+  const code=rest.replace(/\/\*[\s\S]*?\*\//g,'').replace(/\/\/[^\n]*/g,'');
+  ok((code.match(/SpreadsheetApp\.flush\(\)/g)||[]).length===1,'flush を呼ぶのは1か所だけ（flushBeforeRelease_ の中・移す処理を除く）');
+  ok((code.match(/lock\.releaseLock\(\)/g)||[]).length===1,'ロックを外すのは doPost の finally の1か所だけ（移す処理を除く）');
+  if(/function _archiveChunk_\(/.test(SRC_NEW)){
+    const ch=XG.fn('_archiveChunk_'), run=XG.fn('archiveRun_');
+    ok(ch.indexOf('SpreadsheetApp.flush()')<ch.indexOf('照らし合わせ')&&ch.indexOf('照らし合わせ')<ch.indexOf('sh.deleteRows('),'移す処理は 写す→確定→照らし合わせ→消す の順');
+    ok(/finally\{ try\{ lock\.releaseLock\(\); \}catch\(_\)\{\} \}/.test(run),'移す処理のロックは finally で外す');
+  }
   ok(!!SRC_OLD&&!/SpreadsheetApp\.flush\(\)/.test(SRC_OLD),'直す前の版（9f79982）を読めた＝下の「再現」が走る（flush を持たない版）');
 }
 

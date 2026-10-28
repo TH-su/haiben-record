@@ -30,27 +30,34 @@ function makeGasCtx(gasSource, sheet, opts){
     console:{log(){},warn(){},error(){}},
     Date,JSON,Math,String,Number,Array,Object,isNaN,parseInt,parseFloat,
     SpreadsheetApp:{getActiveSpreadsheet:()=>({getId:()=>'SS',getSheetByName:(n)=>_byName(n),insertSheet:(n)=>_create(n)}),flush(){}},
-    PropertiesService:{getScriptProperties:()=>({getProperty:(k)=>(k in props?props[k]:null)})},
+    PropertiesService:{getScriptProperties:()=>({getProperty:(k)=>(k in props?props[k]:null),setProperty:(k,v)=>{props[k]=String(v)}})},
     CacheService:{getScriptCache:()=>({get:()=>null,put(){},remove(){}})},
     LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},
     ContentService:{MimeType:{JSON:'json'},createTextOutput:(s)=>({_s:s,setMimeType(){return this},getContent(){return this._s}})},
     Sheets:{Spreadsheets:{Values:{
       get(id,range){
-        if(range==='Records')return{values:sheet.map(r=>r.slice())};
-        if(range==='Records!1:1')return{values:[sheet[0].slice()]};
+        /* 2026-10-28: Records のほか、控えのシート（RecordsArchive）など名前の付いた盤面も読む */
+        let m0=/^([A-Za-z]+)(?:!1:1)?$/.exec(range);
+        if(m0){
+          const sh=_grid(m0[1]);
+          if(!sh)throw new Error('シートがありません: '+range);
+          return /!1:1$/.test(range)?{values:[(sh[0]||[]).slice()]}:{values:sh.map(r=>r.slice())};
+        }
         throw new Error('未対応のレンジ: '+range);
       },
       batchGet(id,o){
         const out=(o.ranges||[]).map(rg=>{
-          let m=/^Records!([A-Z]+):([A-Z]+)$/.exec(rg);
+          let m=/^([A-Za-z]+)!([A-Z]+):([A-Z]+)$/.exec(rg);
           if(m){
-            const ci=colIndex(m[1]);
-            return{values:sheet.map(r=>{const v=r[ci];return (v===undefined||v==='')?[]:[v]})};
+            const sh=_grid(m[1]);if(!sh)throw new Error('シートがありません: '+rg);
+            const ci=colIndex(m[2]);
+            return{values:sh.map(r=>{const v=r[ci];return (v===undefined||v==='')?[]:[v]})};
           }
-          m=/^Records!A(\d+):([A-Z]+)(\d+)$/.exec(rg);
+          m=/^([A-Za-z]+)!A(\d+):([A-Z]+)(\d+)$/.exec(rg);
           if(m){
-            const r1=Number(m[1]),r2=Number(m[3]);
-            return{values:sheet.slice(r1-1,r2).map(r=>r.slice())};
+            const sh=_grid(m[1]);if(!sh)throw new Error('シートがありません: '+rg);
+            const r1=Number(m[2]),r2=Number(m[4]);
+            return{values:sh.slice(r1-1,r2).map(r=>r.slice())};
           }
           throw new Error('未対応のレンジ: '+rg);
         });
@@ -82,6 +89,7 @@ function makeGasCtx(gasSource, sheet, opts){
     getMaxColumns:()=>sheet.reduce((m,r)=>Math.max(m,r.length),0),
     getRange(r,c,nr,nc){
       nr=nr||1;nc=nc||1;
+      if(!(r>=1)||!(c>=1))throw new Error('範囲の行・列は1以上（本物の Sheets と同じ）: '+r+','+c);   // 2026-10-28
       return{
         getValues(){
           const out=[];
@@ -110,6 +118,9 @@ function makeGasCtx(gasSource, sheet, opts){
       };
     },
     insertColumnsAfter(){},
+    getMaxRows:()=>sheet.length,
+    insertRowsAfter(){},
+    deleteColumns(){},
     appendRow(row){ if(opts&&opts.failAppend&&opts.failAppend(name))throw new Error('Service Spreadsheets failed'); if(writable)sheet.push(row.slice()); },
     deleteRow(n){ if(writable)sheet.splice(n-1,1); },
     deleteRows(n,k){ if(opts&&opts.failDeleteRows&&opts.failDeleteRows(name))throw new Error('Service Spreadsheets failed'); if(writable)sheet.splice(n-1,k||1); },
@@ -119,13 +130,14 @@ function makeGasCtx(gasSource, sheet, opts){
   const sheets=(opts&&opts.sheets)||{};          // 名前 → 2次元配列（呼び出し側が覗ける実体）
   const fakes={Records:fakeSheet};
   Object.keys(sheets).forEach(n=>{fakes[n]=makeFake(sheets[n],n)});
-  const OWN=['Deleted','DeletedRows'];   // 自分の盤面を持つ名前（DeletedRows は消す前の控え・2026-10-21）
+  const OWN=['Deleted','DeletedRows','RecordsArchive'];   // RecordsArchive＝古い記録の控え（2026-10-28）   // 自分の盤面を持つ名前（DeletedRows は消す前の控え・2026-10-21）
   function _byName(n){ if(fakes[n])return fakes[n]; return OWN.indexOf(n)>=0?null:fakeSheet; }
   function _create(n,headers){
     if(!fakes[n]){ sheets[n]=headers?[headers.slice()]:[]; fakes[n]=makeFake(sheets[n],n); }
     return fakes[n];
   }
   ctx.__sheets=sheets;
+  function _grid(n){ return n==='Records'?sheet:(sheets[n]||null); }
   ctx.getOrCreateSheet_=(n,headers)=>{ if(OWN.indexOf(n)>=0){ if(opts&&opts.failCreate&&opts.failCreate(n))throw new Error('Service Spreadsheets failed'); return fakes[n]||_create(n,headers); } return fakeSheet; };
   ctx.readResidentsCached_=()=>residents.map(r=>Object.assign({},r));
   ctx.readConfig_=()=>Object.assign({},config);
