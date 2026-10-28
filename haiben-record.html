@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-Hr6XvAT7gZGxM7NqdSQPqTITlj5yVmSuFwFiu9BF48g='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-gLYTnUDhJ/HN6D7WNBR0a1W05J128G42gC24pehYP3w='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -2444,6 +2444,8 @@ async function apiGet(opts){
   if(opts.heal===false)body.heal=false;
   /* 2026-10-07: 日を指定した取得（日別の照合で違った日だけ）。応答の形は差分と同じ・基準時刻は返らない */
   if(Array.isArray(opts.days)&&opts.days.length)body={action:'getDays',days:opts.days.slice()};
+  /* 2026-10-28: 職員の一覧の控え（id が sys_ の行）も足してもらう。新しい GAS は sysVer:1 を返す。旧 GAS は無視する */
+  if(body.action==='getDays'&&opts.sys===true)body.sys=true;
   if(apiToken)body.token=apiToken; // 認証（GAS: HAIBEN_TOKEN）
   // GAS は毎回シート全行を読むため差分でも約8秒・全件は約15秒かかる（記録7500件時点・実測）。
   // 既定12秒では全件取得（初回・日付回復・「同期」ボタン）が必ずタイムアウトし、
@@ -2548,9 +2550,23 @@ function _hbDigestDiff(srv,loc,from){
   });
   return out;
 }
-async function verifyByDigest(){
-  if(!apiUrl||_dateHealNeeded||_verifyBusy)return false;
+/* opts（2026-10-28・追いつきの syncCatchUp から）: setCursor＝差分の基準が無い端末。digest の読み始めの時刻から基準を作る／
+   progress(済み,全部)＝幕の文言を進める／inner＝取り込みの回で幕を閉じず・名簿を読みに行かない（追いつきの側が最後に行う）。
+   ★照合が進行中なら、新しく始めず進行中の結果を返す（🔄更新の連打・起動の照合と重ねない）。直す前は false を返していた */
+var _verifyP=null;
+function verifyByDigest(opts){
+  if(!apiUrl||_dateHealNeeded)return Promise.resolve(false);
+  if(_verifyBusy&&_verifyP){
+    /* 追いつきの中からの照合（inner）は、進行中の照合（起動の裏の照合）の終わりを待ってから自分の条件で改めて行う
+       （進行中の照合は幕を閉じ・基準を作らないため。2回目は違う日が残っていなければ digest 1本で終わる） */
+    if(opts&&opts.inner){var _o=opts;return _verifyP.then(function(){},function(){}).then(function(){return verifyByDigest(_o)})}
+    return _verifyP;
+  }
   _verifyBusy=true;
+  _verifyP=_verifyByDigestRun(opts||{});
+  return _verifyP;
+}
+async function _verifyByDigestRun(opts){
   try{
     var from=_hbKeepFrom(),j=null;
     try{
@@ -2560,18 +2576,95 @@ async function verifyByDigest(){
       j=await r.json();
       if(!j||j.ok!==true||!j.days||typeof j.days!=='object')throw new Error((j&&j.error)||'digest 非対応');
     }catch(e){
+      /* ★全件に戻すのは「digest を知らない GAS」と分かった時だけ（2026-10-28）。通信の失敗・時間切れ・混雑（割当の超過など）で
+         全件に戻すと、GAS が遅い時ほど最大46秒の全件を呼ぶ。その時は照合済みにせず、次の機会に改めて照合する */
+      if(!_hbUnknownAction(j,'digest')){console.warn('[hbcr] 日別の照合ができない（次の機会に照合する）:',e&&e.message);return false}
       console.warn('[hbcr] 日別の照合ができない → 従来の全件照合へ:',e&&e.message);
-      return await syncFromAPI(false,{full:true,quiet:true});
+      return await syncFromAPI(false,{full:true,quiet:true,keepLoader:!!opts.inner});   // 旧 GAS との混在の時の安全網（全件は残す）
     }
+    /* 差分の基準が無い端末（2026-10-28）: digest の読み始めの時刻（サーバーの時計）を基準にする。
+       これより後に書かれた記録は次の差分で届き、前に書かれた記録はこの照合で違う日として取る。旧 GAS は読み終わり−読んだ時間 */
+    if(opts.setCursor){
+      var _c=(typeof j.syncCursor==='number'&&j.syncCursor>0)?j.syncCursor:((typeof j.serverTime==='number'&&j.serverTime>0)?j.serverTime-(Number(j.readMs)||0):0);
+      if(_c>0)_setLastSyncTs(_cursorFromResponse({syncCursor:_c}));
+    }
+    /* 1本で頼む日数は GAS が宣言する getDaysMax（2026-10-28 の版は 31）。返らない旧版は今までどおり 7 */
+    var _chunk=(Number.isInteger(j.getDaysMax)&&j.getDaysMax>=1&&j.getDaysMax<=31)?j.getDaysMax:HB_DIGEST_CHUNK;
+    /* 旧 GAS（getDaysMax を返さない版）の digest は直近200日（記録のある日）までしか返さない。それより前の日を比べると、
+       手元にだけある日が毎回「違う日」になり、保持日数が1年・2年の端末で照合が終わらない。旧 GAS の時は比べる日を直近190日に絞る */
+    if(!(Number.isInteger(j.getDaysMax))){var _od=new Date();_od.setDate(_od.getDate()-190);var _of=_od.getFullYear()+'-'+String(_od.getMonth()+1).padStart(2,'0')+'-'+String(_od.getDate()).padStart(2,'0');if(_of>from)from=_of}
     var diff=_hbDigestDiff(j.days,_hbDigestLocal(from,D.records),from);
-    for(var i=0;i<diff.length;i+=HB_DIGEST_CHUNK){
-      var ok=await syncFromAPI(false,{quiet:true,days:diff.slice(i,i+HB_DIGEST_CHUNK)});
-      if(ok!==true)return false;   // 途中で失敗＝照合済みにしない（次の起動で改めて照合する）
+    for(var i=0;i<diff.length;i+=_chunk){
+      if(typeof opts.progress==='function'){try{opts.progress(i,diff.length)}catch(e){}}
+      var ok=await syncFromAPI(false,{quiet:true,days:diff.slice(i,i+_chunk),keepLoader:!!opts.inner,noRoster:!!opts.inner});
+      if(ok!==true)return false;   // 途中で失敗＝照合済みにしない（次の起動で改めて照合する。取り込めた日は次の digest で一致する）
     }
     _markFullSync();
     if(diff.length)console.log('[hbcr] 日別の照合: 違った日',diff.length,'日を取り直しました');
     return true;
-  }finally{_verifyBusy=false}
+  }finally{_verifyBusy=false;_verifyP=null}
+}
+
+/* ════════ 追いつき（2026-10-28・全件の取得の代わり） ════════
+   「🔄 更新」・手動の「同期」・職員タブの「全員を受信」・接続先を保存した直後・記録の無い端末の起動は、
+   直す前は全記録を1回で取っていた（10/06 実測 約1.8万件・最大46秒。端末の待ち上限は60秒・記録は月に約3,400件増える）。
+   代わりに短い呼び出しに分けて受け取る:
+     1. 今日1日分＋職員の一覧の控え（id が sys_ の行・日付に関係なく）を getDays で（新しい GAS は sysVer:1 を返す）
+     2. 差分の基準がある端末は、差分（直近14日の窓つき）
+     3. 日別の照合（digest → 違う日だけを getDays。基準が無い端末は保持日数ぶんの全部の日が「違う日」になる）
+   取り込みは今までと同じ syncFromAPI の処理（送信待ちの編集・削除の印・控えの行の守り・和集合）を通す。
+   ★全件は旧 GAS との混在の時の安全網として残す: GAS が答えたのに getDays を受けない（2026-10-07 より前の版）・
+     控えの行を返さない GAS で「全員を受信」か基準の無い端末の時・照合（digest）を受けない時（verifyByDigest の中）。
+     控えの行を返さない GAS でも「🔄 更新」「同期」は照合で進める（代表者の選択 2026-10-28）。
+   ★全体を1つにまとめる（連打・起動の追いつきと重ねない）。幕はここで1回出して1回消す。
+   opts.needSys＝職員の一覧の控えを必ず受け取りたい（全員を受信） */
+var _catchUpP=null;
+var _catchUpLoaderOn=false;   // 追いつきが全画面の幕を出している間（ほかの同期の終わりで幕を閉じない）
+/* GAS が「その口を知らない」と答えたか（旧版の GAS。ロックの後ろの switch の既定の応答＝'unknown action: <名前>'） */
+function _hbUnknownAction(j,name){return !!(j&&typeof j==='object'&&j.ok===false&&typeof j.error==='string'&&j.error.indexOf('unknown action')===0&&j.error.indexOf(name)>=0)}
+function _hbTodayYmd(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function syncCatchUp(showLoader,opts){
+  if(_catchUpP)return _catchUpP;
+  _catchUpP=_syncCatchUpRun(showLoader,opts||{});
+  var p=_catchUpP;
+  p.then(function(){},function(){}).then(function(){if(_catchUpP===p)_catchUpP=null});
+  return p;
+}
+async function _syncCatchUpRun(showLoader,opts){
+  if(!apiUrl)return false;
+  var noCursor=!!opts.reset||!(_getLastSyncTs()>0);   // reset＝接続先を保存した直後（前の接続先の基準を使わない。消すのは照合で新しい基準を作れた時）
+  /* 日付の一度きりの回復（2026-06）は、直す前の記録を持つ端末のためのもの。記録も基準も無い端末には直す記録が無いので、
+     印を立てて全件を強制しない（立てないと、この端末は最初の同期で必ず全件になる） */
+  if(_dateHealNeeded&&noCursor&&!(Array.isArray(D.records)&&D.records.some(function(r){return isUserRec(r)}))){
+    _dateHealNeeded=false;try{localStorage.setItem(DATEFIX_HEAL_KEY,'1')}catch(e){}
+  }
+  if(_dateHealNeeded)return await syncFromAPI(showLoader,{full:true});   // 誤日付の記録を持つかもしれない旧い端末だけ（一度きり）
+  /* 接続先を保存した直後: 前の接続先の照合済みの印は外す（失敗して前の基準が残っても、次の起動で新しい接続先と照合する） */
+  if(opts.reset){try{localStorage.removeItem(LAST_FULL_KEY)}catch(e){}}
+  if(showLoader){ldShow('サーバーから受け取っています...');_catchUpLoaderOn=true}
+  try{
+    var sj=null,ok;
+    ok=await syncFromAPI(false,{quiet:!showLoader,keepLoader:true,noRoster:true,days:[_hbTodayYmd()],
+      fetch:async function(){sj=await apiGet({days:[_hbTodayYmd()],sys:true});return sj}});
+    if(ok!==true){
+      /* getDays を知らない旧 GAS（2026-10-07 より前の版）＝今までどおり全件。通信の失敗・時間切れ・混雑・合言葉の違いは、
+         全件にしても同じか重くなるだけなので、ここで失敗とする（全件に戻すのは旧版と分かった時だけ） */
+      if(_hbUnknownAction(sj,'getDays'))return await syncFromAPI(false,{full:true,keepLoader:true});
+      return false;   // 失敗の知らせは呼んだ側（「更新に失敗しました」等）とヘッダの接続表示が出す
+    }
+    var sysOk=!!(sj&&Number(sj.sysVer)>=1);
+    if(!sysOk&&(opts.needSys||noCursor))return await syncFromAPI(false,{full:true,keepLoader:true});
+    if(!noCursor){
+      ok=await syncFromAPI(false,{heal:true,keepLoader:true,noRoster:true});
+      if(ok!==true)return false;
+    }
+    var v=await verifyByDigest({setCursor:noCursor,inner:true,progress:showLoader?function(i,n){
+      ldShow('サーバーから受け取っています（'+i+'/'+n+'日）...');
+    }:null});
+    if(v!==true)return false;
+    if(typeof syncMasterRoster==='function')syncMasterRoster();   // 途中の回では省いた名簿の同期を最後に1回
+    return true;
+  }finally{if(showLoader){_catchUpLoaderOn=false;ldHide()}}
 }
 /* 日付TZ修正（2026-06-15・サーバー側で date を JST yyyy-MM-dd に正規化）に伴う一度きりの回復。
    旧サーバーは date を1日前で返していたため、端末ローカルに誤日付で取り込まれた記録が残る。
@@ -2653,7 +2746,8 @@ async function syncFromAPI(showLoader,opts){
        opts.heal===true（🔄更新など）だけ。それ以外の追い読みは「変わった記録だけ」を受け取る（約490KB→数KB）。 */
     var _wantHeal=(opts.heal===true)||(Date.now()-_healOkAt>=HEAL_INTERVAL_MS);
     var _fetchStartAt=Date.now();   // 取得開始（これより後に削除が完了した記録は、応答に削除前の行が載りうる）
-    var json=await apiGet(_daysMode?{days:opts.days}:{since:sinceTs,heal:(sinceTs>0&&!_wantHeal)?false:undefined});
+    /* opts.fetch（2026-10-28・追いつきの syncCatchUp だけが使う）: 取得だけを差し替える（応答を見たい時）。取り込みは下の同じ処理を通す */
+    var json=(typeof opts.fetch==='function')?await opts.fetch():await apiGet(_daysMode?{days:opts.days}:{since:sinceTs,heal:(sinceTs>0&&!_wantHeal)?false:undefined});
     if(json.error)throw new Error(json.error);
     if(json.residents===undefined)throw new Error('レスポンス形式が不正です');
     var apiRes=Array.isArray(json.residents)?json.residents:[];
@@ -2873,7 +2967,7 @@ async function syncFromAPI(showLoader,opts){
     if(typeof hbResHealSoon==='function')hbResHealSoon();
     // 入居者マスタ名簿をサーバー経由でも更新（非同期・await しない＝記録同期の完了を待たせない。
     // 失敗しても false を返すだけで、ここまでの同期結果には影響しない）
-    if(typeof syncMasterRoster==='function')syncMasterRoster();
+    if(typeof syncMasterRoster==='function'&&!opts.noRoster)syncMasterRoster();   // 追いつきの途中の回は省き、最後に1回だけ呼ぶ（syncCatchUp）
     cleanData();save();
     /* ════════ サーバーに届いていないローカル記録の送り直し（2026-09-08 追加・D） ════════
        送信キューがメモリだけだった時代（〜2026-09-08）に、送信待ちのままタブが破棄されて
@@ -2980,7 +3074,7 @@ async function syncFromAPI(showLoader,opts){
     // opts.quiet＝時系列の自動取得（5分ごと）。失敗のたびにトーストを出さない（ヘッダの接続表示は従来どおり更新）
     if(!(opts&&opts.quiet))showToast('⚠️ API同期失敗: '+e.message);
     return false}
-  finally{ldHide()}
+  finally{if(!(opts&&opts.keepLoader)&&!_catchUpLoaderOn)ldHide()}   // 追いつき（syncCatchUp）の途中の回は、幕を追いつきの側が閉じる
   })();
   _syncInFlight=_run;_syncInFlightFull=_runFull;
   try{return await _run;}finally{_syncInFlight=null;}
@@ -6238,7 +6332,8 @@ function _syncPollTick(force,retryOnce){
   if(!force&&!_syncPollDue())return;
   _syncPollAt=Date.now();_syncPollBusy=true;
   var p;
-  try{p=syncFromAPI(false,{quiet:true})}catch(e){_syncPollBusy=false;return}
+  /* 差分の基準が無い（記録の無い端末の起動・接続先の保存が失敗した後）時は、全件ではなく追いつきで受け取る（2026-10-28） */
+  try{p=(_getLastSyncTs()>0)?syncFromAPI(false,{quiet:true}):syncCatchUp(false)}catch(e){_syncPollBusy=false;return}
   Promise.resolve(p).then(function(ok){
     _syncPollBusy=false;
     if(ok!==true){_syncPollFails++;_syncPollRetrySoon(retryOnce);return}
@@ -10160,10 +10255,9 @@ function _initRest(){
   function _forceReceiveStaffs(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
     showToast('📡 サーバーから受信中...');
-    /* ★{full:true} が必要（2026-09-08 修正）。syncFromAPI の第1引数は showLoader であって
-       full ではない。true だけを渡していたため「全員を受信」が差分同期になっており、
-       サーバーにしか無い職員を取り直せていなかった。 */
-    syncFromAPI(true,{full:true}).then(function(ok){
+    /* ★差分だけでは足りない（2026-09-08 修正）。差分同期ではサーバーにしか無い職員を取り直せなかった。
+       2026-10-28: 全件の取得をやめ、追いつき（職員の一覧の控えを必ず受け取る needSys）にした。控えを返さない旧 GAS では全件に戻る */
+    syncCatchUp(true,{needSys:true}).then(function(ok){
       if(!ok){showToast('⚠️ 受信に失敗しました','err');return}
       var prevCnt=(D.staffs||[]).length;
       // union:true でローカル限定エントリを保護
@@ -10180,10 +10274,11 @@ function _initRest(){
   function _refreshFromServer(){
     if(!apiUrl){showToast('⚠️ 先に設定で GAS URL を保存してください','err');return}
     showToast('🔄 サーバーから更新中...');
-    /* ★{full:true} が必要（2026-09-08 修正）。ここは「全データをサーバーから受信」を意図した
-       復旧経路だが、第1引数 showLoader に true を渡していただけで実体は差分同期だった。
-       そのため差分同期で取りこぼした記録を現場が取り戻す手段が存在しなかった。 */
-    syncFromAPI(true,{full:true}).then(function(ok){
+    /* ★差分だけでは足りない（2026-09-08 修正）。ここは「全データをサーバーから受信」を意図した復旧経路で、
+       差分同期で取りこぼした記録を現場が取り戻せる必要がある。
+       2026-10-28: 全件の取得（最大46秒・待ち上限60秒に近づいていた）をやめ、追いつき（差分＋日別の照合）にした。
+       日別の照合が保持日数ぶんの全部の日を突き合わせるので、取りこぼしを取り戻す目的は保たれる */
+    syncCatchUp(true).then(function(ok){
       if(!ok){showToast('⚠️ 更新に失敗しました','err');return}
       // union:true でローカル限定エントリを保護（未送信データの消失を防止）
       if(typeof extractStaffsFromCfg==='function')extractStaffsFromCfg({union:true});
@@ -10405,7 +10500,9 @@ function _initRest(){
        起動の同期は差分（自己修復窓つき）で先に済ませ、照合は裏で続ける。記録が無い端末・基準が無い端末は従来どおり全件。 */
     var _wantVerify=_needFullSync();
     var _byDigest=_wantVerify&&!_startupBlock&&_getLastSyncTs()>0&&!_dateHealNeeded;
-    syncFromAPI(_startupBlock,{full:_wantVerify&&!_byDigest}).then(ok=>{
+    /* 2026-10-28: 記録や基準の無い端末も全件を取らず、追いつき（syncCatchUp）で受け取る（旧 GAS の時は追いつきの中で全件に戻る） */
+    (_wantVerify&&!_byDigest?syncCatchUp(_startupBlock):syncFromAPI(_startupBlock,{})).then(ok=>{
+      if(!ok&&_startupBlock)showToast('⚠️ サーバーから記録を受け取れませんでした。接続を確かめて「🔄 更新」を押してください');
       if(ok&&_byDigest){
         verifyByDigest().then(function(v){
           if(v!==true||_locked)return;
@@ -10450,8 +10547,10 @@ function _initRest(){
     // API接続初回: サンプル入居者（_seed）を削除してサーバーデータをクリーンに取り込む
     if(Array.isArray(D.residents)){D.residents=D.residents.filter(function(r){return !r._seed});save()}
     apiSetStatus('sy');
-    // 接続直後は必ず全件（この端末はまだサーバーの内容を1件も持っていない）
-    syncFromAPI(true,{full:true}).then(ok=>{
+    /* 接続直後: この端末はまだこの接続先の内容を持っていない。直す前は全件を取っていた。
+       2026-10-28: 基準の無い端末と同じ扱い（reset）の追いつきで受け取る（保持日数ぶんの全部の日を照合で取り、照合の読み始めの時刻で基準を作り直す）。
+       ★基準は先に消さない。消してから失敗すると、5分ごとの追い読みが全件を取りに行く。旧 GAS の時は追いつきの中で全件に戻る */
+    syncCatchUp(true,{reset:true}).then(ok=>{
       if(ok){
         buildResSel();renderCfg();
         var sc=document.querySelector('.scr.on');
@@ -10485,8 +10584,8 @@ function _initRest(){
 
   $('btnApiSync').addEventListener('click',async function(){
     if(!apiUrl){showToast('⚠️ 先にURLを保存してください');return}
-    // 手動の「同期」は復旧目的で押されるため全件で照合する（2026-09-08 修正）
-    const ok=await syncFromAPI(true,{full:true});
+    // 手動の「同期」は復旧目的で押されるため照合まで行う（2026-09-08 修正。2026-10-28 に全件から追いつきへ）
+    const ok=await syncCatchUp(true);
     if(ok){
       buildResSel();renderCfg();
       const sc=document.querySelector('.scr.on');

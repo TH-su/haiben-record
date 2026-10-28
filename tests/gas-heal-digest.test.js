@@ -158,8 +158,11 @@ head('5. getDays');
   ok(g.delta===true&&Array.isArray(g.residents)&&g.cfg!==undefined,'getAll の差分応答と同じ形（端末の取り込み処理をそのまま使える）');
   ok(g.syncCursor===undefined,'基準時刻（syncCursor）は返さない＝端末の差分同期の基準を動かさない');
   ok(Array.isArray(g.deleted)&&g.deleted.length===1,'削除の印を添える',g.deleted);
-  const many=post(ctx,{action:'getDays',days:['2026-01-01','2026-01-02','2026-01-03','2026-01-04','2026-01-05','2026-01-06','2026-01-07','2026-01-08']});
-  ok(many.ok===false,'1回に8日以上は受けない（7日まで）');
+  /* 2026-10-28: 上限を 7 → 31 日（全件の取得をやめ、記録の無い端末も getDays で受け取るため） */
+  const dlist=n=>Array.from({length:n},(_,i)=>'2026-01-'+('0'+(i+1)).slice(-2));
+  ok(post(ctx,{action:'getDays',days:dlist(31)}).ok===true,'1回に31日までは受ける');
+  const many=post(ctx,{action:'getDays',days:dlist(31).concat(['2026-02-01'])});
+  ok(many.ok===false,'1回に32日以上は受けない（31日まで）');
   ok(post(ctx,{action:'getDays',days:[]}).ok===false,'日の指定が空なら受けない');
 })();
 

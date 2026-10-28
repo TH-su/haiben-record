@@ -209,21 +209,21 @@ head('⑥ クライアント: _cursorFromResponse（端末時計を使わない�
   ok(!/_setLastSyncTs\(Date\.now\(\)\)/.test(SRC),'端末時計を基準にする旧コードが残っていない');
 }
 
-head('⑦ クライアント: 全件取得（復旧経路）が実際に呼ばれるか');
+head('⑦ クライアント: 復旧経路（🔄更新・同期）が差分だけで終わらないか');
 {
-  const callers=SRC.match(/syncFromAPI\([^)]*\)/g)||[];
-  const withFull=callers.filter(c=>/full/.test(c));
-  ok(withFull.length>=4,'opts.full を渡す呼び出しが '+withFull.length+' 箇所ある（修正前は 0）');
-  ok(/showToast\('🔄 サーバーから更新中\.\.\.'\);\s*\/\*[\s\S]*?\*\/\s*syncFromAPI\(true,\{full:true\}\)/.test(SRC),
-     '【本丸】「🔄更新」が全件取得になった');
-  ok(/const ok=await syncFromAPI\(true,\{full:true\}\)/.test(SRC),'設定画面の「同期」も全件取得');
-  if(/function verifyByDigest\(/.test(SRC)){
-    /* 2026-10-07: 1日1回の照合は、手元に記録と基準がある端末では日別の照合（verifyByDigest）。無い端末は従来どおり全件 */
-    ok(/var _wantVerify=_needFullSync\(\);/.test(SRC)&&/syncFromAPI\(_startupBlock,\{full:_wantVerify&&!_byDigest\}\)/.test(SRC)&&/if\(ok&&_byDigest\)\{\s*verifyByDigest\(\)/.test(SRC),
-      '起動時は 1日1回だけ照合（記録と基準がある端末は日別の照合・無い端末は全件。それ以外は差分）');
-  }else{
-    ok(/syncFromAPI\((?:true|_startupBlock),\{full:_needFullSync\(\)\}\)/.test(SRC),'起動時は 1日1回だけ全件（それ以外は差分）');
-  }
+  /* 2026-09-08 の退行防止＝「🔄更新」「同期」が差分だけになり、取りこぼしを取り戻せなかった。
+     2026-10-28 に全件の取得（最大46秒・待ち上限60秒）をやめ、追いつき（syncCatchUp＝差分＋日別の照合）にした。
+     ここでは「入口が追いつきを呼ぶ・全件を呼ばない」を確かめる。追いつきが実際に全部の日を受け取ることは tests/catch-up.test.js */
+  ok(/showToast\('🔄 サーバーから更新中\.\.\.'\);\s*\/\*[\s\S]*?\*\/\s*syncCatchUp\(true\)/.test(SRC),
+     '【本丸】「🔄更新」が追いつき（差分＋日別の照合）を呼ぶ');
+  ok(/const ok=await syncCatchUp\(true\)/.test(SRC),'設定画面の「同期」も追いつき');
+  ok(/showToast\('📡 サーバーから受信中\.\.\.'\);\s*\/\*[\s\S]*?\*\/\s*syncCatchUp\(true,\{needSys:true\}\)/.test(SRC),'「全員を受信」は職員の一覧の控えを必ず受け取る追いつき');
+  ok(/syncCatchUp\(true,\{reset:true\}\)/.test(SRC),'接続先を保存した直後は、前の接続先の基準を使わない追いつき（reset）');
+  const full=(SRC.match(/syncFromAPI\([^)]*full:true[^)]*\)/g)||[]);
+  const inCatch=(X.fn('_syncCatchUpRun').match(/syncFromAPI\([^)]*full:true[^)]*\)/g)||[]).length+(X.fn('_verifyByDigestRun').match(/syncFromAPI\([^)]*full:true[^)]*\)/g)||[]).length;
+  ok(full.length===inCatch&&full.length===4,'全件の取得は追いつきと照合の中の安全網（旧 GAS・日付の回復）だけ（'+full.length+' か所）');
+  ok(/var _wantVerify=_needFullSync\(\);/.test(SRC)&&/\(_wantVerify&&!_byDigest\?syncCatchUp\(_startupBlock\):syncFromAPI\(_startupBlock,\{\}\)\)/.test(SRC)&&/if\(ok&&_byDigest\)\{\s*verifyByDigest\(\)/.test(SRC),
+    '起動時は 1日1回だけ照合（記録と基準がある端末は日別の照合・無い端末は追いつき。それ以外は差分）');
   if(/_startupBlock/.test(SRC))ok(/var _startupBlock=!\(D&&Array\.isArray\(D\.records\)&&D\.records\.length>0\);/.test(SRC),'起動時の全画面の「取得中」は、端末に記録が無い時だけ（2026-10-07）');
   const nf={};vm.createContext(nf);
   nf.localStorage={_m:{},getItem(k){return k in this._m?this._m[k]:null},setItem(k,v){this._m[k]=String(v)},removeItem(k){delete this._m[k]}};

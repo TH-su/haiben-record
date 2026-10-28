@@ -47,6 +47,9 @@ function makeSandbox(state){
       return null;
     },
     syncFromAPI(showLoader,opts){ calls.sync++; const r=Array.isArray(state.syncResult)?state.syncResult.shift():state.syncResult; return Promise.resolve(r===undefined?true:r) },
+    /* 2026-10-28: 差分の基準が無い時は追いつき（syncCatchUp）を呼ぶ。この試験は「いつ取りに行くか」だけを見るので、どちらも1回の取得に数える */
+    _getLastSyncTs(){ return state.noCursor?0:1 },
+    syncCatchUp(showLoader){ calls.sync++; calls.catchUp=(calls.catchUp||0)+1; const r=Array.isArray(state.syncResult)?state.syncResult.shift():state.syncResult; return Promise.resolve(r===undefined?true:r) },
     _netLastErTransient(){ return state.transient!==false },
     flushPendingQueue(){ calls.flush++ },
     _unsentCount(){ return state.unsent||0 },

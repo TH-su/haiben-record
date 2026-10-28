@@ -432,7 +432,7 @@ function makeSyncSandbox(){
     (/var HEAL_INTERVAL_MS=/.test(SRC)?X.varDecl('HEAL_INTERVAL_MS')+'\n'+X.varDecl('_healOkAt'):''),
     (/function _delRecAddMany\(/.test(SRC)?X.fn('_delRecAddMany'):'')].join('\n'),sb);
   Object.assign(sb,{
-    apiUrl:'(接続先あり)',_dateHealNeeded:false,_schedHealNeeded:false,_linkDropN:0,
+    apiUrl:'(接続先あり)',_dateHealNeeded:false,_catchUpLoaderOn:false,_schedHealNeeded:false,_linkDropN:0,
     SYS_STAFF_SNAPSHOT_ID:'sys_snap',SYS_STAFF_SNAPSHOT_MARKER:'__SNAP__',
     DATEFIX_HEAL_KEY:'k1',SCHED_HEAL_KEY:'k2',
     _writeQ:[],_wqCurrent:null,loadPendingQueue:()=>[],
@@ -590,7 +590,7 @@ async function asyncMore(){
     ok(!/localStorage|sessionStorage|_storageSet/.test(src),'最近削除した id は端末のメモリだけ（localStorage に保存しない）');
     ok(/if\(_unsentDel\[String\(r\.id\)\]\)\{seenRecId\[r\.id\]=true;return;\}\s*\/\/[^\n]*\n\s*if\(_recentDelHas\(r\.id,_fetchStartAt\)\)\{seenRecId\[r\.id\]=true;return;\}/.test(X.fn('syncFromAPI')),
       '取り込み時の除外は _unsentDel の直後で同じ扱い（手動の同期にも効く）');
-    ok(/var _fetchStartAt=Date\.now\(\);[^\n]*\n\s*var json=await apiGet\(/.test(X.fn('syncFromAPI')),'取得開始時刻はリクエストを送る直前に取る');
+    ok(/var _fetchStartAt=Date\.now\(\);[^\n]*\n(?:\s*\/\*[^\n]*\*\/\n)?\s*var json=(?:\(typeof opts\.fetch==='function'\)\?await opts\.fetch\(\):)?await apiGet\(/.test(X.fn('syncFromAPI')),'取得開始時刻はリクエストを送る直前に取る（追いつきの取得の差し替え opts.fetch も同じ位置）');
   }
 }
 
