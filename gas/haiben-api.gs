@@ -49,6 +49,18 @@ const DIGEST_MAX_DAYS = 740;         // digest で返す日数の上限（端末
    端末は digest の getDaysMax を見て刻みを決める（返らない旧版には 7 で送る） */
 const GETDAYS_MAX = 31;
 const GETDAYS_GAP = 30;              // getDays: この行数以下のすき間はつないで1つのまとまりで読む（読んだ後で絞る）
+/* ============ 古い記録の控えのシート（2026-10-28・本人「推奨どおり」） ============
+ * Records の行は使うほど増え、毎回の読み取り（digest・getDays・差分）が件数に比例して伸びる。
+ * 今日から ARCHIVE_AFTER_DAYS 日より前の記録を同じスプレッドシートの ARCHIVE_SHEET へ移し、Records を約7か月分に保つ。
+ * ★区切り（この日より前の日は控えにもある）はスクリプト プロパティ ARCHIVE_PROP に yyyy-MM-dd で持ち、前へ戻さない。
+ * ★読み取りは区切りより前の日を頼まれた時だけ控えも読む（digest・getDays）。それより後の日だけの呼び出しは今までと同じ。
+ * ★移すのは代表者がエディタで archiveOldRecords を実行した時と、代表者が入れた月1回の時間の引き金だけ（画面からは動かない）。
+ *   先に archiveCount で件数と日付の幅を見る。 */
+const ARCHIVE_SHEET = 'RecordsArchive';
+const ARCHIVE_PROP = 'ARCHIVE_BEFORE';
+const ARCHIVE_AFTER_DAYS = 200;      // 端末の保持日数の推奨180日＋余白。これより短くしない（端末が毎日比べる日を控えに追い出さない）
+const ARCHIVE_CHUNK = 300;           // 1回のロックで移す行数（書き込みを長く待たせない）
+const ARCHIVE_PAGE_MAX = 5000;       // getArchive 1回で返す行数の上限
 
 /** ============ 認証（2026-07-18 追加） ============
  * スクリプトプロパティ HAIBEN_TOKEN に合言葉を設定すると、全リクエスト（doGet/doPost）で
@@ -487,6 +499,8 @@ function doPost(e){
   /* ── 日別の照合（2026-10-07 追加）。どちらも読み取りだけ＝ロックの前で受ける ── */
   if(rb && typeof rb === 'object' && rb.action === 'digest') return digestResponse_(rb);
   if(rb && typeof rb === 'object' && rb.action === 'getDays') return getDaysResponse_(rb);
+  /* 控えのシートの行をページ分けで返す（2026-10-28・全データの書き出し用）。読み取りだけ＝ロックの前で受ける */
+  if(rb && typeof rb === 'object' && rb.action === 'getArchive') return getArchiveResponse_(rb);
   // 複数端末の同時POSTによる読み-書き競合（lost update・行重複・Configヘッダ破壊）を防ぐため
   // スクリプトロックで書き込みを直列化する。既存の switch / レスポンス形状は不変（外側で包むだけ）。
   var lock = LockService.getScriptLock();
@@ -500,8 +514,8 @@ function doPost(e){
     console.log('doPost action=', action);
     // 応答はいったん受け取り、書いていたら返す前（＝ロックを外す前）に確定させる（2026-09-23）
     switch(action){
-      case 'addRecord':  upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  if(unmarkDeleted_(body.record && body.record.id)) _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
-      case 'saveRecord': upsertRow_('Records',   REC_DEFAULT_HEADERS, body.record);  if(unmarkDeleted_(body.record && body.record.id)) _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
+      case 'addRecord':  upsertRecord_(body.record);  if(unmarkDeleted_(body.record && body.record.id)) _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
+      case 'saveRecord': upsertRecord_(body.record);  if(unmarkDeleted_(body.record && body.record.id)) _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
       case 'delRecord':  deleteRecordMarked_(body.id);                              _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveRes':    upsertRow_('Residents', RES_DEFAULT_HEADERS, body.resident, true); _afterFlush_.push(invalidateResidentsCache_); return json(flushBeforeRelease_({ok:true}));
       case 'saveSched':  return json(flushBeforeRelease_(saveSched_(body)));
@@ -679,8 +693,20 @@ function trimDeletedRows_(bs){
 /** 記録を消して印を残す。行が見つからなくても印は残す（他の端末が持っている写しを送り直させない）。 */
 function deleteRecordMarked_(id){
   if(id == null || id === '') return;
-  var dateYmd = '';
-  const sh = SS.getSheetByName('Records');
+  var dateYmd = _deleteRecordRow_('Records', id);
+  /* 控えのシートからも消す（2026-10-28。移した古い記録・移している途中で両方にある記録の、控えの行が残って印だけ付くのを防ぐ）。
+     控えのシートがある時だけ探す（区切りの有無によらない＝区切りを置く前に止まった写しも消す） */
+  if(SS.getSheetByName(ARCHIVE_SHEET)){ const d2 = _deleteRecordRow_(ARCHIVE_SHEET, id); if(dateYmd === null) dateYmd = d2; }
+  if(dateYmd === null) dateYmd = '';
+  const ds = getOrCreateSheet_(DEL_SHEET, DEL_DEFAULT_HEADERS);
+  _wrote_ = true;
+  ds.appendRow([String(id), Date.now(), dateYmd]);
+  trimDeleted_(ds);
+}
+/** 1枚のシートから id の行を（中身を控えてから）消す。消した行の日付（yyyy-MM-dd・読めなければ ''）、見つからなければ null */
+function _deleteRecordRow_(sheetName, id){
+  var dateYmd = null;
+  const sh = SS.getSheetByName(sheetName);
   if(sh){
     const last = sh.getLastRow();
     if(last >= 2){
@@ -694,8 +720,9 @@ function deleteRecordMarked_(id){
             if(dateCol >= 0){
               try{ dateYmd = _normYmd_(sh.getRange(i+2, dateCol+1).getValue()); }catch(e){ dateYmd = ''; }
             }
+            if(dateYmd === null) dateYmd = '';
             // ★消す前に行の中身を控える（2026-10-21）。書けなければ例外で、消さない
-            backupRowBeforeDelete_('Records', headers, sh.getRange(i+2, 1, 1, headers.length).getValues()[0], id);
+            backupRowBeforeDelete_(sheetName, headers, sh.getRange(i+2, 1, 1, headers.length).getValues()[0], id);
             _wrote_ = true;
             sh.deleteRow(i+2);
             break;
@@ -704,10 +731,7 @@ function deleteRecordMarked_(id){
       }
     }
   }
-  const ds = getOrCreateSheet_(DEL_SHEET, DEL_DEFAULT_HEADERS);
-  _wrote_ = true;
-  ds.appendRow([String(id), Date.now(), dateYmd]);
-  trimDeleted_(ds);
+  return dateYmd;
 }
 /** 記録が書かれたら（作り直し・編集が削除に勝った時）、その id の削除の印を外す。
  *  外さないと、他の端末は作り直された記録を受け取っても印に従って外し続け、見えなくなる。
@@ -786,27 +810,41 @@ function _idHash32_(s){
 }
 function _digestSkipId_(id){ return id == null || id === '' || /^sys_/.test(String(id)); }
 /** id・date・updatedAt・createdAt の4列だけを読む（全19列は読まない） */
-function _readDigestCols_(){
-  getOrCreateSheet_('Records', REC_DEFAULT_HEADERS);
+function _readDigestCols_(sheetName){
+  /* sheetName（2026-10-28）: 省略＝Records（今までどおり）。控えのシートは無ければ作らず、空として返す */
+  const nm = sheetName || 'Records';
+  if(nm === 'Records') getOrCreateSheet_('Records', REC_DEFAULT_HEADERS);
+  else if(!SS.getSheetByName(nm)) return {headers: [], n: 0, at: () => '', sheet: nm};
   const ssId = SS.getId();
-  const hres = Sheets.Spreadsheets.Values.get(ssId, 'Records!1:1', {valueRenderOption:'UNFORMATTED_VALUE'});
+  const hres = Sheets.Spreadsheets.Values.get(ssId, nm + '!1:1', {valueRenderOption:'UNFORMATTED_VALUE'});
   const headers = ((hres.values && hres.values[0]) || []).map(v => String(v).trim());
   const want = ['id','date','updatedAt','createdAt'], idx = {}, ranges = [], order = [];
-  want.forEach(n => { const i = headers.indexOf(n); idx[n] = i; if(i >= 0){ order.push(n); ranges.push('Records!' + _colA1_(i+1) + ':' + _colA1_(i+1)); } });
+  want.forEach(n => { const i = headers.indexOf(n); idx[n] = i; if(i >= 0){ order.push(n); ranges.push(nm + '!' + _colA1_(i+1) + ':' + _colA1_(i+1)); } });
   if(idx.id < 0 || idx.date < 0) throw new Error('id/date 列がありません');
   const bres = Sheets.Spreadsheets.Values.batchGet(ssId, {ranges: ranges, valueRenderOption:'UNFORMATTED_VALUE', dateTimeRenderOption:'SERIAL_NUMBER'});
   const col = {};
   (bres.valueRanges || []).forEach((vr, k) => { col[order[k]] = vr.values || []; });
   let n = 0; order.forEach(k => { n = Math.max(n, col[k].length); });
   const at = (name, r) => { const c = col[name]; if(!c) return ''; const row = c[r]; return (row && row.length) ? row[0] : ''; };
-  return {headers: headers, n: n, at: at};
+  return {headers: headers, n: n, at: at, sheet: nm};
+}
+/** 控えの区切り（この日より前の日は控えのシートにもある）。無い・壊れた値は '' ＝控えを読まない */
+function archiveBoundary_(){
+  try{
+    const v = PropertiesService.getScriptProperties().getProperty(ARCHIVE_PROP);
+    return (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : '';
+  }catch(e){ return ''; }
 }
 function digestResponse_(rb){
   try{
     const from = (rb && typeof rb.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rb.from)) ? rb.from : _ymdJst_(Date.now() - 180*86400000);
     const t0 = Date.now();
-    const cols = _readDigestCols_();
     const days = {}, seen = {};
+    /* 区切りより前の日を頼まれた時だけ、控えのシートも数える（同じ日の同じ id は seen で1件に数える＝移している途中の重なりも1件） */
+    const bnd = archiveBoundary_();
+    const sheetsToRead = ['Records'].concat(bnd && from < bnd ? [ARCHIVE_SHEET] : []);
+    sheetsToRead.forEach(nm => {
+    const cols = _readDigestCols_(nm);
     for(let r = 1; r < cols.n; r++){
       const id = cols.at('id', r);
       if(_digestSkipId_(id)) continue;
@@ -822,8 +860,11 @@ function digestResponse_(rb){
       e[1] = (e[1] + _idHash32_(sid)) >>> 0;
       if(ts > e[2]) e[2] = ts;
     }
+    });
     const keys = Object.keys(days).sort();
     if(keys.length > DIGEST_MAX_DAYS) keys.splice(0, keys.length - DIGEST_MAX_DAYS).forEach(k => { delete days[k]; });
+    /* 日付の順に並べ直して返す（2026-10-28。控えから読んだ古い日が後ろに付いても、答えの形を毎回同じにする） */
+    if(sheetsToRead.length > 1){ const sorted = {}; keys.forEach(k => { sorted[k] = days[k]; }); Object.keys(days).forEach(k => { delete days[k]; }); keys.forEach(k => { days[k] = sorted[k]; }); }
     /* getDaysMax・syncCursor は 2026-10-28 に足した（足すだけ・旧版の端末は見ない）。
        syncCursor＝読み始めの時刻。差分の基準が無い端末は、これ（のりしろを引いた値）を次の差分の基準にする */
     return json({ok:true, from: from, days: days, readMs: Date.now() - t0, serverTime: Date.now(), getDaysMax: GETDAYS_MAX, syncCursor: t0});
@@ -841,7 +882,47 @@ function getDaysResponse_(rb){
     /* sys:true（2026-10-28）＝id が「sys_」で始まる行（職員の一覧の控え等）も日付に関係なく足す。
        全件の取得をやめた端末が、職員の一覧を受け取るため。応答に sysVer:1 を足す（旧版は返さない＝端末は全件に戻る） */
     const wantSys = !!(rb && rb.sys === true);
-    const cols = _readDigestCols_();
+    let records = _getDaysRows_('Records', set, wantSys);
+    /* 区切りより前の日を頼まれた時だけ、控えのシートからも読む（2026-10-28）。同じ id が両方にある時（移している途中）は
+       Records の方を採る。控えには職員の一覧の控え（sys_）は入らない */
+    const bnd = archiveBoundary_();
+    const oldSet = {}; let hasOld = false;
+    if(bnd) want.forEach(d => { if(d < bnd){ oldSet[d] = 1; hasOld = true; } });
+    if(hasOld){
+      const have = {}; records.forEach(r => { have[String(r.id)] = 1; });
+      _getDaysRows_(ARCHIVE_SHEET, oldSet, false).forEach(r => { if(!have[String(r.id)]) records.push(r); });
+    }
+    records.forEach(r => { if(r && r.date) r.date = _normYmd_(r.date) || r.date; });   // getAll の出口と同じ正規化
+    return json({ok:true,
+      residents: readResidentsCached_(),
+      records: records,
+      cfg: readConfig_(),
+      delta: true,
+      schedVer: 1,
+      padSetVer: 1,
+      days: want,
+      deleted: readDeletedIds_(0),
+      serverTime: Date.now(),
+      sysVer: wantSys ? 1 : undefined
+      /* ★syncCursor は返さない＝端末の差分同期の基準時刻を動かさない（日を指定した読み取りは「いつ時点」を表さない） */
+    });
+  }catch(err){
+    console.error('getDays error:', err);
+    return json({ok:false, error:SERVER_ERR_MSG});
+  }
+}
+/** 1枚のシートから、頼まれた日（set）の行（wantSys なら sys_ の行も）を読む。判定の4列を全行読み、要る行だけを読む */
+function _getDaysRows_(sheetName, set, wantSys){
+  /* 行番号のずれ（readRecordsWindow_ と同じ）を見つけたら1回だけ読み直す。それでもずれていれば失敗にする（端末は後で取り直す） */
+  for(let attempt = 0; attempt < 2; attempt++){
+    const v = _getDaysRowsOnce_(sheetName, set, wantSys);
+    if(v !== 'shift') return v;
+  }
+  throw new Error('rows shifted');
+}
+function _getDaysRowsOnce_(sheetName, set, wantSys){
+    const cols = _readDigestCols_(sheetName);
+    if(!cols.n) return [];
     const rows = [];
     for(let r = 1; r < cols.n; r++){
       const id = cols.at('id', r);
@@ -868,39 +949,36 @@ function getDaysResponse_(rb){
       while(rr.length > 200){ gap *= 2; rr = group(gap); }
       const lastA1 = _colA1_(cols.headers.length);
       const rres = Sheets.Spreadsheets.Values.batchGet(SS.getId(), {
-        ranges: rr.map(x => 'Records!A' + x[0] + ':' + lastA1 + x[1]),
+        ranges: rr.map(x => cols.sheet + '!A' + x[0] + ':' + lastA1 + x[1]),
         valueRenderOption:'UNFORMATTED_VALUE', dateTimeRenderOption:'SERIAL_NUMBER'});
+      const idI = cols.headers.indexOf('id');
+      let shifted = false;
       (rres.valueRanges || []).forEach((vr, k) => {
         const base = rr[k] ? rr[k][0] : 0;
         (vr.values || []).forEach((row, j) => {
           if(!keep[base + j]) return;     // つないだすき間の行（頼まれていない日）は返さない
+          if(String(row[idI] == null ? '' : row[idI]) !== String(cols.at('id', base + j - 1))){ shifted = true; return; }   // 行がずれた
           const o = {};
           for(let i = 0; i < cols.headers.length; i++){ const h = cols.headers[i]; if(h) o[h] = cellFromSerial_(h, row[i]); }
           if(o.id != null && o.id !== '') records.push(o);
         });
       });
+      if(shifted) return 'shift';
     }
-    records.forEach(r => { if(r && r.date) r.date = _normYmd_(r.date) || r.date; });   // getAll の出口と同じ正規化
-    return json({ok:true,
-      residents: readResidentsCached_(),
-      records: records,
-      cfg: readConfig_(),
-      delta: true,
-      schedVer: 1,
-      padSetVer: 1,
-      days: want,
-      deleted: readDeletedIds_(0),
-      serverTime: Date.now(),
-      sysVer: wantSys ? 1 : undefined
-      /* ★syncCursor は返さない＝端末の差分同期の基準時刻を動かさない（日を指定した読み取りは「いつ時点」を表さない） */
-    });
-  }catch(err){
-    console.error('getDays error:', err);
-    return json({ok:false, error:SERVER_ERR_MSG});
-  }
+    return records;
 }
 
+/* 判定の列を読んだ後・行を読む前に、ほかの実行が行を消すと行番号がずれ、頼んだのと違う行を読む（2026-10-28・古い記録を移す処理が
+   一度に数百行を消すため起きやすくなった）。行を読んだら id が判定の列と同じかを確かめ、違えば1回だけ読み直す。
+   それでも違えば null（＝呼んだ側は従来どおり全件読みに落ちる＝遅いが正しい） */
 function readRecordsWindow_(sinceMs, recentFromYmd){
+  for(var attempt = 0; attempt < 2; attempt++){
+    var v = _readRecordsWindowOnce_(sinceMs, recentFromYmd);
+    if(v !== 'shift') return v;
+  }
+  return null;
+}
+function _readRecordsWindowOnce_(sinceMs, recentFromYmd){
   try{
     if(!(sinceMs > 0)) return null;                  // 全件要求は従来経路へ
     getOrCreateSheet_('Records', REC_DEFAULT_HEADERS);
@@ -991,17 +1069,20 @@ function readRecordsWindow_(sinceMs, recentFromYmd){
       valueRenderOption: 'UNFORMATTED_VALUE',
       dateTimeRenderOption: 'SERIAL_NUMBER'
     });
-    var out = [];
-    (rres.valueRanges || []).forEach(function(vr){
-      (vr.values || []).forEach(function(row){
+    var out = [], shifted = false;
+    (rres.valueRanges || []).forEach(function(vr, k){
+      var base = rowRanges[k] ? rowRanges[k][0] : 0;
+      (vr.values || []).forEach(function(row, j){
         var o = {};
         for(var i=0;i<headers.length;i++){
           var h = headers[i];
           if(h) o[h] = cellFromSerial_(h, row[i]);
         }
+        if(String(row[cId] == null ? '' : row[cId]) !== String(cellAt('id', base + j - 1))) shifted = true;   // 行がずれた
         if(o.id != null && o.id !== '') out.push(o);
       });
     });
+    if(shifted) return 'shift';
     return out;
   }catch(err){
     console.warn('readRecordsWindow_ フォールバック（全件読みに切替）:', String(err));
@@ -1174,6 +1255,254 @@ function upsertRow_(name, defaultHeaders, obj, ensureCols){
     return;
   }
   sh.appendRow(rowVals);
+}
+
+/** 記録の書き込み（addRecord・saveRecord）。2026-10-28: 控えのシートへ移した古い記録の直しは、控えの行に書く。
+ *  ★控えを探すのは、記録の日付か作った日が区切りより前の時だけ（新しい記録の書き込みでは控えを読まない）。
+ *  ★日付が区切りより後へ直された記録は、Records へ書いてから控えの行を外す（2つのシートに同じ id を残さない）。 */
+function upsertRecord_(obj){
+  const b = archiveBoundary_();
+  if(b && obj && obj.id != null && obj.id !== '' && _mayBeArchived_(obj, b)){
+    const arc = SS.getSheetByName(ARCHIVE_SHEET);
+    const rowIdx = arc ? _findIdRow_(arc, obj.id) : -1;
+    /* 移している途中で止まり、Records と控えの両方に同じ id がある時は Records を正とする（読み取りも Records を採る）。
+       Records へ書き、控えの古い写しは外す（指摘2: 控えだけに書くと、直しが端末に届かない） */
+    const recSh = rowIdx > 0 ? SS.getSheetByName('Records') : null;
+    if(rowIdx > 0 && recSh && _findIdRow_(recSh, obj.id) > 0){
+      upsertRow_('Records', REC_DEFAULT_HEADERS, obj);
+      _wrote_ = true;
+      arc.deleteRow(rowIdx);
+      return;
+    }
+    if(rowIdx > 0){
+      const d = _normYmd_(obj.date);
+      if(d && d < b){ upsertRow_(ARCHIVE_SHEET, REC_DEFAULT_HEADERS, obj); return; }
+      upsertRow_('Records', REC_DEFAULT_HEADERS, obj);
+      _wrote_ = true;
+      arc.deleteRow(rowIdx);
+      return;
+    }
+  }
+  upsertRow_('Records', REC_DEFAULT_HEADERS, obj);
+}
+function _mayBeArchived_(obj, b){
+  const d = _normYmd_(obj.date);
+  if(d && d < b) return true;
+  const c = parseTs_(obj.createdAt);
+  return c > 0 && _ymdJst_(c) < b;
+}
+/** id の行番号（2始まり）。無ければ -1 */
+function _findIdRow_(sh, id){
+  const last = sh.getLastRow();
+  if(last < 2) return -1;
+  const headers = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(v=>String(v).trim());
+  const idCol = headers.findIndex(h=>h.toLowerCase()==='id');
+  if(idCol < 0) return -1;
+  const ids = sh.getRange(2, idCol+1, last-1, 1).getValues();
+  for(let i=0;i<ids.length;i++){ if(String(ids[i][0])===String(id)) return i+2; }
+  return -1;
+}
+
+/** ============ 控えのシートの読み出し（getArchive・2026-10-28） ============
+ * 全データの書き出し（care-tools の使える人の管理）が、控えへ移した記録も受け取るための口。
+ * rb = {offset: 0 始まり, limit: 1〜ARCHIVE_PAGE_MAX}。応答 {ok, total, offset, records, archivedBefore}。読み取りだけ */
+function getArchiveResponse_(rb){
+  try{
+    const offset = Math.max(0, parseInt(rb && rb.offset, 10) || 0);
+    const limit = Math.min(ARCHIVE_PAGE_MAX, Math.max(1, parseInt(rb && rb.limit, 10) || 2000));
+    const arc = SS.getSheetByName(ARCHIVE_SHEET);
+    const bnd = archiveBoundary_();
+    if(!arc) return json({ok:true, total:0, offset:offset, records:[], archivedBefore:bnd});
+    const total = Math.max(0, arc.getLastRow() - 1);
+    const records = [];
+    if(offset < total){
+      const ssId = SS.getId();
+      const hres = Sheets.Spreadsheets.Values.get(ssId, ARCHIVE_SHEET + '!1:1', {valueRenderOption:'UNFORMATTED_VALUE'});
+      const headers = ((hres.values && hres.values[0]) || []).map(v => String(v).trim());
+      const r1 = offset + 2, r2 = Math.min(total + 1, offset + limit + 1);
+      const res = Sheets.Spreadsheets.Values.batchGet(ssId, {ranges:[ARCHIVE_SHEET + '!A' + r1 + ':' + _colA1_(headers.length) + r2],
+        valueRenderOption:'UNFORMATTED_VALUE', dateTimeRenderOption:'SERIAL_NUMBER'});
+      const vr = (res.valueRanges || [])[0] || {};
+      (vr.values || []).forEach(row => {
+        const o = {};
+        for(let i = 0; i < headers.length; i++){ const h = headers[i]; if(h) o[h] = cellFromSerial_(h, row[i]); }
+        if(o.id != null && o.id !== ''){ if(o.date) o.date = _normYmd_(o.date) || o.date; records.push(o); }
+      });
+    }
+    return json({ok:true, total:total, offset:offset, records:records, archivedBefore:bnd});
+  }catch(err){
+    console.error('getArchive error:', err);
+    return json({ok:false, error:SERVER_ERR_MSG});
+  }
+}
+
+/** ============ 古い記録を控えのシートへ移す（2026-10-28） ============
+ * 代表者がエディタで実行する: まず archiveCount（数えるだけ・何も書かない）→ 件数と日付の幅を見てから archiveOldRecords。
+ * 月1回の自動は、代表者がエディタの「トリガー」から archiveOldRecords を時間主導型（月ベース・夜中）で足す。
+ * ★1回の塊（ARCHIVE_CHUNK 行）ごとにロックを取り、写す → 1行ずつ照らし合わせる → 合った行だけ Records から消す。
+ *   照らし合わせで1つでも違えば止める（消さない）。途中で止まっても、もう一度実行すれば続きから同じ結果になる
+ *   （控えに同じ id があれば、更新の時刻が新しい方を残す）。
+ * ★職員の一覧の控え（id が sys_）と、今日から ARCHIVE_AFTER_DAYS 日以内の記録は動かさない。 */
+function archiveCount(){
+  const r = archivePlan_();
+  console.log('数えるだけ（何も書いていません）: ' + JSON.stringify(r));
+  return r;
+}
+function archiveOldRecords(){
+  const r = archiveRun_({});
+  console.log('移しました: ' + JSON.stringify(r));
+  return r;
+}
+function archiveCutoff_(){ return _ymdJst_(Date.now() - ARCHIVE_AFTER_DAYS * 86400000); }
+function archivePlan_(){
+  const cut = archiveCutoff_();
+  const cols = _readDigestCols_('Records');
+  let n = 0, oldest = '', newest = '';
+  for(let r = 1; r < cols.n; r++){
+    const id = cols.at('id', r);
+    if(_digestSkipId_(id)) continue;
+    const d = _normYmd_(cellFromSerial_('date', cols.at('date', r)));
+    if(!d || d >= cut) continue;
+    n++;
+    if(!oldest || d < oldest) oldest = d;
+    if(!newest || d > newest) newest = d;
+  }
+  const arc = SS.getSheetByName(ARCHIVE_SHEET);
+  return {cutoff: cut, boundary: archiveBoundary_(), toMove: n, oldest: oldest, newest: newest,
+    recordsRows: Math.max(0, cols.n - 1), archiveRows: arc ? Math.max(0, arc.getLastRow() - 1) : 0};
+}
+function archiveRun_(opt){
+  const t0 = Date.now(), cut = archiveCutoff_();
+  const limitMs = (opt && opt.limitMs) || 210000;   // 3.5分（Apps Script の6分の上限より、1つの塊のぶん余裕を持たせる）
+  let moved = 0, chunks = 0;
+  while(Date.now() - t0 < limitMs){
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);   // 取れなければ例外＝何も書かずに終わる（次の実行でやり直す）
+    let n = 0;
+    try{ n = _archiveChunk_(cut, (opt && opt.chunk) || ARCHIVE_CHUNK); }
+    finally{ try{ lock.releaseLock(); }catch(_){} }
+    if(!n) break;
+    moved += n; chunks++;
+  }
+  const left = archivePlan_().toMove;
+  return {ok:true, moved: moved, chunks: chunks, left: left, boundary: archiveBoundary_(), cutoff: cut};
+}
+function _cellEq_(a, b){
+  if(a instanceof Date || b instanceof Date){
+    const x = (a instanceof Date) ? a.getTime() : new Date(a).getTime();
+    const y = (b instanceof Date) ? b.getTime() : new Date(b).getTime();
+    return x === y || (isNaN(x) && isNaN(y) && String(a) === String(b));
+  }
+  return String(a == null ? '' : a) === String(b == null ? '' : b);
+}
+/** 控えのシート（無ければ Records と同じ見出しで作り、使わない列と行を減らす＝1,000万マスの上限を食わない） */
+function _archiveSheet_(headers){
+  let arc = SS.getSheetByName(ARCHIVE_SHEET);
+  if(!arc){
+    _wrote_ = true;
+    arc = SS.insertSheet(ARCHIVE_SHEET);
+    arc.getRange(1, 1, 1, headers.length).setValues([headers]);
+    try{ const mc = arc.getMaxColumns(); if(mc > headers.length) arc.deleteColumns(headers.length + 1, mc - headers.length); }catch(e){}
+    try{ const mr = arc.getMaxRows(); if(mr > 2) arc.deleteRows(3, mr - 2); }catch(e){}
+    return arc;
+  }
+  const lc = Math.max(1, arc.getLastColumn());
+  const ah = arc.getRange(1, 1, 1, lc).getValues()[0].map(v => String(v).trim());
+  const same = headers.length >= ah.length && ah.every((h, i) => h === headers[i]);
+  if(!same) throw new Error('控えのシートの見出しが Records と違います（移していません）');
+  if(ah.length < headers.length){
+    _wrote_ = true;
+    try{ const mc = arc.getMaxColumns(); if(mc < headers.length) arc.insertColumnsAfter(mc, headers.length - mc); }catch(e){}
+    arc.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+  return arc;
+}
+/** 1つの塊を移す。移した行数（0＝移すものが無い） */
+function _archiveChunk_(cut, max){
+  const sh = SS.getSheetByName('Records');
+  if(!sh) return 0;
+  const last = sh.getLastRow();
+  if(last < 2) return 0;
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v).trim());
+  const idC = headers.indexOf('id'), dC = headers.indexOf('date'), uC = headers.indexOf('updatedAt');
+  if(idC < 0 || dC < 0) throw new Error('Records に id/date の列がありません');
+  const idv = sh.getRange(2, idC + 1, last - 1, 1).getValues();
+  const dv = sh.getRange(2, dC + 1, last - 1, 1).getValues();
+  const pick = [];
+  for(let i = 0; i < idv.length && pick.length < max; i++){
+    const id = idv[i][0];
+    if(_digestSkipId_(id)) continue;                 // 空行・職員の一覧の控え（sys_）は動かさない
+    const d = _normYmd_(dv[i][0]);
+    if(d && d < cut) pick.push(i + 2);
+  }
+  if(!pick.length) return 0;
+  // 元の行を連続したまとまりごとに読む
+  const blocks = [];
+  let s0 = pick[0], p = pick[0];
+  for(let i = 1; i < pick.length; i++){ if(pick[i] === p + 1){ p = pick[i]; continue; } blocks.push([s0, p]); s0 = p = pick[i]; }
+  blocks.push([s0, p]);
+  const src = [];
+  blocks.forEach(b => { sh.getRange(b[0], 1, b[1] - b[0] + 1, lastCol).getValues().forEach(row => src.push(row)); });
+  // 控えへ写す（同じ id があれば、更新の時刻が新しい方を残す）
+  const arc = _archiveSheet_(headers);
+  const aIdx = {};
+  const aLast = arc.getLastRow();
+  if(aLast >= 2) arc.getRange(2, idC + 1, aLast - 1, 1).getValues().forEach((r, i) => { aIdx[String(r[0])] = i + 2; });
+  const append = [], expect = {}, inAppend = {};
+  src.forEach(row => {
+    const id = String(row[idC]);
+    /* 同じ塊に同じ id の行が2つある（Records の重複行）時は、更新の時刻が新しい方を1行だけ控えに入れる（指摘1） */
+    if(inAppend[id] != null){
+      const k = inAppend[id];
+      if(uC < 0 || parseTs_(row[uC]) >= parseTs_(append[k][uC])){ append[k] = row; expect[id] = row; }
+      return;
+    }
+    const at = aIdx[id];
+    if(at > 0){
+      const cur = arc.getRange(at, 1, 1, lastCol).getValues()[0];
+      if(uC >= 0 && parseTs_(cur[uC]) > parseTs_(row[uC])){ expect[id] = cur; return; }   // 控えの方が新しい＝控えを残す
+      _wrote_ = true;
+      arc.getRange(at, 1, 1, lastCol).setValues([row]);
+      expect[id] = row;
+      return;
+    }
+    inAppend[id] = append.length; append.push(row); expect[id] = row;
+  });
+  if(append.length){
+    _wrote_ = true;
+    const start = arc.getLastRow() + 1;
+    try{ const mr = arc.getMaxRows(), need = start + append.length - 1; if(mr < need) arc.insertRowsAfter(mr, need - mr); }catch(e){}
+    arc.getRange(start, 1, append.length, lastCol).setValues(append);
+  }
+  SpreadsheetApp.flush();
+  // 照らし合わせ: 控えを読み直し、写したつもりの行が1行ずつ同じ中身であること
+  const vLast = arc.getLastRow();
+  const vIds = arc.getRange(2, idC + 1, vLast - 1, 1).getValues();
+  const vRow = {};
+  vIds.forEach((r, i) => { vRow[String(r[0])] = i + 2; });
+  const ids = Object.keys(expect);
+  const vRows = ids.map(id => vRow[id]).filter(n => n > 0).sort((a, b) => a - b);
+  if(vRows.length !== ids.length) throw new Error('控えに写せていない記録があります（消していません）');
+  const got = {};
+  let q0 = vRows[0], q = vRows[0];
+  const vb = [];
+  for(let i = 1; i < vRows.length; i++){ if(vRows[i] === q + 1){ q = vRows[i]; continue; } vb.push([q0, q]); q0 = q = vRows[i]; }
+  vb.push([q0, q]);
+  vb.forEach(b => { arc.getRange(b[0], 1, b[1] - b[0] + 1, lastCol).getValues().forEach(row => { got[String(row[idC])] = row; }); });
+  ids.forEach(id => {
+    const a = got[id], e = expect[id];
+    if(!a) throw new Error('控えの行が読めません（消していません）');
+    for(let c = 0; c < lastCol; c++){ if(!_cellEq_(a[c], e[c])) throw new Error('控えへの写しが元と一致しません（消していません）'); }
+  });
+  // 区切りを進める（前へは戻さない）。消す前に進める＝消した後の読み取りが必ず控えも見る
+  const b0 = archiveBoundary_();
+  if(!b0 || cut > b0) PropertiesService.getScriptProperties().setProperty(ARCHIVE_PROP, cut);
+  // Records から消す（下のまとまりから＝上の行番号がずれない）
+  _wrote_ = true;
+  for(let i = blocks.length - 1; i >= 0; i--) sh.deleteRows(blocks[i][0], blocks[i][1] - blocks[i][0] + 1);
+  SpreadsheetApp.flush();
+  return pick.length;
 }
 
 /** 排泄予定(schedule)の専用書き込み（2026-07-30 追加）。

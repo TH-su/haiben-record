@@ -114,7 +114,7 @@ function makeDevice(server,init){
     _markFullSync:()=>{log.markFull++;mem.hbcr_last_full_ts=String(Date.now())},
     _bumpResIdHw:()=>{},_normNameX:x=>String(x||''),
     extractStaffsFromCfg:()=>0,cleanData:()=>{},save:()=>{},saveApiUrl:()=>{},flushPendingQueue:()=>{},
-    apiPush:(a,d)=>{log.pushes.push({a:a,id:d&&d.record&&d.record.id})},
+    apiPush:(a,d)=>{log.pushes.push({a:a,id:d&&d.record&&d.record.id});sb._writeQ.push({action:a,data:d})},   // 本物と同じく送信の列に載せる
     _delRecHas:id=>!!delIds[String(id)],_delRecAddMany:ids=>{ids.forEach(i=>{delIds[String(i)]=1})},
     syncMasterRoster:()=>{log.roster++},
     showToast:m=>{log.toasts.push(m)},
@@ -189,6 +189,9 @@ head('2. 記録のある端末の「🔄 更新」: 取りこぼしを取り戻�
   const today=ymdJst(Date.now());
   const fresh={id:'r_mada_okutteinai',residentId:2,date:today,time:'11:00',datetime:today+'T11:00',type:'stool',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   local.push(fresh);
+  // 送信待ちにも載っていないのにサーバーに無い今日の記録（送信待ちが消えた端末の取り残し）＝送り直しの本来の相手
+  const lost={id:'r_torinokoshi',residentId:2,date:today,time:'09:00',datetime:today+'T09:00',type:'urine',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  local.push(lost);
   const dev=makeDevice(srv,{records:local,ls:{hbcr_last_sync_ts:String(Date.now()-5*60000),hbcr_datefix_heal_v1:'1',hbcr_last_full_ts:String(Date.now())},
     writeQ:[{action:'saveRecord',data:{record:local[li]}},{action:'addRecord',data:{record:fresh}}]});
   const r=await dev.sb.syncCatchUp(true);
@@ -201,6 +204,9 @@ head('2. 記録のある端末の「🔄 更新」: 取りこぼしを取り戻�
   const ed=dev.sb.D.records.find(r=>String(r.id)===editTarget.id);
   ok(ed&&ed.notes==='送信待ちの直し','送信待ちの直しはサーバーの古い版に巻き戻らない',ed&&ed.notes);
   ok(ids.has(fresh.id),'サーバーに無い送信待ちの新しい記録は消えない（和集合）');
+  const pushOf=id=>dev.log.pushes.filter(x=>x.a==='addRecord'&&x.id===id).length;
+  ok(pushOf(fresh.id)===0,'送信待ちに載っている記録は、取り込みの送り直しで重ねて積まない（📤未送信が長く残らない）',dev.log.pushes);
+  ok(pushOf(lost.id)===1,'送信待ちに無い取り残しの記録は、1回の更新で1回だけ送り直す',dev.log.pushes);
   ok(!!dev.sb._findStaffSnapshot(),'職員の一覧の控えも届く（新しい GAS）');
   const eq=localDigestEq(dev,srv);
   ok(eq.diff.filter(d=>d!==today).length===0,'送信待ちの記録のある今日を除き、手元の要約がサーバーと一致する',eq.diff);

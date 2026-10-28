@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-gLYTnUDhJ/HN6D7WNBR0a1W05J128G42gC24pehYP3w='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-dYPukevIxZH6NR+q2YdKGaytjbPYsC/LBlWLZZ41NuY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -2992,6 +2992,9 @@ async function syncFromAPI(showLoader,opts){
           if(_isSnapshotRec(r))return;                     // 職員スナップショットは専用経路が持つ
           if(_seedRes[toNum(r.residentId)])return;         // サンプル入居者の記録は送らない
           if(_delRecHas(r.id))return;                      // 削除済み＝復活させない
+          /* 送信待ち（送信の列・送信中・再送の控え）に載っている記録は、その列が送る。ここで積むと同じ記録が2重・3重に並び、
+             「📤未送信」が長く残る（2026-10-28。追いつきは今日1日分と照合で1回の更新に2回ここを通るため、直す前より積みやすかった） */
+          if(_unsentEdit[String(r.id)])return;
           var t=_recTs(r)||(r.tsUTC||0);
           if(!(t>=_cut))return;                            // 古すぎる分は触らない
           _resend.push(r);
