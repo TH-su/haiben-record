@@ -430,6 +430,7 @@ function makeSyncSandbox(){
     X.fn('toNum'),X.varDecl('RECENT_DEL_MS'),X.varDecl('_recentDel'),X.fn('_recentDelAdd'),X.fn('_recentDelHas'),
     // 2026-10-07 追加の変数・関数（旧版には無い＝あれば読む）
     (/var HEAL_INTERVAL_MS=/.test(SRC)?X.varDecl('HEAL_INTERVAL_MS')+'\n'+X.varDecl('_healOkAt'):''),
+    (/var _healDigestWanted=/.test(SRC)?[X.varDecl('_healDigestWanted'),X.varDecl('HEAL_DAYS'),X.fn('_hbHealFrom'),X.fn('_healByDigest'),X.varDecl('HEAL_V2_KEY'),X.varDecl('_healDigestV2')].join('\n'):''),
     (/function _delRecAddMany\(/.test(SRC)?X.fn('_delRecAddMany'):'')].join('\n'),sb);
   Object.assign(sb,{
     apiUrl:'(接続先あり)',_dateHealNeeded:false,_catchUpLoaderOn:false,_schedHealNeeded:false,_linkDropN:0,

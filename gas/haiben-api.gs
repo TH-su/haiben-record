@@ -855,10 +855,13 @@ function digestResponse_(rb){
       if(seen[key]) continue;              // 同じ日の同じ id（重複行）は1件として数える
       seen[key] = 1;
       const ts = parseTs_(cellFromSerial_('updatedAt', cols.at('updatedAt', r))) || parseTs_(cellFromSerial_('createdAt', cols.at('createdAt', r)));
-      const e = days[d] || (days[d] = [0, 0, 0]);
+      const e = days[d] || (days[d] = [0, 0, 0, 0]);
       e[0]++;
       e[1] = (e[1] + _idHash32_(sid)) >>> 0;
       if(ts > e[2]) e[2] = ts;
+      /* 4つ目（2026-10-29・digestVer 2）: id と最終更新時刻の要約値の和。同じ日の別の記録が後から直されても、
+         取りこぼした直しを見つけられる（最大時刻だけでは隠れる）。旧版の端末は3つ目までしか見ない */
+      e[3] = (e[3] + _idHash32_(sid + '|' + (ts || 0))) >>> 0;
     }
     });
     const keys = Object.keys(days).sort();
@@ -867,7 +870,7 @@ function digestResponse_(rb){
     if(sheetsToRead.length > 1){ const sorted = {}; keys.forEach(k => { sorted[k] = days[k]; }); Object.keys(days).forEach(k => { delete days[k]; }); keys.forEach(k => { days[k] = sorted[k]; }); }
     /* getDaysMax・syncCursor は 2026-10-28 に足した（足すだけ・旧版の端末は見ない）。
        syncCursor＝読み始めの時刻。差分の基準が無い端末は、これ（のりしろを引いた値）を次の差分の基準にする */
-    return json({ok:true, from: from, days: days, readMs: Date.now() - t0, serverTime: Date.now(), getDaysMax: GETDAYS_MAX, syncCursor: t0});
+    return json({ok:true, from: from, days: days, readMs: Date.now() - t0, serverTime: Date.now(), getDaysMax: GETDAYS_MAX, syncCursor: t0, digestVer: 2});
   }catch(err){
     console.error('digest error:', err);
     return json({ok:false, error:SERVER_ERR_MSG});

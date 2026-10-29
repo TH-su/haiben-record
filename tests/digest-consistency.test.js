@@ -23,7 +23,7 @@ function ymd(t){const d=new Date(t+9*3600000);return d.getUTCFullYear()+'-'+pad(
 
 const sb={Math,String,Number,Array,Object,JSON,Date,console:{log(){},warn(){}},D:{cfg:{}}};
 vm.createContext(sb);
-vm.runInContext([X.varDecl('BAK_OFF_KEY'),X.fn('_keepCap'),X.fn('_localKeepDays'),X.fn('_hbIdHash32'),X.fn('_hbDigestLocal'),X.fn('_hbDigestDiff'),X.fn('_hbKeepFrom')].join('\n'),sb);
+vm.runInContext([X.varDecl('BAK_OFF_KEY'),X.fn('_keepCap'),X.fn('_localKeepDays'),X.fn('_hbIdHash32'),X.fn('_hbDigestLocal'),X.fn('_hbTsGas'),X.fn('_hbDigestDiff'),X.fn('_hbKeepFrom')].join('\n'),sb);
 
 /* 合成の盤面と、それを getAll で受け取った端末の記録（＝端末が実際に持つ形） */
 const BASE=Date.now();   // 盤面は同じ時刻から作る（作るたびに時刻がずれると「サーバーの方が新しい」に見える）
@@ -57,6 +57,21 @@ head('1. 同じデータなら1日も違わない');
   ok(diff.length===0,'端末とサーバーで違う日が0（規則が一致）',diff);
   const r2=sb._hbDigestLocal(from,local.slice().reverse());
   ok(Object.keys(l).length===Object.keys(r2).length&&Object.keys(l).every(d=>JSON.stringify(l[d])===JSON.stringify(r2[d])),'記録の並び順が違っても要約は同じ');
+})();
+
+head('1b. ISO 以外の時刻の行（手で直した行など）・時刻が空の行があっても、4つ目の要約値がそろう（2026-10-29）');
+(function(){
+  const sh=board();
+  const ui=REC_HEADERS_FULL.indexOf('updatedAt'), ci=REC_HEADERS_FULL.indexOf('createdAt');
+  sh[12][ui]='2026-05-19 10:00';         // ISO ではない文字列（GAS は 0 と読む）
+  sh[13][ui]='';                          // 空＝作った時刻へ
+  sh[14][ui]='';sh[14][ci]='';            // どちらも空
+  sh[15][ui]=String(Date.now()-3600000);  // 数字の文字列
+  const from=ymd(Date.now()-40*DAY);
+  const s=srvDigest(sh,from);
+  const diff=sb._hbDigestDiff(s.days,sb._hbDigestLocal(from,srvAll(sh)),from);
+  ok(s.digestVer===2&&Object.values(s.days).every(e=>e.length===4),'GAS は digestVer 2 と4つの要約値を返す');
+  ok(diff.length===0,'違う日が0',diff);
 })();
 
 head('2. 違いがあればその日だけ');
