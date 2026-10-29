@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-dYPukevIxZH6NR+q2YdKGaytjbPYsC/LBlWLZZ41NuY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-pRY19/ngZSFLr5uSJAM7cv7xr2WXbpapsLAUxSBmPtc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -2530,11 +2530,23 @@ function _hbDigestLocal(from,recs){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d<from)return;
     var sid=String(r.id),key=d+'|'+sid;
     if(seen[key])return;seen[key]=1;
-    var t=new Date(r.updatedAt||r.createdAt||0).getTime();if(!(t>0))t=0;
-    var e=days[d]||(days[d]=[0,0,0]);
+    /* 時刻は GAS の parseTs_ と同じ読み方（2026-10-29）。前はブラウザの読み方で、ISO 以外・数字の文字列の行で3つ目がずれていた */
+    var t=_hbTsGas(r.updatedAt)||_hbTsGas(r.createdAt);
+    var e=days[d]||(days[d]=[0,0,0,0]);
     e[0]++;e[1]=(e[1]+_hbIdHash32(sid))>>>0;if(t>e[2])e[2]=t;
+    e[3]=(e[3]+_hbIdHash32(sid+'|'+t))>>>0;   // id と最終更新時刻の要約値（GAS の digestVer 2 の4つ目と同じ規則）
   });
   return days;
+}
+/* GAS の parseTs_ の写し（2026-10-29）。手で直した行など ISO 以外の時刻でも、4つ目の要約値を GAS とそろえる */
+function _hbTsGas(v){
+  if(v==null||v==='')return 0;
+  if(typeof v==='number')return v>0?v:0;
+  if(typeof v==='string'){
+    if(/^\d{4}-\d{2}-\d{2}T/.test(v)){var t=new Date(v).getTime();return isNaN(t)?0:t}
+    var n=parseInt(v,10);if(!isNaN(n)&&n>1000000000000)return n;
+  }
+  return 0;
 }
 /* 違う日: 件数か id の要約値が違う日／サーバーの方が新しく直されている日（手元が新しいのは未送信の編集＝違いに数えない） */
 function _hbDigestDiff(srv,loc,from){
@@ -2547,28 +2559,32 @@ function _hbDigestDiff(srv,loc,from){
     if(!a&&!b)return;
     if(!a||!b){if((a&&a[0]>0)||(b&&b[0]>0))out.push(d);return}
     if(a[0]!==b[0]||a[1]!==b[1]||a[2]>b[2])out.push(d);
+    else if(a.length>3&&b.length>3&&a[3]!==b[3]&&!(b[2]>a[2]))out.push(d);   // 直しの取りこぼし（digestVer 2 の GAS だけが4つ目を返す・2026-10-29）。手元の方が新しい日＝未送信の編集は数えない
   });
   return out;
 }
 /* opts（2026-10-28・追いつきの syncCatchUp から）: setCursor＝差分の基準が無い端末。digest の読み始めの時刻から基準を作る／
    progress(済み,全部)＝幕の文言を進める／inner＝取り込みの回で幕を閉じず・名簿を読みに行かない（追いつきの側が最後に行う）。
    ★照合が進行中なら、新しく始めず進行中の結果を返す（🔄更新の連打・起動の照合と重ねない）。直す前は false を返していた */
-var _verifyP=null;
+var _verifyP=null, _verifyPartial=false;
 function verifyByDigest(opts){
   if(!apiUrl||_dateHealNeeded)return Promise.resolve(false);
   if(_verifyBusy&&_verifyP){
     /* 追いつきの中からの照合（inner）は、進行中の照合（起動の裏の照合）の終わりを待ってから自分の条件で改めて行う
        （進行中の照合は幕を閉じ・基準を作らないため。2回目は違う日が残っていなければ digest 1本で終わる） */
     if(opts&&opts.inner){var _o=opts;return _verifyP.then(function(){},function(){}).then(function(){return verifyByDigest(_o)})}
+    /* 進行中が直近14日だけの照合（_healByDigest）で、こちらが全日の照合の時も、終わりを待ってから改めて行う（2026-10-29） */
+    if(_verifyPartial&&!(opts&&opts.noMark)){var _o2=opts;return _verifyP.then(function(){},function(){}).then(function(){return verifyByDigest(_o2)})}
     return _verifyP;
   }
   _verifyBusy=true;
+  _verifyPartial=!!(opts&&opts.noMark);
   _verifyP=_verifyByDigestRun(opts||{});
   return _verifyP;
 }
 async function _verifyByDigestRun(opts){
   try{
-    var from=_hbKeepFrom(),j=null;
+    var from=(typeof opts.from==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(opts.from))?opts.from:_hbKeepFrom(),j=null;
     try{
       var body={action:'digest',from:from};if(apiToken)body.token=apiToken;
       var r=await fetchTO(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),cache:'no-store'},30000);
@@ -2579,9 +2595,13 @@ async function _verifyByDigestRun(opts){
       /* ★全件に戻すのは「digest を知らない GAS」と分かった時だけ（2026-10-28）。通信の失敗・時間切れ・混雑（割当の超過など）で
          全件に戻すと、GAS が遅い時ほど最大46秒の全件を呼ぶ。その時は照合済みにせず、次の機会に改めて照合する */
       if(!_hbUnknownAction(j,'digest')){console.warn('[hbcr] 日別の照合ができない（次の機会に照合する）:',e&&e.message);return false}
+      if(opts.noFull)return 'unknown';   // 1時間ごとの照合（_healByDigest）は全件へ戻さず、呼んだ側が今までの窓つきへ戻す
       console.warn('[hbcr] 日別の照合ができない → 従来の全件照合へ:',e&&e.message);
       return await syncFromAPI(false,{full:true,quiet:true,keepLoader:!!opts.inner});   // 旧 GAS との混在の時の安全網（全件は残す）
     }
+    /* GAS が4つ目の要約値（id と最終更新時刻）を返すか（2026-10-29）。返す版と分かった端末だけ、1時間ごとの窓を照合で代える */
+    _healDigestV2=Number(j.digestVer)>=2;
+    try{if(_healDigestV2)localStorage.setItem(HEAL_V2_KEY,'1');else localStorage.removeItem(HEAL_V2_KEY)}catch(e){}
     /* 差分の基準が無い端末（2026-10-28）: digest の読み始めの時刻（サーバーの時計）を基準にする。
        これより後に書かれた記録は次の差分で届き、前に書かれた記録はこの照合で違う日として取る。旧 GAS は読み終わり−読んだ時間 */
     if(opts.setCursor){
@@ -2599,7 +2619,7 @@ async function _verifyByDigestRun(opts){
       var ok=await syncFromAPI(false,{quiet:true,days:diff.slice(i,i+_chunk),keepLoader:!!opts.inner,noRoster:!!opts.inner});
       if(ok!==true)return false;   // 途中で失敗＝照合済みにしない（次の起動で改めて照合する。取り込めた日は次の digest で一致する）
     }
-    _markFullSync();
+    if(!opts.noMark)_markFullSync();   // 直近14日だけの照合（_healByDigest）は全日の照合済みにしない
     if(diff.length)console.log('[hbcr] 日別の照合: 違った日',diff.length,'日を取り直しました');
     return true;
   }finally{_verifyBusy=false;_verifyP=null}
@@ -2745,9 +2765,15 @@ async function syncFromAPI(showLoader,opts){
     /* 自己修復窓（直近14日）を付けてもらうか（2026-10-07）。付けるのは 起動して最初の同期・前回から60分たった時・
        opts.heal===true（🔄更新など）だけ。それ以外の追い読みは「変わった記録だけ」を受け取る（約490KB→数KB）。 */
     var _wantHeal=(opts.heal===true)||(Date.now()-_healOkAt>=HEAL_INTERVAL_MS);
+    /* 起動と1時間ごとの窓（14日分を丸ごと受け取る・1台1時間 約490KB）は、日別の照合で代える（2026-10-29・本人「変えてよい」）。
+       差分は窓なしで受け取り、終わった後に直近14日の要約（digest）を見比べて、違う日だけを getDays で取り直す（_healByDigest）。
+       ★🔄更新など opts.heal===true・基準の無い全件・日指定・差し替えの取得は今までどおり。
+       ★digest を知らない旧 GAS と分かったら（_healDigestOff）、今までどおり窓つきで受け取る
+       ★digest が id と最終更新時刻の要約値を返す GAS（digestVer 2）と分かるまでは、今までどおり窓つき（_healDigestV2） */
+    var _digestHeal=_wantHeal&&opts.heal!==true&&sinceTs>0&&!_daysMode&&typeof opts.fetch!=='function'&&!_healDigestOff&&_healDigestV2;
     var _fetchStartAt=Date.now();   // 取得開始（これより後に削除が完了した記録は、応答に削除前の行が載りうる）
     /* opts.fetch（2026-10-28・追いつきの syncCatchUp だけが使う）: 取得だけを差し替える（応答を見たい時）。取り込みは下の同じ処理を通す */
-    var json=(typeof opts.fetch==='function')?await opts.fetch():await apiGet(_daysMode?{days:opts.days}:{since:sinceTs,heal:(sinceTs>0&&!_wantHeal)?false:undefined});
+    var json=(typeof opts.fetch==='function')?await opts.fetch():await apiGet(_daysMode?{days:opts.days}:{since:sinceTs,heal:(sinceTs>0&&(!_wantHeal||_digestHeal))?false:undefined});
     if(json.error)throw new Error(json.error);
     if(json.residents===undefined)throw new Error('レスポンス形式が不正です');
     var apiRes=Array.isArray(json.residents)?json.residents:[];
@@ -3064,7 +3090,8 @@ async function syncFromAPI(showLoader,opts){
     if(!_daysMode)_setLastSyncTs(_cursorFromResponse(json));   // 日指定の取得は「いつ時点」を表さない＝基準を動かさない
     // 全件取得が成功したときだけ「最後に全件で照合した時刻」を更新する（日別の照合は verifyByDigest がまとめて付ける）
     if(_fullFetch&&!_daysMode)_markFullSync();
-    if(!_daysMode&&(sinceTs===0||_wantHeal))_healOkAt=Date.now();   // 自己修復窓つきで受け取れた時刻
+    if(!_daysMode&&(sinceTs===0||_wantHeal)&&!_digestHeal)_healOkAt=Date.now();   // 自己修復窓つきで受け取れた時刻
+    if(_digestHeal)_healDigestWanted=true;   // 窓の代わりの照合は、この同期が終わってから（下の _healByDigest）
     // 日付TZ修正の回復が全件取得で完了したらフラグを立て、以後は通常の差分同期に戻す
     if(_healing){_dateHealNeeded=false;try{localStorage.setItem(DATEFIX_HEAL_KEY,'1')}catch(e){}}
     // ヘッダには時刻のみ表示（「(差分)」ラベルは現場画面で不要のため非表示。差分同期動作は維持）
@@ -3080,7 +3107,29 @@ async function syncFromAPI(showLoader,opts){
   finally{if(!(opts&&opts.keepLoader)&&!_catchUpLoaderOn)ldHide()}   // 追いつき（syncCatchUp）の途中の回は、幕を追いつきの側が閉じる
   })();
   _syncInFlight=_run;_syncInFlightFull=_runFull;
-  try{return await _run;}finally{_syncInFlight=null;}
+  try{return await _run;}finally{_syncInFlight=null;if(_healDigestWanted){_healDigestWanted=false;_healByDigest()}}
+}
+/* 1時間ごとの窓の代わりの照合（2026-10-29）。直近14日（今日を含む）の要約を見比べ、違う日だけを取り直す。
+   ★照合が通った時だけ _healOkAt を進める（失敗・途中で止まった時は、次の同期でもう一度照合する）。
+   ★digest を知らない旧 GAS なら、以後は今までの窓つきに戻し、すぐ窓つきで受け取り直す（取りこぼしを残さない）。
+   ★照合が通らなかった時（混雑・時間切れ等）は、すぐ今までの窓つきで受け取り直す（窓に戻る道を残す。照合だけが壊れても修復が止まらない）。
+   ★直近の日だけの照合では全日の照合済みの印（_markFullSync）は付けない・全件には戻さない。
+   ★全日の照合が要る時（その日まだ照合していない＝起動の全日の照合が続く）は、全日の照合を先に行い、起動の照合はそれに相乗りする */
+var _healDigestWanted=false, _healDigestOff=false, _healDigestBusy=false;
+var HEAL_V2_KEY='hbcr_digest_v2';   // 端末に残すのは GAS の能力の印だけ（業務データではない）
+var _healDigestV2=(function(){try{return localStorage.getItem(HEAL_V2_KEY)==='1'}catch(e){return false}})();
+function _hbHealFrom(){var d=new Date();d.setDate(d.getDate()-(HEAL_DAYS-1));return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+var HEAL_DAYS=15;   // GAS の自己修復窓（14日前の日から今日まで＝15日）と同じ日数
+async function _healByDigest(){
+  if(_healDigestBusy||!apiUrl)return;
+  _healDigestBusy=true;
+  try{
+    var v=await verifyByDigest(_needFullSync()?{}:{from:_hbHealFrom(),noMark:true,noFull:true});
+    if(v===true){_healOkAt=Date.now();return}
+    if(v==='unknown')_healDigestOff=true;   // 旧 GAS: 以後は窓つき
+    await syncFromAPI(false,{quiet:true,heal:true});   // 照合が通らなかった回は、今までの窓つきで受け取り直す
+  }catch(e){console.warn('[hbcr] 1時間ごとの照合ができない（次の同期でもう一度）:',e&&e.message)}
+  finally{_healDigestBusy=false}
 }
 
 // 未送信キュー（API書き込み失敗時、後で再送する）

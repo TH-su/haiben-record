@@ -94,10 +94,11 @@ function makeDevice(server,init){
     localStorage:{getItem(k){return k in mem?mem[k]:null},setItem(k,v){mem[k]=String(v)},removeItem(k){delete mem[k]}}};
   vm.createContext(sb);
   const pieces=[
-    X.varDecl('_syncInFlight'),X.varDecl('HEAL_INTERVAL_MS'),X.varDecl('_healOkAt'),X.fn('syncFromAPI'),X.fn('apiGet'),
+    X.varDecl('_syncInFlight'),X.varDecl('HEAL_INTERVAL_MS'),X.varDecl('_healOkAt'),X.fn('syncFromAPI'),
+    X.varDecl('_healDigestWanted'),X.varDecl('HEAL_DAYS'),X.fn('_hbHealFrom'),X.fn('_healByDigest'),X.varDecl('HEAL_V2_KEY'),X.varDecl('_healDigestV2'),X.fn('apiGet'),
     X.varDecl('SYNC_OVERLAP_MS'),X.fn('_cursorFromResponse'),X.varDecl('LAST_SYNC_KEY'),X.fn('_getLastSyncTs'),X.fn('_setLastSyncTs'),
     X.varDecl('LAST_FULL_KEY'),X.varDecl('FULL_SYNC_INTERVAL_MS'),X.fn('_needFullSync'),
-    X.varDecl('HB_DIGEST_CHUNK'),X.varDecl('_verifyBusy'),X.fn('_hbIdHash32'),X.fn('_hbKeepFrom'),X.fn('_hbDigestLocal'),X.fn('_hbDigestDiff'),
+    X.varDecl('HB_DIGEST_CHUNK'),X.varDecl('_verifyBusy'),X.fn('_hbIdHash32'),X.fn('_hbKeepFrom'),X.fn('_hbDigestLocal'),X.fn('_hbTsGas'),X.fn('_hbDigestDiff'),
     X.varDecl('_verifyP'),X.fn('verifyByDigest'),X.fn('_verifyByDigestRun'),
     X.varDecl('_catchUpP'),X.varDecl('_catchUpLoaderOn'),X.fn('_hbUnknownAction'),X.fn('_hbTodayYmd'),X.fn('syncCatchUp'),X.fn('_syncCatchUpRun'),
     X.varDecl('DATEFIX_HEAL_KEY'),X.varDecl('_dateHealNeeded'),
