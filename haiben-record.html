@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-pRY19/ngZSFLr5uSJAM7cv7xr2WXbpapsLAUxSBmPtc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-jnL/CuhvQ/afopnOE3sLENp7VY1Q1MprdZDXIASDXyU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -5100,6 +5100,73 @@ function pushMasterHospState(r,prevHosp){
   var nowHosp=isCurrentlyHospitalized(r);
   if(typeof prevHosp==='boolean'&&prevHosp===nowHosp)return;   // 現在の入院状態が変わらない後追い編集は併送しない
   apiPush('setMasterState',{masterId:String(r.masterId),hospitalized:nowHosp});
+  if(typeof hbMhQueue_==='function')hbMhQueue_(String(r.masterId),nowHosp);   // 正本を切り替えた後は、新しい保存先の「入院の印だけを書く口」へも送る（下）
+}
+/* ═══ 入居者マスタの正本を Supabase へ切り替えた後の入院の印（2026-10-29・care-backend 設計書 §4 決定2）═══
+   care-tools の切り替えスイッチ master_live（su-backend.json）が入の時だけ、入院の印を新しい保存先の res_set_hosp（入院の印の3項目だけを書く口・
+   現場のログインでも書ける）へも送る。
+   ・Google（setMasterState）へは今までどおり送る（この画面の名簿は Google から読むため。Google の値は後で新しい保存先からの写し返しでそろう）
+   ・新しい保存先がまだ写しの期間（shadow）なら Google だけで足りる＝控えを消す
+   ・届かない・ログインしていない時は、利用者No と入院中かどうかだけを端末に控え、開いた時・通信が戻った時に送り直す（同じ方は最後の印だけ）
+   ・スイッチが切の間は何もしない（控えも作らない＝今までと同じ） */
+var HB_MH_PEND='hb_master_hosp_pending';
+var HB_CT='../care-tools/';
+var _hbMhFlags=null,_hbMhFlagsAt=0,_hbMhBusy=false,_hbMhAgain=false,_hbMhWarned=false;
+function hbMhLiveOn_(){
+  if(_hbMhFlags&&Date.now()-_hbMhFlagsAt<60000)return Promise.resolve(_hbMhFlags.on);
+  return fetch(HB_CT+'su-backend.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){
+    _hbMhFlags={on:!!(j&&j.supabase&&typeof j.supabase==='object'&&j.supabase.master_live===true)};_hbMhFlagsAt=Date.now();return _hbMhFlags.on;
+  },function(){return _hbMhFlags?_hbMhFlags.on:null});   // 読めない時は前の値（初めてなら分からない＝控えだけ残す）
+}
+function hbMhPend_(){try{var o=JSON.parse(localStorage.getItem(HB_MH_PEND)||'{}');return(o&&typeof o==='object'&&!Array.isArray(o))?o:{}}catch(e){return{}}}
+function hbMhSave_(o){try{if(Object.keys(o).length)localStorage.setItem(HB_MH_PEND,JSON.stringify(o));else localStorage.removeItem(HB_MH_PEND)}catch(e){}}
+function hbMhQueue_(masterId,hosp){
+  hbMhLiveOn_().then(function(on){
+    if(on===false)return;                       // スイッチが切: 今までと同じ（Google だけ）
+    var o=hbMhPend_();o[masterId]=!!hosp;hbMhSave_(o);
+    hbMhSend_();
+  });
+}
+function hbMhLoadAuth_(){
+  if(window.SUAuth)return Promise.resolve(window.SUAuth);
+  function load(src){return new Promise(function(ok,ng){var s=document.createElement('script');s.src=src;s.onload=function(){ok()};s.onerror=function(){ng(new Error('load'))};document.head.appendChild(s)})}
+  return (window.supabase?Promise.resolve():load(HB_CT+'supabase-js-2.112.4.js')).then(function(){return window.SUAuth?null:load(HB_CT+'su-auth.js?v=2026-10-28')}).then(function(){return window.SUAuth||null});
+}
+function hbMhSend_(){
+  if(_hbMhBusy){_hbMhAgain=true;return Promise.resolve()}
+  var o=hbMhPend_(),ids=Object.keys(o);
+  if(!ids.length)return Promise.resolve();
+  _hbMhBusy=true;
+  return hbMhLiveOn_().then(function(on){
+    if(on===false){hbMhSave_({});return}        // スイッチが切に戻った: Google へは送ってあるので控えを捨てる
+    if(on===null)return;
+    return hbMhLoadAuth_().then(function(A){
+      if(!A)return;
+      return A.check().then(function(st){
+        if(!st||st.status!==A.STATUS.OK){
+          if(!_hbMhWarned){_hbMhWarned=true;try{showToast('⚠️ 入院の印を入居者マスタ（新しい保存先）へ送れていません。この端末でログインしてください（ログインすると送り直します）')}catch(e){}}
+          return;
+        }
+        var sb=A.client(),chain=Promise.resolve();
+        ids.forEach(function(id){
+          chain=chain.then(function(){
+            var want=o[id];
+            return sb.rpc('res_set_hosp',{p_id:id,p_hospitalized:want}).then(function(r){
+              var d=r&&r.data,err=r&&r.error;
+              if(err){if(!_hbMhWarned){_hbMhWarned=true;try{showToast('⚠️ 入院の印を入居者マスタ（新しい保存先）へ送れませんでした。あとで送り直します')}catch(e){}}return}
+              if(d&&(d.ok===true||d.error==='shadow'||d.error==='notfound'||d.error==='badrow')){
+                var cur=hbMhPend_();if(cur[id]===want){delete cur[id];hbMhSave_(cur)}   // 送っている間に印が変わっていたら残す
+              }
+            });
+          });
+        });
+        return chain;
+      });
+    });
+  }).catch(function(){}).then(function(){
+    _hbMhBusy=false;
+    if(_hbMhAgain){_hbMhAgain=false;return hbMhSend_()}
+  });
 }
 /* 指定日にある入退院イベント（赤地/青地マーカーセル表示用） */
 function getHospEventsOnDate(resident,dateStr){
@@ -6581,6 +6648,7 @@ function setupNetHealth(){
   if(_netBound)return;                             // 二重登録しない
   _netBound=true;
   window.addEventListener('online',_netOnOnline);
+  window.addEventListener('online',function(){try{hbMhSend_()}catch(e){}});   // 入院の印の控え（新しい保存先）を送り直す
   window.addEventListener('offline',_netOnOffline);
   window.addEventListener('resize',function(){try{_netLayout()}catch(e){}});
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')_netEvalSoon()});
@@ -10836,6 +10904,7 @@ document.addEventListener('DOMContentLoaded',function(){
   var _bm=document.getElementById('btnMaster');
   if(_bm)_bm.addEventListener('click',function(){window.open('../care-tools/resident-master.html','_blank')});
   init();
+  try{hbMhSend_()}catch(e){}   // 前に送れなかった入院の印の控えがあれば送る（控えが無ければ何もしない）
 });
 
 // グローバルエラーハンドラ — 未処理エラーでフリーズしないよう保護
