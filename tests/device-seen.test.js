@@ -90,7 +90,12 @@ const today = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0
   {
     const w = world({ okReply: false });
     await w.api.hbSeen_(); await tick();
-    t('受け口が断った時は控えない（次に開いた時に送り直す）', w.posts.length === 1 && !('hb_seen_sent' in w.store));
+    t('受け口が断った時は控えない（後で送り直す）', w.posts.length === 1 && !('hb_seen_sent' in w.store));
+    await w.api.hbSeen_(); await tick();
+    t('　断られた後の6時間は送り直さない（開くたびに繰り返さない）', w.posts.length === 1 && w.flags.length === 1);
+    w.store.hb_seen_retry = String(Date.now() - 7 * 3600 * 1000);
+    await w.api.hbSeen_(); await tick();
+    t('　6時間を過ぎたら送り直す', w.posts.length === 2);
     const w2 = world({ netFail: true });
     let threw = false;
     try { await w2.api.hbSeen_(); await tick(); } catch (e) { threw = true; }

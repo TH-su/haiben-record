@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-s8vmN7iIyXMxwEP2f6N7E41iRIN/I2Cj0ubTgmROvow='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-9c+d9eqwjlM9IuN3GxITj/s8B+ODQMaJxFIs0L8knVo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -5200,6 +5200,7 @@ function hbSeen_(){
   var has=hbSeenHasSession_();
   if(sent===day+'|'+role+'|1'&&has)return Promise.resolve();       // 今日はログイン中として送ってある
   if(sent===day+'|'+role+'|0'&&!has)return Promise.resolve();      // 今日はログインしていないとして送ってあり、今も控えが無い
+  try{var wait=Number(localStorage.getItem('hb_seen_retry')||0);if(wait>Date.now()-6*3600*1000&&wait<=Date.now())return Promise.resolve()}catch(e){}   // 受け口が断った・届かなかった後の6時間は送らない（開くたびに確かめ・送信を繰り返さない）
   _hbSeenBusy=true;
   return fetch(HB_CT+'su-backend.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){
     if(!(j&&j.supabase&&typeof j.supabase==='object'&&j.supabase.device_seen===true))return;
@@ -5219,8 +5220,9 @@ function hbSeen_(){
       if(!k)return;
       return fetch(HB_SEEN_URL,{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',apikey:HB_SEEN_PUB},
         body:JSON.stringify({k:k,role:role,login:!!login,app:'hb'})}).then(function(res){
-        if(res&&res.ok){try{localStorage.setItem(HB_SEEN_SENT,mark)}catch(e){}}
-      });
+        if(res&&res.ok){try{localStorage.setItem(HB_SEEN_SENT,mark);localStorage.removeItem('hb_seen_retry')}catch(e){}}
+        else{try{localStorage.setItem('hb_seen_retry',String(Date.now()))}catch(e){}}
+      },function(){try{localStorage.setItem('hb_seen_retry',String(Date.now()))}catch(e){}});
     });
   }).catch(function(){}).then(function(){_hbSeenBusy=false});
 }
