@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-9c+d9eqwjlM9IuN3GxITj/s8B+ODQMaJxFIs0L8knVo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-+RKrTIg25Nq2HA7s5tItTsizMnyRPGILp/WXXsLJSdw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -44,6 +44,10 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
   background:#fff;color:var(--warn-tx);font-size: 0.8125rem;cursor:pointer}
 .frombar button:focus-visible{outline:2px solid var(--warn-tx);outline-offset:1px}
 @media print{.frombar{display:none !important}}
+/* 保存先を切り替えた後にログインしていない端末の帯（2026-11-05 代表者の決定・統合 0064）。画面だけ・印刷しない */
+.hb-nologin{background:#fff8c5;color:#4d3d00;border-bottom:1px solid #e0c200;padding:8px 16px;font-size:0.9375rem;font-weight:700;line-height:1.5}
+.hb-nologin[hidden]{display:none}
+@media print{.hb-nologin{display:none !important}}
 /* デイ（せせらぎ）の表示の帯（2026-10-24・正本 §9.7）。デイの表示の印がある端末（html.hb-daycare）だけに出す。
    確認バーの下に貼り付く（位置は layoutStickyTops が決める）。印の無い端末（施設）では出ない＝貼り付く位置と表の高さも今までと同じ */
 .dcbar{display:none}
@@ -1043,6 +1047,9 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
     <div style="font-size: 0.75rem;opacity:.85" id="hTime"></div>
   </div>
 </header>
+
+<!-- 保存先を新しい保存先へ切り替えた後に、ログインしていない端末で出す帯（hbNoLoginBand_ が出し入れする・2026-11-05 代表者の決定） -->
+<div class="hb-nologin" id="hbNoLogin" role="status" hidden>この端末はログインしていません。排泄ケア記録の保存先を切り替えた後は、ログインしていないと記録をサーバーへ送れません。入れた記録はこの端末に控えてあり、ログインすると送ります。メニューの『ログイン』からログインしてください。</div>
 
 <!-- 入居者マスタから本人単位で開いた時の確認バー（誰を開いているかを示す＝取り違え防止）。既定は非表示 -->
 <div class="frombar" id="fromMaster" role="status" aria-live="polite" style="display:none"></div>
@@ -2447,6 +2454,10 @@ async function apiGet(opts){
   /* 2026-10-28: 職員の一覧の控え（id が sys_ の行）も足してもらう。新しい GAS は sysVer:1 を返す。旧 GAS は無視する */
   if(body.action==='getDays'&&opts.sys===true)body.sys=true;
   if(apiToken)body.token=apiToken; // 認証（GAS: HAIBEN_TOKEN）
+  /* 保存先を切り替えた後（スイッチ haiben が入・新しい保存先の印が live・ログイン中）は新しい保存先から読む（2026-11-05・統合 0064）。
+     それ以外は下の今までどおりの Google への取得（応答の形は同じ） */
+  var _hbR=(typeof hbTryLive_==='function')?await hbTryLive_(body,(opts.since&&opts.since>0)?30000:60000,false):undefined;
+  if(_hbR!==undefined)return _hbR;
   // GAS は毎回シート全行を読むため差分でも約8秒・全件は約15秒かかる（記録7500件時点・実測）。
   // 既定12秒では全件取得（初回・日付回復・「同期」ボタン）が必ずタイムアウトし、
   // 未回復端末は since=0 の全件を強制するため回復フラグが立たず永久に同期不能になる。
@@ -2587,9 +2598,12 @@ async function _verifyByDigestRun(opts){
     var from=(typeof opts.from==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(opts.from))?opts.from:_hbKeepFrom(),j=null;
     try{
       var body={action:'digest',from:from};if(apiToken)body.token=apiToken;
+      var _hbD=(typeof hbTryLive_==='function')?await hbTryLive_(body,30000,false):undefined;   // 保存先を切り替えた後は新しい保存先の要約（統合 0064）
+      if(_hbD!==undefined){j=_hbD}else{
       var r=await fetchTO(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),cache:'no-store'},30000);
       if(!r.ok)throw new Error('HTTP '+r.status);
       j=await r.json();
+      }
       if(!j||j.ok!==true||!j.days||typeof j.days!=='object')throw new Error((j&&j.error)||'digest 非対応');
     }catch(e){
       /* ★全件に戻すのは「digest を知らない GAS」と分かった時だけ（2026-10-28）。通信の失敗・時間切れ・混雑（割当の超過など）で
@@ -2711,6 +2725,10 @@ var _schedHealNeeded=(function(){try{return !localStorage.getItem(SCHED_HEAL_KEY
 async function apiPost(action,data){
   if(!apiUrl)return null;
   data=data||{};
+  /* 保存先を切り替えた後は新しい保存先の口（hb_call）へ同じ本文を送る（合言葉は付けない・2026-11-05・統合 0064）。
+     ログインしていない端末では送らずに {code:'hb_switched'} を返す＝下の _writeDrain が端末に控える */
+  var _hbW=(typeof hbTryLive_!=='function')?undefined:await hbTryLive_({action:action,record:data.record,id:data.id,resident:data.resident,schedule:data.schedule,padSet:data.padSet,cfg:data.cfg,masterId:data.masterId,hospitalized:data.hospitalized},30000,true);
+  if(_hbW!==undefined)return _hbW;
   // 書込も GAS 側で LockService.waitLock(20秒)＋シート全行読込が走るため、
   // 既定12秒では混雑時にタイムアウトし未送信キュー送りになりうる。30秒へ緩和。
   var r=await fetchTO(apiUrl,{
@@ -3354,6 +3372,8 @@ function flushPendingQueue(done){
         if(!(r&&r.ok!==false)){
           if(isDroppableOnOldGas(item.action,r)){
             console.log('[hbcr] setMasterState は旧GASのため破棄・状態は名簿同期で復元されます');
+          }else if(r&&r.code==='hb_bad'){
+            console.warn('[hbcr] 送れない形のため送らない:',item.action);   // 送り直しても通らない（統合 0064）。この端末の記録は残る
           }else{
             remain.push(item);
           }
@@ -3386,6 +3406,16 @@ function _writeDrain(){
            ※個人情報保護のため action 名だけを出す（masterId・氏名は出さない）。 */
         console.log('[hbcr] setMasterState は旧GASのため破棄・状態は名簿同期で復元されます');
         apiSetStatus('ok','最終同期: '+new Date().toLocaleTimeString('ja-JP'),'書き込み');
+      }else if(r&&r.code==='hb_bad'){
+        /* 新しい保存先が形を受け取れない記録（日付が読めない等・送り直しても通らない）。この端末の記録は消さず、送るのをやめて知らせる（統合 0064） */
+        console.warn('[hbcr] 送れない形のため送らない:',item.action);
+        apiSetStatus('er','送れない記録があります','書き込み');
+        showToast('⚠️ 日付などが読めない記録をサーバーへ送れませんでした（この端末には残っています。記録を開いて日付を確かめてください）');
+      }else if(r&&r.code==='hb_switched'){
+        /* 保存先の切り替え中・切り替えた後でログインしていない（帯で知らせている）: 端末に控えて後で送る。「保存しました」とは出さない（統合 0064） */
+        if(typeof hbLiveReset_==='function')hbLiveReset_();
+        apiSetStatus('er','未送信（端末に控えています）','書き込み');
+        enqueuePending(item.action,item.data);
       }else{
         apiSetStatus('er','書き込みエラー','書き込み');
         enqueuePending(item.action,item.data);
@@ -5166,6 +5196,76 @@ function hbMhSend_(){
   }).catch(function(){}).then(function(){
     _hbMhBusy=false;
     if(_hbMhAgain){_hbMhAgain=false;return hbMhSend_()}
+  });
+}
+/* ═══ 排泄ケア記録の正本を新しい保存先へ切り替えた後の送り先（2026-11-05 代表者の決定・care-backend 統合 0064）═══
+   care-tools の切り替えスイッチ haiben（su-backend.json）が入で、新しい保存先の印が「切り替えた後」（hb_mode_public が live）の時だけ、
+   記録の読み書きを新しい保存先の画面の口（hb_call）へ送る。本文と応答の形は GAS の doPost と同じ（合言葉は付けない）。
+   ・スイッチが切・印が写しの期間・印を読めない時は今までどおり Google へ（スイッチが切の間は新しい保存先へ1回も問い合わせない）
+   ・ログインしていない端末: 読み取りは今までどおり Google から（1時間ごとの写し返しで新しくなる）。保存は送らずに端末に控え（未送信）、
+     見出しの下の帯で知らせる。ログインすると控えを送る（「保存しました」とは出さない）。ログインを確かめられない時（通信の失敗）は帯を出さない
+   ・入居者マスタの名簿（masterRoster）は今までどおり Google から読む
+   ・新しい保存先から読めない時（通信の失敗）は Google へ流さず失敗にする（読み先が混ざると差分の基準時刻がずれるため。次の同期で読み直す）
+   ・Google から読んでいた端末が新しい保存先から読み始める時（ログインした時）は、差分ではなく全件で読む（Google は写し返しの分だけ遅れているため）
+   ・返り値 undefined＝今までどおり Google へ。応答（GAS と同じ形）＝それを使う。保存でログインしていない時は {ok:false, code:'hb_switched'} */
+var HB_SB_URL='https://jhbernqawjrzqwrmqrih.supabase.co';
+var _hbLiveSt={flag:null,flagAt:0,mode:null,modeAt:0};
+function hbLiveFlag_(){
+  if(_hbLiveSt.flagAt&&Date.now()-_hbLiveSt.flagAt<60000)return Promise.resolve(_hbLiveSt.flag);
+  return fetch(HB_CT+'su-backend.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){
+    if(!j)return _hbLiveSt.flag;
+    _hbLiveSt.flag=!!(j.supabase&&typeof j.supabase==='object'&&j.supabase.haiben===true);_hbLiveSt.flagAt=Date.now();return _hbLiveSt.flag;
+  },function(){return _hbLiveSt.flag});   // 読めない時は前の値（初めてなら null＝分からない）
+}
+function hbLiveMode_(){
+  if(_hbLiveSt.modeAt&&Date.now()-_hbLiveSt.modeAt<60000)return Promise.resolve(_hbLiveSt.mode);
+  return fetchTO(HB_SB_URL+'/rest/v1/rpc/hb_mode_public',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',apikey:HB_SEEN_PUB},body:'{}',cache:'no-store'},10000)
+    .then(function(r){return r.ok?r.json():null}).then(function(j){
+      var m=(j&&(j.mode==='live'||j.mode==='shadow'))?j.mode:null;
+      if(m){_hbLiveSt.mode=m;_hbLiveSt.modeAt=Date.now()}
+      return m||_hbLiveSt.mode;
+    },function(){return _hbLiveSt.mode});
+}
+function hbLiveReset_(){_hbLiveSt.flagAt=0;_hbLiveSt.modeAt=0}
+/* 新しい保存先へ送るか。true＝送る・false＝Google・null＝分からない（Google へ。保存は Google が断れば端末に控える） */
+function hbLiveOn_(){
+  return hbLiveFlag_().then(function(on){
+    if(on!==true)return on===false?false:null;
+    return hbLiveMode_().then(function(m){return m==='live'?true:(m==='shadow'?false:null)});
+  }).then(null,function(){return null});
+}
+var HB_READ_SRC='hb_read_src';   // 前に記録を読んだ先（'g' Google・'s' 新しい保存先）
+function hbReadSrc_(v){try{if(v)localStorage.setItem(HB_READ_SRC,v);return localStorage.getItem(HB_READ_SRC)||''}catch(e){return ''}}
+function hbNoLoginBand_(show){try{var b=document.getElementById('hbNoLogin');if(b)b.hidden=!show}catch(e){}}
+function hbTimeout_(p,ms){
+  return new Promise(function(ok,ng){
+    var tid=setTimeout(function(){ng(new Error('タイムアウト（'+Math.round(ms/1000)+'秒）'))},ms);
+    p.then(function(v){clearTimeout(tid);ok(v)},function(e){clearTimeout(tid);ng(e)});
+  });
+}
+function hbTryLive_(body,ms,write){
+  return hbLiveOn_().then(function(live){
+    if(live!==true){hbNoLoginBand_(false);if(!write)hbReadSrc_('g');return undefined}
+    return hbMhLoadAuth_().then(function(A){
+      if(!A)throw new Error('ログインの部品を読めません');
+      return A.check().then(function(st){
+        if(st&&st.status==='error')throw new Error('ログインを確かめられません');
+        if(!st||(st.status!==A.STATUS.OK&&st.status!=='mfa_verify'))return null;   // ログインしていない・使えないアカウント
+        var b={};Object.keys(body||{}).forEach(function(k){if(k!=='token'&&body[k]!==undefined)b[k]=body[k]});
+        if(!write&&b.action==='getAll'&&b.since&&hbReadSrc_()!=='s'){delete b.since;delete b.heal}   // Google から読んでいた後は全件で読む
+        return hbTimeout_(A.client().rpc('hb_call',{p_body:b}),ms).then(function(r){
+          if(r&&r.error){if(String(r.error.code)==='42501')return null;throw new Error('新しい保存先: '+(r.error.code||'error'))}
+          if(!r||!r.data||typeof r.data!=='object')throw new Error('新しい保存先: 応答がありません');
+          return r.data;
+        });
+      });
+    }).then(function(res){
+      if(res===null){hbNoLoginBand_(true);if(!write)hbReadSrc_('g');return write?{ok:false,error:'hb_login',code:'hb_switched'}:undefined}   // 読み取りは Google から
+      hbNoLoginBand_(false);
+      if(!write&&res.ok===true)hbReadSrc_('s');
+      if(res.code==='hb_switched')hbLiveReset_();   // 切り替え中・戻した直後: 次は印を読み直す
+      return res;
+    });   // 失敗は呼んだ側へ（保存は _writeDrain が端末に控える・読み取りは同期の失敗として次に読み直す）
   });
 }
 /* ═══ 排泄ケア記録を開いた端末のログインの有無（2026-11-03 代表者の決定・care-backend 統合 0062）═══
