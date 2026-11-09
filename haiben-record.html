@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-hzmsJpVUWp6xqul0nFYHfud7xq9R3/OFQMWRwbhMUrE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-YVMZFCd4koKyy91prpD8AT2zx2d8WY6egLz+EL7Av4M='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -1050,7 +1050,7 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
   #sc-tl .tl-leg-i{font-size:0.75rem}
   #sc-tl .tl-w{max-height:calc(100vh - 100px)}
   #sc-tl .tl-w.box-fit{max-height:var(--fit-h)}
-  #sc-tl .tl-nm > br{display:none}
+  #sc-tl .tl-nm:not(.tl-nm-hosp) > br{display:none}   /* 入院中の札がある行は、居室番号と札・氏名の2段のまま（氏名の欄を広げない） */
   #sc-tl .tl-nm > span:first-child{margin-right:6px}
   #sc-tl .tl-nm{padding-top:3px;padding-bottom:3px}
   #sc-tl .tl-c,#sc-tl .tl-t.tl-compact .tl-c{height:32px}
@@ -1064,6 +1064,32 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
   #sc-tl .bd-hdr{gap:4px}   /* 幅1024px（iPad 横）で 44px のボタンが1段に収まるように（6px のままだと「下剤」だけ2段目へ折り返す） */
   #sc-tl .bd-hdr .bsm{min-height:44px;min-width:44px}
   #sc-tl .bd-hdr input[type=date]{min-height:44px}
+}
+/* iPhone など、上の「時系列をいちばん大きく見せる」が効かない画面（幅744px未満、または幅1024px未満で高さ900px未満）で
+   時系列を開いている間だけ、表の上を詰めて表を大きく見せる（2026-11-09 本人指示「タイトル帯とその下のボタンの高さはまだ縮められる」）。
+   なぜ: 390px の iPhone で、青い帯が3段（約120px）・日付の操作が4段（約190px）・凡例と枠の余白で、表の上端が画面の上から
+   約430pxにあり、表に残る高さが約380px（7行ほど）しかなかった。
+   ・青い帯は余白を詰め、アプリ名を小さくし、日付（帯の2段目）は時系列の画面だけ隠す（日付は下の日付の欄に出ている）
+   ・押すボタンの高さを 44px→36px にする（本人指示）。日付の操作は「更新・全体・今・下剤」を1段にまとめる（並べる順だけ・ボタンは同じ）
+   ・凡例・枠の余白と、氏名の欄の上下の余白を詰める
+   ほかの画面（入力・一覧など）・印刷・パソコンとタブレットの見た目には効かない。 */
+@media screen and (max-width:743.98px), screen and (max-width:1023.98px) and (max-height:899.98px){
+  body:has(#sc-tl.on) .hdr{padding:6px 12px;row-gap:4px}
+  body:has(#sc-tl.on) .hdr h1{font-size:0.9375rem}
+  body:has(#sc-tl.on) .hdr-sub{display:none}
+  body:has(#sc-tl.on) .hdr-btn{min-height:36px;padding-top:2px;padding-bottom:2px}
+  #sc-tl.on{padding-top:6px}
+  #sc-tl .bd-hdr{gap:4px 6px;margin-bottom:6px;padding-top:4px;padding-bottom:4px}
+  #sc-tl .bd-hdr .bsm{min-height:36px;padding-top:2px;padding-bottom:2px}
+  #sc-tl .bd-hdr input[type=date]{min-height:36px;padding-top:2px;padding-bottom:2px}
+  #sc-tl .bd-hdr .tgl-l{min-height:36px}
+  #sc-tl .bd-hdr .tgl-l,#sc-tl .bd-hdr > label{order:1}
+  #sc-tl #tlOvdSum{order:2}
+  #sc-tl .bd-hdr #tlLax{margin-left:0}
+  #sc-tl .cd{padding:8px;margin-bottom:0}
+  #sc-tl .tl-leg{gap:4px 10px;margin-bottom:4px}
+  #sc-tl .tl-leg-i{font-size:0.75rem}
+  #sc-tl .tl-nm{padding-top:2px;padding-bottom:2px}
 }
 @media screen and (max-width:599.98px){#btnNight{display:none}}
 }
@@ -7015,13 +7041,18 @@ function renderTL(){const date=$('tlDate').value||today();
     // 🏥 完全入院日（入院翌日〜退院前日）は氏名セルもグレーアウトし、排泄カウントの代わりに「入院中」表示
     var isFullHospTL=isFullHospDay(re,date);
     var nmCellStyle=isFullHospTL?' style="background:#9e9e9e;color:#424242"':'';
+    /* 入院中の札は居室番号のすぐ右に置く（氏名の後ろに置くと、PC・タブレットの1段の氏名の欄がその行に合わせて広がるため・2026-11-09 本人指示）。
+       札のある行だけは居室番号と札の下に氏名を置く2段のまま（.tl-nm-hosp） */
+    var hospBadge='<span style="margin-left:6px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block;vertical-align:middle"%T>🏥 入院中</span>';
+    var showMasterHosp=(!isFullHospTL&&re.masterHosp===true&&date===today());
+    var nmCls=(isFullHospTL||showMasterHosp)?'tl-nm tl-nm-hosp':'tl-nm';
     var nmContent=isFullHospTL
-      ?'<span style="color:#424242">'+escapeHtmlText(re.room)+'</span><br><span class="tl-nm-link" data-hist="'+escapeHtmlText(re.id)+'" style="color:#212121;text-decoration-color:#212121">'+escapeHtmlText(re.name)+'</span>'+fdBtn+
-        '<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block">🏥 入院中</div>'
-      :'<span style="color:var(--g5)">'+escapeHtmlText(re.room)+'</span><br><span class="tl-nm-link" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+fdBtn+
+      ?'<span style="color:#424242">'+escapeHtmlText(re.room)+'</span>'+hospBadge.replace('%T','')+'<br><span class="tl-nm-link" data-hist="'+escapeHtmlText(re.id)+'" style="color:#212121;text-decoration-color:#212121">'+escapeHtmlText(re.name)+'</span>'+fdBtn
+      :'<span style="color:var(--g5)">'+escapeHtmlText(re.room)+'</span>'+
         // 入居者マスタ側だけで入院中の人にもバッジを出す（今日の表示のみ。灰色化・入力可否は従来どおり履歴が根拠）
-        ((re.masterHosp===true&&date===today())?'<div style="margin-top:4px;background:#c62828;color:#fff;font-weight:700;font-size: 0.6875rem;padding:2px 8px;border-radius:4px;display:inline-block" title="入居者マスタで入院中">🏥 入院中</div>':'')+offHtml;
-    return'<tr><td class="tl-nm"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
+        (showMasterHosp?hospBadge.replace('%T',' title="入居者マスタで入院中"'):'')+
+        '<br><span class="tl-nm-link" data-hist="'+escapeHtmlText(re.id)+'">'+escapeHtmlText(re.name)+'</span>'+fdBtn+offHtml;
+    return'<tr><td class="'+nmCls+'"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
   var tlEmpty=(!res.length&&onlyAttn)?'<tr><td colspan="99" class="attn-empty">✅ いま要注意の方はいません（「要注意だけ」を外すと全員を表示します）</td></tr>':'';
   if(!res.length&&!onlyAttn&&hbDcOn())tlEmpty='<tr><td colspan="99" class="attn-empty">'+escapeHtmlText(DC_EMPTY_MSG)+'</td></tr>';
   $('tlBox').innerHTML='<table class="tl-t'+(tlCompact?' tl-compact':'')+'"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+tlEmpty+'</tbody></table>';
