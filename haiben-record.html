@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-p5DoloKVdIilkcYy7uew4rtEtCQDvIHfpQX5LcxVADg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-hzmsJpVUWp6xqul0nFYHfud7xq9R3/OFQMWRwbhMUrE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -1033,8 +1033,10 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
    ・青い帯（アプリ名）・日付の操作・凡例の余白と文字を詰める（押す所は 32px 以上・マウスで使う PC だけ）
    ・氏名の欄は居室番号と氏名を1段に並べ、コマの高さを 38px→32px にして1画面の行数を増やす
    ・表の高さは、ページを送らずに画面の下（下のメニューの上）まで伸ばす（tlFitHeight）
-   幅1024px未満（iPhone・iPad 縦）と、一覧・入力などほかの画面と、印刷はこのブロックが効かない＝今までどおり。 */
-@media screen and (min-width:1024px){
+   幅1024px未満（iPhone・iPad 縦）と、一覧・入力などほかの画面と、印刷はこのブロックが効かない＝今までどおり。
+   タブレットの縦向き（幅744px以上・高さ900px以上）にも同じ詰め方を当てる（2026-11-09 本人指示）。iPhone は縦も横も
+   この条件に入らない（縦は幅430px以下・横は高さ430px以下）。条件を変える時は _fitScrollBox の TL_BIG_MQ も同じにする。 */
+@media screen and (min-width:1024px), screen and (min-width:744px) and (min-height:900px){
   body:has(#sc-tl.on) .hdr{padding:5px 14px}
   body:has(#sc-tl.on) .hdr h1{font-size:0.9375rem;display:inline}
   body:has(#sc-tl.on) .hdr-sub{display:inline;margin:0 0 0 10px}
@@ -1054,6 +1056,14 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
   #sc-tl .tl-c,#sc-tl .tl-t.tl-compact .tl-c{height:32px}
   #sc-tl .tl-t.tl-compact{width:100%}   /* 全体表示（0〜23時）は表を画面の幅いっぱいに広げ、時刻のコマを広くする */
   #sc-tl .tl-t:not(.tl-compact) .tl-c.sched::before{width:32px;height:32px}   /* 全体表示の丸（18px）は今のまま */
+}
+/* 指で触る端末（タブレット）では、上の詰め方のうち押すボタンだけ 44px に戻す（押し間違いを防ぐ・2026-11-09 本人指示）。
+   表のコマの高さ（32px）と1段の氏名は上のまま＝見える行の数は減らさない。 */
+@media screen and (min-width:1024px) and (pointer:coarse), screen and (min-width:744px) and (min-height:900px) and (pointer:coarse){
+  body:has(#sc-tl.on) .hdr-btn{min-height:44px}
+  #sc-tl .bd-hdr{gap:4px}   /* 幅1024px（iPad 横）で 44px のボタンが1段に収まるように（6px のままだと「下剤」だけ2段目へ折り返す） */
+  #sc-tl .bd-hdr .bsm{min-height:44px;min-width:44px}
+  #sc-tl .bd-hdr input[type=date]{min-height:44px}
 }
 @media screen and (max-width:599.98px){#btnNight{display:none}}
 }
@@ -6325,6 +6335,8 @@ function setupTopScroll(){setupTopScrollFor('tlScrollTop','tlBox')}
    CSS の上限より大きくはしない＝見出しが隠れない端末の見た目は従来どおり。
    上限は画面表示の時だけ効く（.box-fit・@media screen）＝印刷の見た目は変えない。 */
 var _boxFitBound=false,_boxFitRaf=0,_svhProbe=null;
+/* 時系列を大きく出す画面の条件（CSS の「時系列の表をいちばん大きく見せる」ブロックと同じ文字列・2026-11-09） */
+var TL_BIG_MQ='screen and (min-width:1024px), screen and (min-width:744px) and (min-height:900px)';
 function _smallVh(){
   if(!_svhProbe){
     _svhProbe=document.createElement('div');
@@ -6354,7 +6366,7 @@ function _fitScrollBox(box,stickies){
   });
   /* パソコンの画面（幅1024px以上）の時系列は、ページを送らずに表を画面の下まで伸ばす（2026-11-09 本人指示）。
      表より上の部品（凡例など）が貼り付く部分より下にあっても、今のページ上の位置から下の余白までを表に使う */
-  if(box.id==='tlBox'&&window.matchMedia&&window.matchMedia('screen and (min-width:1024px)').matches)top=Math.max(top,box.getBoundingClientRect().top+(window.scrollY||0));
+  if(box.id==='tlBox'&&window.matchMedia&&window.matchMedia(TL_BIG_MQ).matches)top=Math.max(top,box.getBoundingClientRect().top+(window.scrollY||0));
   var fit=Math.floor(_smallVh()-top-_boxBelow(box)-4);
   // 見出しと1行も入らないほど狭い時（iPhone の横・表示200% など）は縮めず従来の高さのまま（縮めても見出しは残せず、行が減るだけ）
   if(fit<cssMax&&fit>=_boxFloor(box)){box.style.setProperty('--fit-h',fit+'px');box.classList.add('box-fit')}
