@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-+RKrTIg25Nq2HA7s5tItTsizMnyRPGILp/WXXsLJSdw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-p5DoloKVdIilkcYy7uew4rtEtCQDvIHfpQX5LcxVADg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -1026,6 +1026,35 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
    この幅では自動の切替（21:00〜翌7:00）だけが効く */
 @media screen and (max-width:259.98px){.bnav .hb-night-nav{display:none}}
 @media screen and (min-width:600px){.bnav .hb-night-nav{display:none}}
+/* パソコンの画面（幅1024px以上）で時系列を開いている間だけ、時系列の表をいちばん大きく見せる（2026-11-09 本人指示）。
+   なぜ: 画面の横幅を960pxまでに抑え、上の青い帯・日付の操作・凡例で約270pxを取り、1行を居室番号と氏名の2段（52px）に
+   していたため、PC では表が小さく、見える行が少なかった。
+   ・時系列の画面だけ横幅の上限を外し、画面の幅いっぱいに使う（見える時刻の列が増える）
+   ・青い帯（アプリ名）・日付の操作・凡例の余白と文字を詰める（押す所は 32px 以上・マウスで使う PC だけ）
+   ・氏名の欄は居室番号と氏名を1段に並べ、コマの高さを 38px→32px にして1画面の行数を増やす
+   ・表の高さは、ページを送らずに画面の下（下のメニューの上）まで伸ばす（tlFitHeight）
+   幅1024px未満（iPhone・iPad 縦）と、一覧・入力などほかの画面と、印刷はこのブロックが効かない＝今までどおり。 */
+@media screen and (min-width:1024px){
+  body:has(#sc-tl.on) .hdr{padding:5px 14px}
+  body:has(#sc-tl.on) .hdr h1{font-size:0.9375rem;display:inline}
+  body:has(#sc-tl.on) .hdr-sub{display:inline;margin:0 0 0 10px}
+  body:has(#sc-tl.on) .hdr-btn{min-height:32px;padding:3px 10px}
+  #sc-tl.on{max-width:none;padding:6px 12px 0}
+  #sc-tl .bd-hdr{gap:6px;margin-bottom:6px;padding:4px 0}
+  #sc-tl .bd-hdr .bsm{min-height:32px;min-width:32px;padding:4px 10px}
+  #sc-tl .bd-hdr input[type=date]{min-height:32px;padding-top:2px;padding-bottom:2px}
+  #sc-tl .cd{padding:6px 8px;margin-bottom:0}
+  #sc-tl .tl-leg{gap:12px;margin-bottom:4px}
+  #sc-tl .tl-leg-i{font-size:0.75rem}
+  #sc-tl .tl-w{max-height:calc(100vh - 100px)}
+  #sc-tl .tl-w.box-fit{max-height:var(--fit-h)}
+  #sc-tl .tl-nm > br{display:none}
+  #sc-tl .tl-nm > span:first-child{margin-right:6px}
+  #sc-tl .tl-nm{padding-top:3px;padding-bottom:3px}
+  #sc-tl .tl-c,#sc-tl .tl-t.tl-compact .tl-c{height:32px}
+  #sc-tl .tl-t.tl-compact{width:100%}   /* 全体表示（0〜23時）は表を画面の幅いっぱいに広げ、時刻のコマを広くする */
+  #sc-tl .tl-t:not(.tl-compact) .tl-c.sched::before{width:32px;height:32px}   /* 全体表示の丸（18px）は今のまま */
+}
 @media screen and (max-width:599.98px){#btnNight{display:none}}
 }
 </style>
@@ -6323,6 +6352,9 @@ function _fitScrollBox(box,stickies){
   [document.querySelector('.frombar'),$('dcBar')].concat(stickies||[]).forEach(function(el){   // デイの帯は印の無い端末では出ない（offsetParent が無い＝数えない）
     if(el&&el.offsetParent&&getComputedStyle(el).position==='sticky')top=Math.max(top,(parseFloat(getComputedStyle(el).top)||0)+el.offsetHeight);   // 貼り付いた時の下端（貼り付けていない操作バーは数えない）
   });
+  /* パソコンの画面（幅1024px以上）の時系列は、ページを送らずに表を画面の下まで伸ばす（2026-11-09 本人指示）。
+     表より上の部品（凡例など）が貼り付く部分より下にあっても、今のページ上の位置から下の余白までを表に使う */
+  if(box.id==='tlBox'&&window.matchMedia&&window.matchMedia('screen and (min-width:1024px)').matches)top=Math.max(top,box.getBoundingClientRect().top+(window.scrollY||0));
   var fit=Math.floor(_smallVh()-top-_boxBelow(box)-4);
   // 見出しと1行も入らないほど狭い時（iPhone の横・表示200% など）は縮めず従来の高さのまま（縮めても見出しは残せず、行が減るだけ）
   if(fit<cssMax&&fit>=_boxFloor(box)){box.style.setProperty('--fit-h',fit+'px');box.classList.add('box-fit')}
