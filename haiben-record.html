@@ -1052,7 +1052,8 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
   #sc-tl .tl-nm > span:first-child{margin-right:6px}
   #sc-tl .tl-nm{padding-top:3px;padding-bottom:3px}
   #sc-tl .tl-c,#sc-tl .tl-t.tl-compact .tl-c{height:32px}
-  #sc-tl .tl-c.sched::before{width:32px;height:32px}
+  #sc-tl .tl-t.tl-compact{width:100%}   /* 全体表示（0〜23時）は表を画面の幅いっぱいに広げ、時刻のコマを広くする */
+  #sc-tl .tl-t:not(.tl-compact) .tl-c.sched::before{width:32px;height:32px}   /* 全体表示の丸（18px）は今のまま */
 }
 @media screen and (max-width:599.98px){#btnNight{display:none}}
 }
