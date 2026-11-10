@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-YVMZFCd4koKyy91prpD8AT2zx2d8WY6egLz+EL7Av4M='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-1Z5Hi3b0cZ8XxEpQ59V5uWfD/uOsqr/0Qjyu6LX6s2k='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -2358,6 +2358,7 @@ function _idbDel(key){
 
 function saveApiUrl(url){
   if(!url)return;
+  if(typeof _hbDevCfg!=='undefined'&&_hbDevCfg)return;   // 管理者が配った接続先は端末に書かない（hbDevCfgLoad_）
   try{localStorage.setItem(API_KEY,url)}catch(e){console.warn('[hbcr] localStorage失敗:',e)}
   try{localStorage.setItem(API_KEY_BAK,url)}catch(e){}
   try{localStorage.setItem(API_KEY_BAK2,url)}catch(e){}
@@ -2404,6 +2405,7 @@ function clearApiUrl(){
 }
 /* ── 同期トークンの保存／読み出し（URL と同じ多層永続化） ── */
 function saveApiToken(tk){
+  if(typeof _hbDevCfg!=='undefined'&&_hbDevCfg)return;   // 管理者が配った合言葉は端末に書かない（hbDevCfgLoad_）
   tk=(tk||'').trim();
   if(!tk){clearApiToken();return}
   try{localStorage.setItem(API_TOKEN_KEY,tk)}catch(e){console.warn('[hbcr] token localStorage失敗:',e)}
@@ -5226,6 +5228,30 @@ function hbMhLoadAuth_(){
   if(window.SUAuth)return Promise.resolve(window.SUAuth);
   function load(src){return new Promise(function(ok,ng){var s=document.createElement('script');s.src=src;s.onload=function(){ok()};s.onerror=function(){ng(new Error('load'))};document.head.appendChild(s)})}
   return (window.supabase?Promise.resolve():load(HB_CT+'supabase-js-2.112.4.js')).then(function(){return window.SUAuth?null:load(HB_CT+'su-auth.js?v=2026-10-28')}).then(function(){return window.SUAuth||null});
+}
+/* ═══ 管理者が配った接続先（2026-11-10 本人指示・care-tools の su-devcfg.js・統合 0080）═══
+   端末ごとの設定を増やさない（CLAUDE.md §1）。この端末に接続先が入っていない時だけ、ログインしていれば、
+   管理者が接続設定の「全端末へ配る」で入れた排泄ケア記録の接続先と合言葉（系統 haiben・現場の端末でも受け取れる）を受け取って使う。
+   ・受け取った値はこのページのメモリにだけ置き、端末（localStorage・cookie・IndexedDB）には書かない（部品は同じタブの控えだけを持つ）
+   ・端末に接続先が入っている端末は今までどおり（端末の値を使う）
+   ・ログインしていない・配っていない・読めない時は何もしない（今までどおり接続先なし）
+   ・部品は care-tools から読み、ログインの部品（hbMhLoadAuth_）を先に読んでおく（部品が自分で読む住所はこのページから見ると違うため） */
+var HB_DEVCFG_SRC=HB_CT+'su-devcfg.js?v=2026-11-08';
+var _hbDevCfg=false;   // 今の接続先が配った値か（true の間は端末に書かない）
+function hbDevCfgLoad_(){
+  if(!hbSeenHasSession_())return Promise.resolve(null);
+  return hbMhLoadAuth_().then(function(A){
+    if(!A)return null;
+    if(window.SUDevCfg)return window.SUDevCfg;
+    return new Promise(function(ok){var s=document.createElement('script');s.src=HB_DEVCFG_SRC;s.onload=function(){ok(window.SUDevCfg||null)};s.onerror=function(){ok(null)};document.head.appendChild(s)});
+  }).then(function(C){
+    if(!C||typeof C.get!=='function')return null;
+    return Promise.resolve(typeof C.ready==='function'?C.ready(8000):null).then(function(){
+      var c=C.get('haiben');
+      if(!c||typeof c.url!=='string'||!c.url.startsWith('https://script.google.com/'))return null;
+      return {url:c.url,token:typeof c.token==='string'?c.token:''};
+    });
+  }).catch(function(){return null});
 }
 function hbMhSend_(){
   if(_hbMhBusy){_hbMhAgain=true;return Promise.resolve()}
@@ -10894,6 +10920,7 @@ function _initRest(){
   /* 保存の実行本体。btnApiSave から直接、または「保存済みトークンを空欄で消す」確認を経て呼ばれる。
      従来の処理内容は変えていない（空欄＝旧GAS互換の未認証モードという仕様も維持）。 */
   function _applyApiSave(url,tk){
+    _hbDevCfg=false;   // 手で入れた接続先は今までどおり端末に保存する
     apiToken=tk;
     if(tk)saveApiToken(tk);else clearApiToken();
     apiUrl=url;saveApiUrl(url);
@@ -10912,6 +10939,28 @@ function _initRest(){
         showToast('✅ 接続・同期しました')
       }
       else showToast('⚠️ URL確認後、再度お試しください')});
+  }
+
+  /* 管理者が配った接続先で同期する（上の _applyApiSave と同じ流れで、端末には書かない・hbDevCfgLoad_） */
+  function _applyDevCfg(url,tk){
+    _hbDevCfg=true;apiToken=tk;apiUrl=url;
+    if(Array.isArray(D.residents)&&D.residents.some(function(r){return r&&r._seed})){D.residents=D.residents.filter(function(r){return !r._seed});save()}
+    apiSetStatus('sy');
+    syncCatchUp(true,{reset:true}).then(ok=>{
+      if(ok){
+        buildResSel();renderCfg();
+        var sc=document.querySelector('.scr.on');
+        if(sc&&sc.id==='sc-board')renderBoard();
+        if(sc&&sc.id==='sc-tl')renderTL();
+        showToast('✅ 管理者が配った接続先で同期しました')
+      }
+      else showToast('⚠️ サーバーから記録を受け取れませんでした。「🔄 更新」を押してください')});
+  }
+  if(!apiUrl){
+    hbDevCfgLoad_().then(function(c){
+      if(!c||apiUrl||_locked)return;   // 待つ間に端末へ接続先が入った・画面が鍵で閉じた時は使わない
+      _applyDevCfg(c.url,c.token);
+    });
   }
 
   $('btnApiSave').addEventListener('click',function(){if(hbFieldDeny())return;
@@ -10949,6 +10998,7 @@ function _initRest(){
   $('btnApiClear').addEventListener('click',function(){if(hbFieldDeny())return;
     customConfirm('Google Sheets連携を解除しますか？\nローカルデータは保持されます。').then(function(ok){
       if(!ok)return;
+      _hbDevCfg=false;
       apiUrl='';clearApiUrl();
       apiToken='';clearApiToken();
       $('cfgApi').value='';
