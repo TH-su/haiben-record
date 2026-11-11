@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-1Z5Hi3b0cZ8XxEpQ59V5uWfD/uOsqr/0Qjyu6LX6s2k='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-Wj7oFLvWm15JgtEy9GAW3/aMYxmbczSTfRBQcddlt/E='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -1497,6 +1497,8 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
       <label class="dc-cfg-l"><input type="checkbox" id="cfgDayOnlyOn"> デイ せせらぎの表示から「デイだけの方」を加えられるようにする</label>
       <div class="dc-cfg-help">施設とデイの全部の端末を新しい画面に〔更新〕してから入れてください。</div>
     </div>
+    <!-- 同じ方が2行ある（重複）のまとめ（2026-11-11）。事務所の端末だけ -->
+    <div id="resDupBox"></div>
     <div id="resList"></div>
   </div>
   <!-- ══ マスタ連携の点検（2026-08-06 追加） ══
@@ -4513,6 +4515,7 @@ function _hasApiUrlStored(){
 
 function mergeCommonResidents(srcList, opts){
   opts=opts||{};
+  try{if(typeof hbMergedHeal==='function'&&hbMergedHeal())save()}catch(e){console.warn('[hbcr] 重複のまとめの後始末をスキップ:',e)}
   var list;
   if(Array.isArray(srcList)){list=srcList}
   else{
@@ -7721,6 +7724,7 @@ function renderStoreNote(){
 }
 function renderCfg(){
   try{var _dco=$('cfgDayOnlyOn');if(_dco)_dco.checked=hbDcAddEnabled()}catch(e){}
+  try{renderResDup()}catch(e){console.warn('[hbcr] 重複の点検をスキップ:',e)}
   renderStoreNote();
   try{renderPadCfg()}catch(e){}
   var showInactive=$('cfgShowInactive')&&$('cfgShowInactive').checked;
@@ -8372,6 +8376,7 @@ function extractHospsFromSnapshot(){
 function isUserRes(r){
   if(!r)return false;
   if(_isStaffRes(r))return false;
+  if(typeof hbMergedInto==='function'&&hbMergedInto(r)!==null)return false;   // 重複をまとめて隠した行（2026-11-11）。記録は残す方の行に付け替え済み
   // 旧バージョン互換
   if(toNum(r.id)===LEGACY_SYS_RID)return false;
   if(typeof r.name==='string'&&r.name.indexOf(LEGACY_SYS_NAME_PREFIX)===0)return false;
@@ -9137,6 +9142,231 @@ async function delRes(id){if(hbFieldDeny())return;var r=D.residents.find(functio
   D.residents=D.residents.filter(function(x){return x.id!==id});save();
   apiPush('delRes',{id:id});
   renderCfg();buildResSel();showToast('🗑️ 削除しました')}
+/* ══════════ 同じ方が2行ある（重複）を1つにまとめる（2026-11-11・代表者の依頼「どちらを残すか分からない・データを消さない」） ══════════
+   なぜ: 2026-10-25 より前は、入居者マスタから取り込んだ方に端末ごとに番号（手元の最大＋1）を付けていた。
+     別の端末が同じ方に別の番号を付け、非表示などの操作で両方がサーバー（Residents シート）へ送られて、同じ氏名の行が2つになった。
+   どうまとめる:
+     ・残す行を1つ決め（おすすめ＝記録が多い→入居者マスタと結ばれている→表示中→番号が小さい）、もう一方の記録を残す行へ付け替えて送る
+     ・もう一方の行は【消さない】。cfg.mergedInto（残す行の番号）の印を付け、在籍を外し・非表示にして送る
+       （行を消すと、ほかの端末の手元の行が「この端末にだけある行」として残り、編集で送り直されて復活するため）
+     ・印のある行は isUserRes が外す＝一覧・入力・帳票・入居者マスタとの照らし合わせのどこにも出ない
+     ・ほかの端末では hbMergedHeal が、印のある行に残った入居者マスタの紐づけを残す行へ移し、まとめた後にその行へ付いた記録を付け替えて送る
+   ★まとめる前に、行と付け替える記録の番号をこの端末に控える（〔取り消す〕で元に戻せる）
+   ★記録は1件も消さない（付け替えだけ） */
+var HB_MERGE_BAK_KEY='hbcr_merge_bak';
+function hbMergedInto(r){
+  if(!r||!r.cfg||typeof r.cfg!=='object')return null;
+  var t=toNum(r.cfg.mergedInto);
+  if(t===null||t===toNum(r.id))return null;
+  return t;
+}
+/* 印をたどって最後に残る行（印が輪になっていたら null） */
+function hbMergeTarget(rid,byId){
+  var cur=toNum(rid),seen={};
+  for(var i=0;i<10;i++){
+    if(cur===null||seen[cur])return null;seen[cur]=1;
+    var r=byId[cur];if(!r)return null;
+    var t=hbMergedInto(r);if(t===null)return cur;
+    cur=t;
+  }
+  return null;
+}
+/* 印のある行の後始末（ほかの端末・まとめた後に届いた記録）。変えたら true */
+function hbMergedHeal(){
+  if(!Array.isArray(D.residents))return false;
+  var byId={};D.residents.forEach(function(r){var k=toNum(r&&r.id);if(k!==null)byId[k]=r});
+  var changed=false,map={};
+  D.residents.forEach(function(m){
+    if(hbMergedInto(m)===null)return;
+    var tid=hbMergeTarget(m.id,byId);if(tid===null||tid===toNum(m.id))return;
+    var t=byId[tid];map[toNum(m.id)]={tid:tid,at:Number(m.cfg.mergedAt)||0};
+    /* 入居者マスタとの紐づけ（この端末の中だけの値）は残す行へ移す。残す行が既に結ばれていれば移さずに外すだけ */
+    if(m.masterId!=null&&m.masterId!==''){
+      if(t.masterId==null||t.masterId===''){
+        t.masterId=m.masterId;
+        if(m.midAck===true)t.midAck=true;
+        if(m.masterHosp!==undefined&&t.masterHosp===undefined)t.masterHosp=m.masterHosp;
+      }
+      delete m.masterId;delete m.midAck;delete m.masterHosp;changed=true;
+    }
+  });
+  /* まとめた時より後に、まとめた行へ付いた記録（古い画面の端末・電波の無い所で入れた分）は残す行へ付け替えて送る。
+     まとめた時より前の記録は、まとめた端末が付け替えて送っている（ここで送り直すと古い中身で上書きしうるので送らない） */
+  if(Array.isArray(D.records)&&Object.keys(map).length){
+    D.records.forEach(function(rec){
+      var x=rec&&map[toNum(rec.residentId)];if(!x)return;
+      var c=Date.parse(rec.createdAt||'')||0;
+      if(x.at&&c&&c<x.at)return;
+      rec.residentId=x.tid;rec.updatedAt=new Date().toISOString();changed=true;
+      if(typeof apiPush==='function')apiPush('saveRecord',{record:rec});
+    });
+    if(changed)_recIdx=null;
+  }
+  if(changed){try{_invalidateLinkIdx()}catch(e){}}
+  return changed;
+}
+/* 同じ氏名の在籍の行の組（2行以上）。各組は残す行のおすすめ順に並べる */
+function hbDupGroups(){
+  var cnt={},last={};
+  (D.records||[]).forEach(function(r){
+    if(!r||(typeof isUserRec==='function'&&!isUserRec(r)))return;
+    var k=toNum(r.residentId);if(k===null)return;
+    cnt[k]=(cnt[k]||0)+1;
+    if(r.date&&(!last[k]||r.date>last[k]))last[k]=r.date;
+  });
+  var by={};
+  (D.residents||[]).forEach(function(r){
+    if(!isUserRes(r)||!isValidRes(r)||r.active===false)return;
+    var nx=_normNameX(r.name);if(!nx)return;
+    (by[nx]=by[nx]||[]).push(r);
+  });
+  var out=[];
+  Object.keys(by).forEach(function(nx){
+    var g=by[nx];if(g.length<2)return;
+    var rows=g.map(function(r){var k=toNum(r.id);return{r:r,n:cnt[k]||0,last:last[k]||'',linked:(r.masterId!=null&&r.masterId!=='')}});
+    rows.sort(function(a,b){
+      if(a.n!==b.n)return b.n-a.n;
+      if(a.linked!==b.linked)return a.linked?-1:1;
+      if((a.r.hidden===true)!==(b.r.hidden===true))return a.r.hidden===true?1:-1;
+      return toNum(a.r.id)-toNum(b.r.id);
+    });
+    var rooms={};rows.forEach(function(x){rooms[String(x.r.room||'')]=1});
+    out.push({rows:rows,sameRoom:Object.keys(rooms).length===1});
+  });
+  out.sort(function(a,b){return String(a.rows[0].r.room||'').localeCompare(String(b.rows[0].r.room||''),'ja')});
+  return out;
+}
+function _hbMergeBakRead(){try{var a=JSON.parse(localStorage.getItem(HB_MERGE_BAK_KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return[]}}
+function _hbMergeBakWrite(a){localStorage.setItem(HB_MERGE_BAK_KEY,JSON.stringify(a.slice(-50)))}
+/* 1組をまとめる（画面の確かめは呼ぶ側）。控えを書けなければ何も変えない。成功で true */
+function hbMergeDupRows(keepId,dupIds){
+  var keep=(D.residents||[]).find(function(x){return toNum(x.id)===toNum(keepId)});
+  if(!keep||hbMergedInto(keep)!==null)return false;
+  var dups=dupIds.map(function(id){return(D.residents||[]).find(function(x){return toNum(x.id)===toNum(id)})})
+    .filter(function(x){return x&&x!==keep&&hbMergedInto(x)===null});
+  if(!dups.length)return false;
+  var dset={};dups.forEach(function(d){dset[toNum(d.id)]=1});
+  var moved=(D.records||[]).filter(function(rec){return rec&&dset[toNum(rec.residentId)]});
+  /* ★先に控える（行の中身・付け替える記録の番号と元の入居者番号） */
+  try{
+    var bak=_hbMergeBakRead();
+    bak.push({at:Date.now(),keep:JSON.parse(JSON.stringify(keep)),dups:JSON.parse(JSON.stringify(dups)),
+      recs:moved.map(function(rec){return[rec.id,toNum(rec.residentId)]})});
+    _hbMergeBakWrite(bak);
+  }catch(e){showToast('⚠️ 控えを書けないため、まとめませんでした（端末の空きを確かめてください）');return false}
+  var now=Date.now(),iso=new Date(now).toISOString(),kid=toNum(keep.id);
+  moved.forEach(function(rec){rec.residentId=kid;rec.updatedAt=iso;apiPush('saveRecord',{record:rec})});
+  var keepHidden=(keep.hidden===true)&&dups.every(function(d){return d.hidden===true});   // どれかが表示中なら残す行を表示にする
+  keep.hidden=keepHidden;
+  dups.forEach(function(d){
+    if((keep.masterId==null||keep.masterId==='')&&d.masterId!=null&&d.masterId!==''){keep.masterId=d.masterId;if(d.midAck===true)keep.midAck=true;if(d.masterHosp!==undefined)keep.masterHosp=d.masterHosp}
+    if(!String(keep.laxNote||'').trim()&&String(d.laxNote||'').trim())keep.laxNote=d.laxNote;
+    if(!String(keep.yomi||'').trim()&&String(d.yomi||'').trim())keep.yomi=d.yomi;
+    if(!Array.isArray(keep.hospitalizations)&&Array.isArray(d.hospitalizations))keep.hospitalizations=d.hospitalizations;
+    delete d.masterId;delete d.midAck;delete d.masterHosp;
+    var c={};if(d.cfg&&typeof d.cfg==='object')Object.keys(d.cfg).forEach(function(k){c[k]=d.cfg[k]});
+    c.mergedInto=kid;c.mergedAt=now;d.cfg=c;
+    d.hidden=true;d.active=false;
+  });
+  _recIdx=null;try{_invalidateLinkIdx()}catch(e){}
+  save();
+  apiPush('saveRes',{resident:keep});
+  dups.forEach(function(d){apiPush('saveRes',{resident:d})});
+  return true;
+}
+/* まとめを取り消す（この端末の控えがあれば行と記録を元に戻す。無ければ印を外すだけ＝記録は残す行のまま） */
+function hbUnmergeRow(dupId){
+  var d=(D.residents||[]).find(function(x){return toNum(x.id)===toNum(dupId)});
+  if(!d||hbMergedInto(d)===null)return false;
+  var kid=hbMergedInto(d),keep=(D.residents||[]).find(function(x){return toNum(x.id)===kid});
+  var bak=_hbMergeBakRead(),hit=null;
+  for(var i=bak.length-1;i>=0;i--){var b=bak[i];if(b&&Array.isArray(b.dups)&&b.dups.some(function(x){return toNum(x.id)===toNum(dupId)})){hit=b;break}}
+  var c={};Object.keys(d.cfg).forEach(function(k){if(k!=='mergedInto'&&k!=='mergedAt')c[k]=d.cfg[k]});
+  if(Object.keys(c).length)d.cfg=c;else delete d.cfg;
+  var iso=new Date().toISOString();
+  if(hit){
+    var od=hit.dups.find(function(x){return toNum(x.id)===toNum(dupId)});
+    d.active=(od.active!==false);d.hidden=(od.hidden===true);
+    var back={};(hit.recs||[]).forEach(function(p){if(toNum(p[1])===toNum(dupId))back[String(p[0])]=1});
+    (D.records||[]).forEach(function(rec){
+      if(rec&&back[String(rec.id)]&&toNum(rec.residentId)===kid){rec.residentId=toNum(dupId);rec.updatedAt=iso;apiPush('saveRecord',{record:rec})}
+    });
+    if(keep&&hit.keep&&keep.hidden!==(hit.keep.hidden===true)){keep.hidden=(hit.keep.hidden===true);apiPush('saveRes',{resident:keep})}
+  }else{d.active=true}
+  _recIdx=null;try{_invalidateLinkIdx()}catch(e){}
+  save();apiPush('saveRes',{resident:d});
+  return true;
+}
+function renderResDup(){
+  var box=$('resDupBox');if(!box)return;
+  var gs=hbDupGroups();
+  var merged=(D.residents||[]).filter(function(r){return r&&hbMergedInto(r)!==null});
+  if(!gs.length&&!merged.length){box.innerHTML='';return}
+  function rowTxt(x){
+    return escapeHtmlText(x.r.room||'')+'号室・番号 '+escapeHtmlText(x.r.id)+'・記録 '+x.n+'件'+(x.last?'（最後 '+escapeHtmlText(x.last)+'）':'')
+      +(x.r.hidden===true?'・非表示':'・表示中')+(x.linked?'・入居者マスタと結び付き':'');
+  }
+  var h='';
+  if(gs.length){
+    var bulk=gs.filter(function(g){return g.sameRoom}).length;
+    h+='<div style="border:2px solid #c62828;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff8f8">'
+      +'<div style="font-size: 0.9375rem;font-weight:700;color:#c62828;margin-bottom:4px">⚠️ 同じ方が2行あります（'+gs.length+'組）</div>'
+      +'<div style="font-size: 0.8125rem;color:var(--g9);line-height:1.6;margin-bottom:8px">10月25日より前の不具合で、同じ方に別の番号が2つ付いていました。'
+      +'〔★残す〕の行に記録を集めて1つにまとめます。もう一方の行は消さずに隠すだけなので、記録は1件も消えません（あとで取り消せます）。</div>';
+    gs.forEach(function(g,gi){
+      var best=g.rows[0];
+      h+='<div style="border:1px solid var(--g3);border-radius:8px;padding:8px 10px;margin-bottom:6px;background:#fff">'
+        +'<div><b>'+escapeHtmlText(best.r.name||'')+'</b> さん</div>'
+        +g.rows.map(function(x,i){return'<div style="font-size: 0.8125rem;color:var(--g9);margin-top:2px">'+(i===0?'★残す: ':'　まとめる: ')+rowTxt(x)+'</div>'}).join('')
+        +(g.sameRoom?'':'<div style="font-size: 0.8125rem;color:#c62828;margin-top:2px">居室が違います。同じ方か確かめてから押してください。</div>')
+        +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'
+        +g.rows.map(function(x,i){return'<button class="bn '+(i===0?'bp':'bs')+' bsm res-dup-merge" data-g="'+gi+'" data-keep="'+escapeHtmlText(x.r.id)+'" style="min-height:44px">'+(i===0?'★':'')+'番号 '+escapeHtmlText(x.r.id)+' に1つにまとめる</button>'}).join('')
+        +'</div></div>';
+    });
+    if(bulk)h+='<button class="bn bp" id="btnDupMergeAll" style="min-height:48px;width:100%;margin-top:4px">★おすすめどおり全部まとめる（'+bulk+'組）</button>';
+    h+='</div>';
+  }
+  if(merged.length){
+    h+='<details style="margin-bottom:10px"><summary style="font-size: 0.8125rem;color:var(--g7);cursor:pointer">まとめて隠した行 '+merged.length+'件（取り消せます）</summary>'
+      +merged.map(function(r){
+        return'<div style="font-size: 0.8125rem;color:var(--g9);margin-top:4px">'+escapeHtmlText(r.name||'')+'（番号 '+escapeHtmlText(r.id)+' → 番号 '+escapeHtmlText(hbMergedInto(r))+' にまとめ済み）'
+          +' <button class="bn bs bsm res-dup-undo" data-id="'+escapeHtmlText(r.id)+'" style="min-height:36px">取り消す</button></div>';
+      }).join('')+'</details>';
+  }
+  box.innerHTML=h;
+  $$('.res-dup-merge').forEach(function(b){b.addEventListener('click',function(){hbMergeDupAsk(gs[+this.dataset.g],toNum(this.dataset.keep))})});
+  if($('btnDupMergeAll'))$('btnDupMergeAll').addEventListener('click',function(){hbMergeDupAll(gs)});
+  $$('.res-dup-undo').forEach(function(b){b.addEventListener('click',function(){hbUnmergeAsk(toNum(this.dataset.id))})});
+}
+function _hbAfterMerge(){
+  renderCfg();buildResSel();
+  if(typeof renderBoard==='function'&&$('sc-board')&&$('sc-board').classList.contains('on'))renderBoard();
+  if(typeof renderTL==='function'&&$('sc-tl')&&$('sc-tl').classList.contains('on'))renderTL();
+}
+async function hbMergeDupAsk(g,keepId){if(hbFieldDeny())return;if(!g)return;
+  var keep=g.rows.find(function(x){return toNum(x.r.id)===keepId});if(!keep)return;
+  var others=g.rows.filter(function(x){return x!==keep});
+  var nMove=others.reduce(function(a,x){return a+x.n},0);
+  var ok=await customConfirm(keep.r.name+' さんを、番号 '+keep.r.id+'（'+(keep.r.room||'')+'号室）の1行にまとめます。\n'
+    +'番号 '+others.map(function(x){return x.r.id}).join('・')+' の記録 '+nMove+'件を付け替え、その行は消さずに隠します。\n記録は1件も消えません。よろしいですか？');
+  if(!ok)return;
+  if(hbMergeDupRows(keepId,others.map(function(x){return x.r.id}))){_hbAfterMerge();showToast('✅ 1つにまとめました（記録は保持されています）')}
+}
+async function hbMergeDupAll(gs){if(hbFieldDeny())return;
+  var list=(gs||[]).filter(function(g){return g.sameRoom});if(!list.length)return;
+  var ok=await customConfirm('次の '+list.length+'組を、★残すの行に1つずつまとめます。\n'
+    +list.map(function(g){return'・'+g.rows[0].r.name+'（番号 '+g.rows[0].r.id+' に）'}).join('\n')
+    +'\nもう一方の行は消さずに隠し、記録は残す行へ付け替えます。記録は1件も消えません。よろしいですか？');
+  if(!ok)return;
+  var n=0;list.forEach(function(g){if(hbMergeDupRows(g.rows[0].r.id,g.rows.slice(1).map(function(x){return x.r.id})))n++});
+  _hbAfterMerge();showToast('✅ '+n+'組を1つにまとめました（記録は保持されています）');
+}
+async function hbUnmergeAsk(id){if(hbFieldDeny())return;
+  var d=(D.residents||[]).find(function(x){return toNum(x.id)===toNum(id)});if(!d)return;
+  var ok=await customConfirm(d.name+' さん（番号 '+d.id+'）のまとめを取り消し、元の2行に戻しますか？');
+  if(!ok)return;
+  if(hbUnmergeRow(id)){_hbAfterMerge();showToast('↩️ まとめを取り消しました')}
+}
 var RES_CFG_KEYS=['urineWarnH','urineDangerH','stoolWarnD','stoolDangerD'];   // 入居者を直す画面で入れ直す cfg のキー（閾値）
 function saveRes(){if(hbFieldDeny())return;const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$('mRG').value;
   var ym=$('mRY')?$('mRY').value.trim():'';
