@@ -137,6 +137,10 @@ function fetchMasterRoster_(){
   const sheetId = PropertiesService.getScriptProperties().getProperty('MASTER_SHEET_ID');
   if(!sheetId) return null;   // 連携未設定 ＝ 従来動作
 
+  /* 排泄ケア記録を新しい保存先へ切り替えた後は、入居者マスタの正本（新しい保存先）から読む（cutover.gs・統合 0079。
+     use が false の時＝切り替える前・入居者マスタが Google のまま・戻す途中は、下の今までどおりシートを読む） */
+  if(typeof hbMasterRosterDb_ === 'function'){ const db = hbMasterRosterDb_(); if(db && db.use) return db.roster; }
+
   const cache = CacheService.getScriptCache();
   try{
     const hit = cache.get(MASTER_ROSTER_CACHE_KEY);
@@ -317,6 +321,7 @@ function checkMasterLink(){
 
   console.log('--- 3. 名簿の読み取り ---');
   try{ CacheService.getScriptCache().remove(MASTER_ROSTER_CACHE_KEY); }catch(e){}  // 診断は必ず実データを見る
+  if(typeof hbMasterRosterDiag_ === 'function') hbMasterRosterDiag_();   // 切り替えた後の読み先と、前に読めなかった時の種類（cutover.gs・統合 0079）
   const roster = fetchMasterRoster_();
   if(roster === null){ console.log('→ 読み取りに失敗しました。上に出ているエラーログを確認してください。'); return; }
   console.log('★★★ 成功 ★★★');
@@ -485,6 +490,8 @@ function doPost(e){
      ★getAll（記録の取得）は同じ日のうちに下で足した。 */
   var rb = null;
   try{ rb = (e && e.postData) ? JSON.parse(e.postData.contents) : null; }catch(pe){ rb = null; }
+  /* 新しい保存先への切り替え（cutover.gs・統合 0064）。切り替え・写し返しの操作を受け、切り替えた後は保存を断る（受けない時は null＝今までどおり） */
+  if(typeof hbGate_ === 'function'){ var hg = hbGate_(rb); if(hg) return json(hg); }
   if(rb && typeof rb === 'object' && rb.action === 'masterRoster') return json(masterRosterResponse_());
   /* ── 記録の取得 getAll も POST 本文で受ける（2026-09-23 追加）──
      ★masterRoster と同じく認証の後・ロック取得より前＝同期の読み取りが保存の行列に並ばない。
@@ -512,6 +519,8 @@ function doPost(e){
     const action = body.action;
     // 個人情報保護：body（氏名・排泄記録内容）はログに出力しない。action のみ記録する。
     console.log('doPost action=', action);
+    /* ロックの後に切り替えの印を見直す（cutover.gs・統合 0064。印を立てる前に入口を通り、ロックを待っていた保存も書かずに断る） */
+    if(typeof hbLockedRefuse_ === 'function'){ var hr = hbLockedRefuse_(action); if(hr) return json(hr); }
     // 応答はいったん受け取り、書いていたら返す前（＝ロックを外す前）に確定させる（2026-09-23）
     switch(action){
       case 'addRecord':  upsertRecord_(body.record);  if(unmarkDeleted_(body.record && body.record.id)) _afterFlush_.push(invalidateDeletedCache_); return json(flushBeforeRelease_({ok:true}));
