@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-1Z5Hi3b0cZ8XxEpQ59V5uWfD/uOsqr/0Qjyu6LX6s2k='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-Hwl9N+9NA6o1KdP1CgisnbvTuZhOarqawgurEmHLK1U='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -75,6 +75,17 @@ html.hb-daycare .dcbar{position:sticky;top:56px;z-index:98;
 .dcm-sub{color:var(--g7);font-size: 0.9375rem;margin-left:6px}
 .dcm-why{color:#8a2c00;font-weight:700;font-size: 1rem} 
 .dc-cfg{margin:4px 0 10px;padding:8px 10px;border:1px solid var(--g3);border-radius:8px}
+.hb-dup{margin:4px 0 10px;padding:10px 12px;border:2px solid #b45309;border-radius:8px;background:#fffbeb;color:#1f2937}
+.hb-dup-h{font-weight:700;font-size:0.875rem;color:#7c2d12}
+.hb-dup-help{font-size:0.75rem;line-height:1.6;margin:4px 0 6px}
+.hb-dup-g{border-top:1px solid #fcd34d;padding:8px 0 4px}
+.hb-dup-n{font-size:0.8125rem;margin-bottom:4px}
+.hb-dup-r{font-size:0.75rem;line-height:1.6;padding:2px 0 2px 8px;border-left:3px solid #d1d5db;margin:2px 0}
+.hb-dup-r.keep{border-left-color:#15803d;font-weight:700}
+.hb-dup-s{font-weight:400;color:#374151}
+.hb-dup-w{font-size:0.75rem;color:#991b1b;font-weight:700;margin-top:4px}
+.hb-dup-btn{margin-top:6px}
+.hb-dup-b{background:#b45309;color:#fff;font-size:0.6875rem;padding:2px 6px;border-radius:4px;margin-right:4px}
 .dc-cfg-l{display:flex;align-items:center;gap:8px;min-height:44px;font-size: 0.9375rem;font-weight:700;cursor:pointer}
 .dc-cfg-l input{width:22px;height:22px}
 .dc-cfg-help{font-size: 0.9375rem;color:var(--g7);line-height:1.5}
@@ -3044,6 +3055,8 @@ async function syncFromAPI(showLoader,opts){
     D.residents=mergedRes;
     if(typeof padSetHeal==='function'){try{padSetHeal(_psHealList)}catch(e){}}
     D.records=mergedRec;
+    /* ほかの端末で〔1つにまとめる〕を押した行を、この端末でも1つにする（2026-11-11・同じ方の重複のまとめ） */
+    if(typeof hbDupFollow==='function'){try{hbDupFollow(apiRes)}catch(e){console.warn('[hbcr] 重複のまとめの反映をスキップ:',e)}}
     /* この端末で切り替えたばかり（送った設定がまだサーバーに届いていない見込み）の dayOnlyOn は、同期の応答で書き換えない（親の検収 軽3）。
        切り替える前に始まった同期の応答は古い値（無い・逆の値）を持っていて、重ねると入れた直後に切れる（その後の保存で Config から消える） */
     var _dcKeepOn=(typeof hbDcCfgFresh==='function'&&hbDcCfgFresh()&&D.cfg&&Object.prototype.hasOwnProperty.call(D.cfg,'dayOnlyOn'))?{v:D.cfg.dayOnlyOn}:null;
@@ -7728,13 +7741,17 @@ function renderCfg(){
   const actives=all.filter(function(r){return r.active!==false});
   const inactives=all.filter(function(r){return r.active===false});
   const list=showInactive?all:actives;
-  $('resList').innerHTML=!list.length?'<p style="color:var(--g5);font-size: 0.8125rem">まだ登録されていません</p>':
+  var _dupG=(typeof hbDupGroups==='function')?hbDupGroups(D.residents,D.records,_resSrvIds):[];
+  var _dupSet={};_dupG.forEach(function(g){g.rows.forEach(function(x){_dupSet[x.id]=x})});
+  $('resList').innerHTML=hbDupPanelHtml(_dupG)+(!list.length?'<p style="color:var(--g5);font-size: 0.8125rem">まだ登録されていません</p>':
     list.map(function(r){
       var isInactive=(r.active===false);
       var isHidden=(r.hidden===true);
       var badges='';
       if(isInactive)badges+='<span style="background:#9e9e9e;color:#fff;font-size: 0.6875rem;padding:2px 6px;border-radius:4px;margin-right:4px">退去済</span>';
       if(isHidden&&!isInactive)badges+='<span style="background:#fb8c00;color:#fff;font-size: 0.6875rem;padding:2px 6px;border-radius:4px;margin-right:4px">非表示</span>';
+      var _dx=_dupSet[toNum(r.id)];
+      if(_dx)badges+='<span class="hb-dup-b">同じ方が2行・記録'+escapeHtmlText(_dx.recN)+'件</span>';
       if(hbIsDayOnly(r))badges+='<span class="dc-only" style="margin-right:4px" title="デイ せせらぎの表示から加えた方（施設の一覧・時系列には出ません）">デイのみ</span>';
       // 🏥 現在入院中ならバッジ表示（入居者マスタの入院フラグも統合＝isHospNow）
       if(!isInactive&&isHospNow(r))badges+='<span style="background:#c62828;color:#fff;font-size: 0.6875rem;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:4px">🏥 入院中</span>';
@@ -7754,10 +7771,11 @@ function renderCfg(){
       var hideBtn=isInactive?'':'<button class="bn bs bsm '+hideCls+'" data-id="'+escapeHtmlText(r.id)+'">'+hideLabel+'</button>';
       var hospBtn=isInactive?'':'<button class="bn bs bsm res-hosp" data-id="'+escapeHtmlText(r.id)+'" style="background:#ffebee;border-color:#c62828;color:#c62828">🏥 入院</button>';
       return'<div class="rli"'+(isInactive||isHidden?' style="opacity:.6"':'')+'><div>'+badges+'<b>'+escapeHtmlText(r.name)+'</b> <span style="font-size: 0.75rem;color:var(--g5)">'+escapeHtmlText(r.room)+'号室 / '+escapeHtmlText(r.gender||'')+'</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">'+histBtn+'<button class="bn bs bsm res-edit" data-id="'+escapeHtmlText(r.id)+'">編集</button>'+hospBtn+hideBtn+'<button class="bn bs bsm '+toggleCls+'" data-id="'+escapeHtmlText(r.id)+'"'+toggleAttr+'>'+toggleLabel+'</button><button class="bn br bsm res-del" data-id="'+escapeHtmlText(r.id)+'">削除</button></div></div>'}).join('')+
-    '<div style="margin-top:8px;font-size: 0.75rem;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>';
+    '<div style="margin-top:8px;font-size: 0.75rem;color:var(--g5)">在籍: '+actives.length+'名 / 退去済: '+inactives.length+'名</div>');
   // ボタンイベント
   $$('.res-edit').forEach(b=>b.addEventListener('click',function(){editRes(parseInt(this.dataset.id))}));
   $$('.res-del').forEach(b=>b.addEventListener('click',function(){delRes(parseInt(this.dataset.id))}));
+  $$('.hb-dup-btn').forEach(b=>b.addEventListener('click',function(){hbDupMerge(this.dataset.dk)}));
   $$('.res-hosp').forEach(b=>b.addEventListener('click',function(){openHospModal(parseInt(this.dataset.id))}));
   $$('.res-leave').forEach(b=>b.addEventListener('click',function(){toggleResActive(parseInt(this.dataset.id),false)}));
   $$('.res-restore').forEach(b=>b.addEventListener('click',function(){toggleResActive(parseInt(this.dataset.id),true)}));
@@ -9132,11 +9150,286 @@ async function delRes(id){if(hbFieldDeny())return;var r=D.residents.find(functio
   /* 入居者マスタで排泄の対象のままの方は、名簿から取り込み直されることがある（2026-10-25・代表者: 排泄ケア記録の側だけで消す運用は無い＝注意だけ出す） */
   var _tg=null;try{_tg=(r.masterId!=null&&r.masterId!==''&&typeof apiUrl==='string'&&apiUrl&&typeof hbMasterTargetSet==='function')?hbMasterTargetSet():null}catch(e){_tg=null}
   var _tgNote=(_tg&&_tg[String(r.masterId)])?'\n\n入居者マスタでは排泄の対象のままです。名簿から取り込み直されることがあります。先に入居者マスタで対象から外してください。':'';
-  var ok=await customConfirm(r.name+' を削除しますか？\n（記録データは保持されます）'+_tgNote);
+  var _rcN=(D.records||[]).filter(function(x){return x&&isUserRec(x)&&toNum(x.residentId)===toNum(id)}).length;
+  var _rcNote=_rcN?'\n\nこの行にはこの端末に記録が'+_rcN+'件あります。削除すると記録はどの方にも表示されなくなります。同じ方の行が2つある時は、一覧の上の〔1つにまとめる〕を使ってください。':'';
+  var ok=await customConfirm(r.name+' を削除しますか？\n（記録データは保持されます）'+_rcNote+_tgNote);
   if(!ok)return;
   D.residents=D.residents.filter(function(x){return x.id!==id});save();
   apiPush('delRes',{id:id});
   renderCfg();buildResSel();showToast('🗑️ 削除しました')}
+/* ══════════ 同じ方の重複のまとめ（2026-11-11・本人指示「重複表示を1つに集約・記録を消さない」） ══════════
+   なぜ起きていたか: 2026-10-25 より前は、入居者マスタの名簿から取り込む方を端末ごとに nextResId（手元の最大＋1）で作り、
+     サーバーへ送っていなかった。2台が同じ方を別々の番号で作り、後から〔非表示〕〔編集〕などの saveRes で両方の行が
+     サーバーに届くと、同じ氏名・同じ居室の行が2つ並ぶ（記録はどちらか一方だけに付く）。入居者マスタとの紐づけ（masterId）は
+     端末の中にしか無いため、紐づけでは1つに戻らない。サーバーで消しても、ほかの端末の手元に残った行は同期で残り、
+     そこで〔編集〕すると書き戻される。
+   何をする:
+     ・hbDupGroups … 在籍の行を「氏名（比較用の正規化）＋居室」でまとめ、2行以上ある組を出す（記録の件数・最初と最後の日・
+       非表示か・入居者マスタと結ばれているか・サーバーにあるか）。残す行は記録の多い行（同じなら新しい記録・表示中・
+       結ばれている・サーバーにある・番号の小さい順）
+     ・hbDupMerge … 人が〔1つにまとめる〕を押した時だけ動く（事務所の端末だけ）。サーバーを読み直し、記録が2つ以上の行に
+       分かれていればまとめない（人が確かめる）。まとめる時は、残す行に印（cfg.mergedFrom）を付けて送り、
+       この端末の送信待ちの記録・予定・おむつ・入院の控えを残す行へ移してから、もう一方の行をサーバーから外す
+     ・hbDupFollow … 同期のたびに、サーバーの行の印（mergedFrom）を見て、サーバーから外れた行を手元からも外し、
+       その行の紐づけ・記録を残す行へ移す（移した記録は saveRecord で送る）。ほかの端末も1つに収まる
+   ★自動ではまとめない（同姓同名・居室の入れ替えがありうる）。★記録は消さない（付け替えるだけ）。★GAS は変えない */
+var HB_DUP_MAX_MERGED=50;   // 印に残す番号の数の上限（cfg のセルを大きくしすぎない）
+function _hbDupKey(r){
+  var nx=_normNameX(r&&r.name);if(!nx)return '';
+  return nx+'|'+_hbDcRoomKey(r.room);
+}
+function _hbMergedFrom(r){
+  var a=(r&&r.cfg&&typeof r.cfg==='object'&&Array.isArray(r.cfg.mergedFrom))?r.cfg.mergedFrom:[];
+  var out=[];a.forEach(function(x){var n=toNum(x);if(n!==null&&out.indexOf(n)<0)out.push(n)});
+  return out;
+}
+/* 純関数: residents / records / srvIds（サーバーにある番号の集まり・無ければ null）→ 組の一覧 */
+function hbDupGroups(residents,records,srvIds){
+  var stat={};
+  (records||[]).forEach(function(x){
+    if(!x||(typeof isUserRec==='function'&&!isUserRec(x)))return;
+    var k=toNum(x.residentId);if(k===null)return;
+    var s=stat[k]||(stat[k]={n:0,f:'',l:''});
+    s.n++;var d=String(x.date||'');
+    if(d){if(!s.f||d<s.f)s.f=d;if(!s.l||d>s.l)s.l=d}
+  });
+  var by={},order=[];
+  (residents||[]).forEach(function(r){
+    if(!r||!isUserRes(r)||r._seed||r.active===false)return;
+    var id=toNum(r.id);if(id===null)return;
+    var k=_hbDupKey(r);if(!k||!String(r.room||'').trim())return;
+    if(!by[k]){by[k]=[];order.push(k)}
+    var s=stat[id]||{n:0,f:'',l:''};
+    by[k].push({r:r,id:id,recN:s.n,first:s.f,last:s.l,hidden:r.hidden===true,
+      linked:(r.masterId!=null&&r.masterId!==''),onSrv:srvIds?!!srvIds[id]:null});
+  });
+  var out=[];
+  order.forEach(function(k){
+    var rows=by[k];if(rows.length<2)return;
+    var keep=rows.slice().sort(function(a,b){
+      if(a.recN!==b.recN)return b.recN-a.recN;
+      if(a.last!==b.last)return a.last<b.last?1:-1;
+      if(a.hidden!==b.hidden)return a.hidden?1:-1;
+      if(a.linked!==b.linked)return a.linked?-1:1;
+      if(a.onSrv!==b.onSrv)return a.onSrv?-1:1;
+      return a.id-b.id;
+    })[0];
+    out.push({key:k,rows:rows,keepId:keep.id,withRecs:rows.filter(function(x){return x.recN>0}).length});
+  });
+  return out;
+}
+/* 純関数に近い: 残す行 keep へ、外す行 drop の中身を移す（keep の値がある項目は keep のまま・無い所だけ足す）。
+   移したものを返す {sched, pad, hosp}（送り直す種類） */
+function hbDupFold(keep,drop,opts){
+  opts=opts||{};
+  var moved={sched:false,pad:false,hosp:false};
+  if(!keep||!drop||keep===drop)return moved;
+  if(opts.unhide&&keep.hidden===true)keep.hidden=false;
+  ['yomi','laxNote','gender','careLevel'].forEach(function(f){
+    if(!String(keep[f]==null?'':keep[f]).trim()&&String(drop[f]==null?'':drop[f]).trim())keep[f]=drop[f];
+  });
+  if((!Array.isArray(keep.schedule)||!keep.schedule.length)&&Array.isArray(drop.schedule)&&drop.schedule.length){keep.schedule=drop.schedule.slice();moved.sched=true}
+  if(!keep.padSet&&drop.padSet){keep.padSet=JSON.parse(JSON.stringify(drop.padSet));moved.pad=true}
+  if(Array.isArray(drop.hospitalizations)&&drop.hospitalizations.length){
+    var kh=Array.isArray(keep.hospitalizations)?keep.hospitalizations.slice():[];
+    var seen={};kh.forEach(function(h){if(h)seen[String(h.admissionAt||'')+'|'+String(h.dischargeAt||'')]=1});
+    drop.hospitalizations.forEach(function(h){if(!h||!h.admissionAt)return;var s=String(h.admissionAt)+'|'+String(h.dischargeAt||'');if(seen[s])return;seen[s]=1;kh.push(h);moved.hosp=true});
+    keep.hospitalizations=kh;
+  }
+  /* 入居者マスタとの紐づけは端末の中の値。残す行に無く、外す行にあれば移す（同じ氏名でまとめた組なので別人には移らない） */
+  if((keep.masterId==null||keep.masterId==='')&&drop.masterId!=null&&drop.masterId!==''){
+    keep.masterId=drop.masterId;
+    if(drop.masterHosp!==undefined&&keep.masterHosp===undefined)keep.masterHosp=drop.masterHosp;
+    if(drop.midAck)keep.midAck=true;
+  }
+  /* cfg: 残す行のキーが勝ち、無いキーだけ足す。印 mergedFrom は両方の印と外す行の番号を合わせる */
+  var dc=(drop.cfg&&typeof drop.cfg==='object')?drop.cfg:{};
+  var kc=(keep.cfg&&typeof keep.cfg==='object')?Object.assign({},keep.cfg):{};
+  Object.keys(dc).forEach(function(k){if(k!=='mergedFrom'&&k!=='dayOnly'&&!Object.prototype.hasOwnProperty.call(kc,k))kc[k]=dc[k]});
+  if(opts.mark){
+    var mf=_hbMergedFrom(keep);
+    _hbMergedFrom(drop).concat([toNum(drop.id)]).forEach(function(n){if(n!==null&&n!==toNum(keep.id)&&mf.indexOf(n)<0)mf.push(n)});
+    if(mf.length>HB_DUP_MAX_MERGED)mf=mf.slice(mf.length-HB_DUP_MAX_MERGED);
+    kc.mergedFrom=mf;
+  }
+  if(Object.keys(kc).length)keep.cfg=kc;
+  return moved;
+}
+/* 記録の付け替え（手元）。付け替えた記録を返す（呼び手が saveRecord で送る） */
+function hbDupMoveRecs(records,fromIds,toId){
+  var set={};(fromIds||[]).forEach(function(n){set[n]=1});
+  var out=[],now=new Date().toISOString();
+  (records||[]).forEach(function(x){
+    if(!x||(typeof isUserRec==='function'&&!isUserRec(x)))return;
+    var k=toNum(x.residentId);if(k===null||!set[k])return;
+    x.residentId=toId;x.updatedAt=now;out.push(x);
+  });
+  return out;
+}
+/* 同期の後: サーバーの行の印を見て、サーバーから外れた行を手元からも外す（ほかの端末で〔1つにまとめる〕を押した分）。
+   apiRes: この同期で受け取ったサーバーの入居者（全員）。差分同期で入居者が返らない時は何もしない */
+/* まとめた端末の控え（外した番号 → 残した番号・まとめた時刻）。残す行の印が、まだ印を受け取っていない端末の保存で
+   消された時に、この端末が印を付け直して送る（反証 3）。番号だけを持つ（氏名などは持たない）。30日で捨てる */
+var HB_DUP_LOG_KEY='hbcr_dup_merged',HB_DUP_LOG_DAYS=30;
+function hbDupLogLoad(){
+  try{var o=JSON.parse(localStorage.getItem(HB_DUP_LOG_KEY)||'{}');if(!o||typeof o!=='object')return {};
+    var lim=Date.now()-HB_DUP_LOG_DAYS*864e5,out={};
+    Object.keys(o).forEach(function(k){var v=o[k];if(v&&toNum(v.k)!==null&&Number(v.at)>lim)out[k]=v});return out}catch(e){return {}}
+}
+function hbDupLogAdd(dropIds,keepId){
+  try{var o=hbDupLogLoad();dropIds.forEach(function(n){o[String(n)]={k:keepId,at:Date.now()}});localStorage.setItem(HB_DUP_LOG_KEY,JSON.stringify(o))}catch(e){}
+}
+function hbDupFollow(apiRes){
+  if(!Array.isArray(apiRes)||!apiRes.length||!Array.isArray(D.residents))return 0;
+  var srv={},into={};
+  apiRes.forEach(function(z){var n=toNum(z&&z.id);if(n!==null)srv[n]=1});
+  var byId={};D.residents.forEach(function(r){var n=toNum(r&&r.id);if(n!==null)byId[n]=r});
+  D.residents.forEach(function(r){
+    var kid=toNum(r&&r.id);if(kid===null||!srv[kid]||!isUserRes(r))return;
+    _hbMergedFrom(r).forEach(function(n){if(n!==kid&&!srv[n]&&into[n]===undefined)into[n]=kid});
+  });
+  /* この端末でまとめた分: 残す行の印が消えていれば付け直して送る（ほかの端末が印を受け取る前に残す行を保存した） */
+  var log=(typeof localStorage!=='undefined')?hbDupLogLoad():{},remark={};
+  Object.keys(log).forEach(function(s){
+    var n=toNum(s),kid=toNum(log[s].k),keep=byId[kid];
+    if(n===null||!keep||!srv[kid]||srv[n])return;
+    if(into[n]===undefined)into[n]=kid;
+    if(_hbMergedFrom(keep).indexOf(n)<0)remark[kid]=1;
+  });
+  Object.keys(remark).forEach(function(s){
+    /* 付け直しは1時間に1回まで（新しい保存先が印を残さない場合に、同期のたびに送り続けない） */
+    var _rk='hbdup_'+s,_now=Date.now();if(hbDupFollow._at&&hbDupFollow._at[_rk]&&_now-hbDupFollow._at[_rk]<36e5)return;
+    (hbDupFollow._at=hbDupFollow._at||{})[_rk]=_now;
+    var keep=byId[toNum(s)],mf=_hbMergedFrom(keep);
+    Object.keys(log).forEach(function(d){if(toNum(log[d].k)===toNum(s)&&mf.indexOf(toNum(d))<0)mf.push(toNum(d))});
+    if(mf.length>HB_DUP_MAX_MERGED)mf=mf.slice(mf.length-HB_DUP_MAX_MERGED);
+    keep.cfg=Object.assign({},(keep.cfg&&typeof keep.cfg==='object')?keep.cfg:{},{mergedFrom:mf});
+    apiPush('saveRes',{resident:keep});
+  });
+  var ids=Object.keys(into);if(!ids.length)return 0;
+  var gone=[];
+  ids.forEach(function(s){
+    var n=toNum(s),kid=into[s],drop=byId[n],keep=byId[kid];
+    /* 同じ方かを確かめる（反証 5）: 手元の外す行が残す行と同じ氏名・居室の時だけ。手元に行が無い番号は、記録も動かさない
+       （番号がほかの方に使い直されていた時に、その方の記録を移さない）。行が手元に無い番号は、サーバーにも無い（into の条件）ので、記録だけ寄せる */
+    if(!keep)return;
+    if(drop){
+      if(_hbDupKey(drop)!==_hbDupKey(keep))return;
+      hbDupFold(keep,drop,{});
+      gone.push(n);
+    }
+    /* 手元にもサーバーにも行 n が無い時も、記録だけは残す行へ寄せる（送り直しで n に戻った記録を、どの端末も拾わなくなるのを防ぐ） */
+    var recs=hbDupMoveRecs((D.records||[]).filter(function(x){
+      /* サーバーで消された記録は送り直さない（反証 8・saveRecord は削除の印を外すため） */
+      return !(x&&x.id!=null&&((typeof _delRecHas==='function'&&_delRecHas(x.id))||(typeof _recentDelHas==='function'&&_recentDelHas(x.id))));
+    }),[n],kid);
+    recs.forEach(function(x){apiPush('saveRecord',{record:x})});
+  });
+  if(gone.length){
+    var g={};gone.forEach(function(n){g[n]=1});
+    D.residents=D.residents.filter(function(r){return !(r&&g[toNum(r.id)])});
+    /* 入院の記録は職員の控え（snapshot）が正本。ここでは控えを送らない（同期の途中で送ると、古い職員の一覧・入院の記録で
+       控えを上書きする・反証 1）。まとめた端末が、残す行へ合わせた入院の記録を控えで送っている */
+    _recIdx=null;try{_invalidateLinkIdx()}catch(e){}
+  }
+  return gone.length;
+}
+/* 控えのシート（約200日より前の記録）を全部読む。読めなければ null（まとめない）。新しい保存先へ切り替えた後は同じ受け口を通す */
+async function hbDupArchiveRecs(){
+  var out=[],off=0;
+  for(var i=0;i<100;i++){
+    var body={action:'getArchive',offset:off,limit:5000};if(apiToken)body.token=apiToken;
+    var j=null;
+    try{
+      var _w=(typeof hbTryLive_==='function')?await hbTryLive_(body,60000,false):undefined;
+      if(_w!==undefined)j=_w;
+      else{var r=await fetchTO(apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),cache:'no-store'},60000);if(!r.ok)return null;j=await r.json()}
+    }catch(e){return null}
+    if(!j||j.ok!==true||!Array.isArray(j.records))return null;
+    out=out.concat(j.records);off+=5000;   // 位置は行で数える（id の無い行は返らないため、返った件数では進めない）
+    if(off>=Number(j.total||0))return out;
+  }
+  return null;
+}
+/* 〔1つにまとめる〕（事務所の端末だけ・人が押した時だけ） */
+var _hbDupBusy=false;
+async function hbDupMerge(key){
+  if(hbFieldDeny()||_hbDupBusy)return;
+  if(typeof apiUrl!=='string'||!apiUrl){showToast('⚠️ 接続先が無い端末ではまとめられません');return}
+  var g=hbDupGroups(D.residents,D.records,_resSrvIds).find(function(x){return x.key===key});
+  if(!g){renderCfg();return}
+  _hbDupBusy=true;
+  try{
+    showToast('サーバーの記録を確かめています（1分ほどかかることがあります）');
+    var sv=null;try{sv=await apiGet({})}catch(e){sv=null}
+    if(!sv||sv.error||!Array.isArray(sv.residents)||!Array.isArray(sv.records)){showToast('⚠️ サーバーを読めないため、まとめませんでした。通信を確かめて、もう一度押してください');return}
+    if(typeof _locked!=='undefined'&&_locked)return;
+    var arc=await hbDupArchiveRecs();
+    if(arc===null){showToast('⚠️ 古い記録（控えのシート）を読めないため、まとめませんでした。もう一度押してください');return}
+    var srvIds={};sv.residents.forEach(function(z){var n=toNum(z&&z.id);if(n!==null)srvIds[n]=1});
+    /* 記録はサーバーの分と、この端末の分（まだ送っていない記録を含む）を合わせて数える */
+    var all={},recs=[];
+    sv.records.concat(arc,D.records||[]).forEach(function(x){if(x&&x.id!=null&&!all[String(x.id)]){all[String(x.id)]=1;recs.push(x)}});
+    g=hbDupGroups(D.residents,recs,srvIds).find(function(x){return x.key===key});
+    if(!g){showToast('状態が変わったため、まとめませんでした');renderCfg();return}
+    if(g.withRecs>1){
+      showToast('⚠️ 記録が'+g.withRecs+'つの行に分かれているため、自動ではまとめません（記録は消していません）');
+      return;
+    }
+    var keepRow=g.rows.find(function(x){return x.id===g.keepId});
+    var drops=g.rows.filter(function(x){return x.id!==g.keepId});
+    function line(x){return '・'+(x.id===g.keepId?'残す':'外す')+'：番号'+x.id+'（記録 '+x.recN+'件'+(x.last?'・最後 '+x.last:'')+(x.hidden?'・非表示':'')+(x.onSrv===false?'・この端末だけ':'')+'）'}
+    var ok=await customConfirm('「'+(keepRow.r.name||'')+'」さん（'+(keepRow.r.room||'')+'号室）の行を1つにまとめます。\n'
+      +g.rows.map(line).join('\n')
+      +'\n\n記録は残す行へ付け替えます（消しません）。予定・おむつの設定・下剤のメモは、残す行に無い時だけ移します。\n同じ方であることを確かめてから押してください。よろしいですか？');
+    if(!ok)return;
+    if(typeof _locked!=='undefined'&&_locked)return;
+    /* 窓を開いている間に同期が終わると、行は新しいオブジェクトに差し替わる。いまの D から取り直して使う（反証 2） */
+    var cur=hbDupGroups(D.residents,recs,srvIds).find(function(x){return x.key===key});
+    if(!cur||cur.keepId!==g.keepId||cur.rows.length!==g.rows.length||cur.rows.some(function(x){return !g.rows.some(function(y){return y.id===x.id})})){showToast('状態が変わったため、まとめませんでした');renderCfg();return}
+    keepRow=cur.rows.find(function(x){return x.id===cur.keepId});drops=cur.rows.filter(function(x){return x.id!==cur.keepId});
+    var keep=keepRow.r,unhide=cur.rows.some(function(x){return !x.hidden}),mv={sched:false,pad:false,hosp:false};
+    drops.forEach(function(x){var m=hbDupFold(keep,x.r,{mark:true,unhide:unhide});if(m.sched)mv.sched=true;if(m.pad)mv.pad=true;if(m.hosp)mv.hosp=true});
+    var dropIds=drops.map(function(x){return x.id});
+    var moved=hbDupMoveRecs(D.records,dropIds,keep.id);
+    var dset={};dropIds.forEach(function(n){dset[n]=1});
+    D.residents=D.residents.filter(function(r){return !(r&&dset[toNum(r.id)])});
+    save();
+    hbDupLogAdd(dropIds,keep.id);
+    /* 送る順: 残す行（印つき）→ 予定・おむつ → 記録 → 外す行。印が先に届くので、ほかの端末は外れた行を正しく残す行へ寄せる */
+    apiPush('saveRes',{resident:keep});
+    if(mv.sched)apiPush('saveSched',{id:keep.id,schedule:keep.schedule.slice()});
+    if(mv.pad)apiPush('savePadSet',{id:keep.id,padSet:keep.padSet});
+    moved.forEach(function(x){apiPush('saveRecord',{record:x})});
+    dropIds.forEach(function(n){if(srvIds[n])apiPush('delRes',{id:n})});
+    if(mv.hosp&&typeof pushStaffsSnapshot==='function'){try{pushStaffsSnapshot()}catch(e){}}
+    _recIdx=null;try{_invalidateLinkIdx()}catch(e){}
+    try{mergeCommonResidents()}catch(e){}
+    renderCfg();buildResSel();
+    try{if($('sc-board').classList.contains('on'))renderBoard();if($('sc-tl').classList.contains('on'))renderTL()}catch(e){}
+    showToast('✅ 1つにまとめました（記録は残す行に付いています）');
+  }finally{_hbDupBusy=false}
+}
+/* 入居者の管理の上に出す「同じ方が2行以上あります」の枠（事務所の端末だけ）。行ごとに、記録の件数・最後の日・どこから来た行かを出す */
+function hbDupPanelHtml(groups){
+  if(!groups||!groups.length||(typeof hbIsField==='function'&&hbIsField()))return '';
+  function md(s){var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||'');return m?(Number(m[2])+'/'+Number(m[3])):''}
+  return '<div class="hb-dup" role="region" aria-label="同じ方の行の重なり">'
+    +'<div class="hb-dup-h">⚠️ 同じ方の行が2つ以上あります（'+groups.length+'組）</div>'
+    +'<div class="hb-dup-help">以前の取り込みで、同じ方が別の番号で2回登録されていました。〔1つにまとめる〕で、記録の付いている行を残し、もう一方の行を外します。記録は残す行へ付け替え（消しません）、予定・おむつの設定は残す行に無い時だけ移します。</div>'
+    +groups.map(function(g){
+      var nm=g.rows[0].r.name||'',rm=g.rows[0].r.room||'';
+      return '<div class="hb-dup-g"><div class="hb-dup-n"><b>'+escapeHtmlText(nm)+'</b> '+escapeHtmlText(rm)+'号室</div>'
+        +g.rows.map(function(x){
+          var src=[x.linked?'入居者マスタと結ばれています':'入居者マスタとは未連携',x.onSrv===false?'この端末だけにある行':(x.onSrv?'サーバーにある行':'')].filter(Boolean).join('・');
+          return '<div class="hb-dup-r'+(x.id===g.keepId?' keep':'')+'">'+(x.id===g.keepId?'残す行':'外す行')+'：番号'+escapeHtmlText(x.id)
+            +'・この端末の記録 '+escapeHtmlText(x.recN)+'件'+(x.last?'（'+escapeHtmlText(md(x.first))+'〜'+escapeHtmlText(md(x.last))+'）':'')
+            +(x.hidden?'・非表示':'')+'<br><span class="hb-dup-s">'+escapeHtmlText(src)+'</span></div>'}).join('')
+        +(g.withRecs>1?'<div class="hb-dup-w">記録が2つの行に分かれています。自動ではまとめません（代表者に知らせてください）。</div>'
+          :'<button class="bn bp bsm hb-dup-btn" data-dk="'+escapeHtmlText(g.key)+'">1つにまとめる</button>')
+        +'</div>'}).join('')
+    +'</div>';
+}
 var RES_CFG_KEYS=['urineWarnH','urineDangerH','stoolWarnD','stoolDangerD'];   // 入居者を直す画面で入れ直す cfg のキー（閾値）
 function saveRes(){if(hbFieldDeny())return;const nm=$('mRN').value.trim(),rm=$('mRR').value.trim(),gn=$('mRG').value;
   var ym=$('mRY')?$('mRY').value.trim():'';
