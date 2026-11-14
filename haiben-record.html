@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-Hwl9N+9NA6o1KdP1CgisnbvTuZhOarqawgurEmHLK1U='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-yk9qtyZ36nmRnJRAHlSiKweocak3TSeEF0DQTWUiQ8U='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -1125,6 +1125,10 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
 </header>
 
 <!-- 保存先を新しい保存先へ切り替えた後に、ログインしていない端末で出す帯（hbNoLoginBand_ が出し入れする・2026-11-05 代表者の決定） -->
+<!-- 保存先を切り替える前から、ログインしていない端末で出す帯（hbPreLoginBand_ が出し入れする・2026-11-14 代表者の決定「この文で出して」）。
+     切り替えの確かめ（ログインしていない端末0台）を満たすため、どの端末が済んでいないかを現場で見分けられるようにする。画面だけ・印刷しない・ログインすると消える。
+     切り替えた後の帯（hbNoLogin）が出ている間は出さない -->
+<div class="hb-nologin" id="hbPreLogin" role="status" hidden>この端末はまだログインしていません。排泄ケア記録の保存先の切り替えに向けて、事務所で「端末登録の QR」を出してもらい、この端末のカメラで読んでください。</div>
 <div class="hb-nologin" id="hbNoLogin" role="status" hidden>この端末はログインしていません。排泄ケア記録の保存先を切り替えた後は、ログインしていないと記録をサーバーへ送れません。入れた記録はこの端末に控えてあり、ログインすると送ります。メニューの『ログイン』からログインしてください。</div>
 
 <!-- 入居者マスタから本人単位で開いた時の確認バー（誰を開いているかを示す＝取り違え防止）。既定は非表示 -->
@@ -5340,7 +5344,27 @@ function hbLiveOn_(){
 }
 var HB_READ_SRC='hb_read_src';   // 前に記録を読んだ先（'g' Google・'s' 新しい保存先）
 function hbReadSrc_(v){try{if(v)localStorage.setItem(HB_READ_SRC,v);return localStorage.getItem(HB_READ_SRC)||''}catch(e){return ''}}
-function hbNoLoginBand_(show){try{var b=document.getElementById('hbNoLogin');if(b)b.hidden=!show}catch(e){}}
+function hbNoLoginBand_(show){try{var b=document.getElementById('hbNoLogin');if(b)b.hidden=!show;var p=document.getElementById('hbPreLogin');if(show&&p)p.hidden=true}catch(e){}}
+/* 切り替える前から、ログインしていない端末にだけ帯を出す（2026-11-14 代表者の決定）。
+   ・ログインの控え（sb-…-auth-token）が無ければ出す（ログインの部品は読まない＝通信しない）
+   ・控えがあれば su-auth.js で確かめ、ログインしていない・使えないアカウントの時だけ出す。確かめられない（通信の失敗）時は出さない
+   ・切り替えた後の帯（hbNoLogin）が出ている間は出さない。読むのは端末の控えのキーの名前だけで、何も書かない・送らない */
+var _hbPreBusy=false;
+function hbPreLoginBand_(){
+  var b=document.getElementById('hbPreLogin');
+  if(!b||_hbPreBusy)return Promise.resolve();
+  function set(v){try{var n=document.getElementById('hbNoLogin');b.hidden=!(v&&!(n&&!n.hidden))}catch(e){}}
+  if(!hbSeenHasSession_()){set(true);return Promise.resolve()}
+  _hbPreBusy=true;
+  return hbMhLoadAuth_().then(function(A){
+    if(!A)return null;
+    return A.check().then(function(st){
+      if(!st)return null;
+      if(st.status===A.STATUS.SIGNED_OUT||st.status==='denied')return true;
+      return st.status==='error'?null:false;
+    });
+  }).then(function(show){set(show===true)},function(){set(false)}).then(function(){_hbPreBusy=false});
+}
 function hbTimeout_(p,ms){
   return new Promise(function(ok,ng){
     var tid=setTimeout(function(){ng(new Error('タイムアウト（'+Math.round(ms/1000)+'秒）'))},ms);
@@ -11481,7 +11505,10 @@ document.addEventListener('DOMContentLoaded',function(){
   if(_bm)_bm.addEventListener('click',function(){window.open('../care-tools/resident-master.html','_blank')});
   init();
   try{hbMhSend_()}catch(e){}   // 前に送れなかった入院の印の控えがあれば送る（控えが無ければ何もしない）
-  try{hbSeen_();document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')hbSeen_()})}catch(e){}   // この画面を開いた端末のログインの有無（1日1回・スイッチ device_seen が入の時だけ）
+  try{hbSeen_();document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')hbSeen_()})}catch(e){}
+  // 切り替える前から、ログインしていない端末に帯を出す（開いた時・見えた時・別のタブでログインした時に確かめ直す・2026-11-14 代表者の決定）
+  try{hbPreLoginBand_();document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')hbPreLoginBand_()});
+    window.addEventListener('storage',function(e){if(!e||e.key===null||/^sb-[a-z0-9]+-auth-token$/.test(String(e.key)))hbPreLoginBand_()})}catch(e){}   // この画面を開いた端末のログインの有無（1日1回・スイッチ device_seen が入の時だけ）
 });
 
 // グローバルエラーハンドラ — 未処理エラーでフリーズしないよう保護
