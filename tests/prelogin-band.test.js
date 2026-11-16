@@ -69,8 +69,11 @@ function world(o) {
     t('3 切り替えた後の帯を出す時は、この帯を消す', w2.pre.hidden === true && w2.no.hidden === false);
   }
   {
-    const m = /<div class="hb-nologin" id="hbPreLogin" role="status" hidden>([^<]*)<\/div>/.exec(HTML);
+    const m = /<div class="hb-nologin" id="hbPreLogin" role="status" hidden>([^<]*)<span class="hb-nologin-sub">([\s\S]*?)<\/span><\/div>/.exec(HTML);
     t('4 文は代表者が決めた文のまま（id hbPreLogin・始めは隠す・読み上げの status）', !!m && m[1] === TEXT, m && m[1]);
+    /* 2026-11-16: ホーム画面に置いたアプリは Safari と保存場所が別で、カメラの QR のログインが届かない（統合 0095・代表者の決定 案A）。
+       同じ入れ物のままログインの画面（登録の番号の欄）へ移るリンクを、同じタブで開く（別のタブ・別の窓は Safari へ出てしまう） */
+    t('4 ホーム画面のアプリ向けに、ログインの画面へ同じタブで移るリンクがある', !!m && /<a class="hb-nologin-a" href="\.\.\/care-tools\/login\.html">ログインの画面<\/a>/.test(m[2]) && !/target=/.test(m[2]) && /登録の番号/.test(m[2]), m && m[2]);
     t('4 印刷しない（.hb-nologin は印刷で出さない）', /@media print\{\.hb-nologin\{display:none !important\}\}/.test(HTML));
     t('4 開いた時・見えた時・別のタブでログインした時に確かめる', /hbPreLoginBand_\(\);document\.addEventListener\('visibilitychange'/.test(SRC) && /auth-token\$\/\.test\(String\(e\.key\)\)\)hbPreLoginBand_\(\)/.test(SRC));
   }

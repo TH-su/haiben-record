@@ -47,6 +47,8 @@ body{font-family:'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic UI','Mei
 /* 保存先を切り替えた後にログインしていない端末の帯（2026-11-05 代表者の決定・統合 0064）。画面だけ・印刷しない */
 .hb-nologin{background:#fff8c5;color:#4d3d00;border-bottom:1px solid #e0c200;padding:8px 16px;font-size:0.9375rem;font-weight:700;line-height:1.5}
 .hb-nologin[hidden]{display:none}
+.hb-nologin-sub{display:block;font-weight:400}
+.hb-nologin-a{display:inline-block;padding:11px 2px;color:#0b3d91;font-weight:700;text-decoration:underline}
 @media print{.hb-nologin{display:none !important}}
 /* デイ（せせらぎ）の表示の帯（2026-10-24・正本 §9.7）。デイの表示の印がある端末（html.hb-daycare）だけに出す。
    確認バーの下に貼り付く（位置は layoutStickyTops が決める）。印の無い端末（施設）では出ない＝貼り付く位置と表の高さも今までと同じ */
@@ -1128,7 +1130,7 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
 <!-- 保存先を切り替える前から、ログインしていない端末で出す帯（hbPreLoginBand_ が出し入れする・2026-11-14 代表者の決定「この文で出して」）。
      切り替えの確かめ（ログインしていない端末0台）を満たすため、どの端末が済んでいないかを現場で見分けられるようにする。画面だけ・印刷しない・ログインすると消える。
      切り替えた後の帯（hbNoLogin）が出ている間は出さない -->
-<div class="hb-nologin" id="hbPreLogin" role="status" hidden>この端末はまだログインしていません。排泄ケア記録の保存先の切り替えに向けて、事務所で「端末登録の QR」を出してもらい、この端末のカメラで読んでください。</div>
+<div class="hb-nologin" id="hbPreLogin" role="status" hidden>この端末はまだログインしていません。排泄ケア記録の保存先の切り替えに向けて、事務所で「端末登録の QR」を出してもらい、この端末のカメラで読んでください。<span class="hb-nologin-sub">ホーム画面のアイコンから開いている時は、カメラで読んでもこの画面には届きません。<a class="hb-nologin-a" href="../care-tools/login.html">ログインの画面</a>を開き、QR の下の8文字の「登録の番号」を入れてください。</span></div>
 <div class="hb-nologin" id="hbNoLogin" role="status" hidden>この端末はログインしていません。排泄ケア記録の保存先を切り替えた後は、ログインしていないと記録をサーバーへ送れません。入れた記録はこの端末に控えてあり、ログインすると送ります。メニューの『ログイン』からログインしてください。</div>
 
 <!-- 入居者マスタから本人単位で開いた時の確認バー（誰を開いているかを示す＝取り違え防止）。既定は非表示 -->
