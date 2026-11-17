@@ -397,7 +397,7 @@ function part9(){
     ok(!/document|window|\$\(|Date\.now|new Date|today\(/.test(pure),'tlOverdueList は DOM・現在時刻に触れない');
     const tl=X.fn('renderTL');
     ok(/tlIsToday=\(date===today\(\)\)/.test(tl)&&/if\(tlIsToday\)tlOvdForRes/.test(tl),'renderTL は今日の表示の時だけ判定する');
-    ok(/tlOvdSummary\(tlIsToday,tlOvdN\)/.test(tl)&&/tlNowPlace\(\)/.test(tl),'renderTL の最後で要約と縦線を更新する');
+    ok(/tlOvdSummary\(tlIsToday,tlOvdN(,tlOvdHid)?\)/.test(tl)&&/tlNowPlace\(\)/.test(tl),'renderTL の最後で要約と縦線を更新する');
     ok(!/ovd|tlOvd|tl-now/.test(X.fn('showFiveDay')),'5日表示には超過表示・縦線を出さない');
     ok(!/ovd|tlOvd|tl-now/.test(X.fn('renderBoard')),'一覧表示（renderBoard）は変えていない');
     const np=X.fn('tlNowPlace');

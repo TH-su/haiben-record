@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-6+OwDqhtyzGmdH6okh5LK7zWqZxwss/Tq8mXs+N6/yc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-UgPrx7k2CsKWDv8McuOReRwbAgf2qcdVtMZW6pu20dw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -504,6 +504,9 @@ textarea{resize:vertical;min-height:76px}
 .tl-t.tl-compact .tl-c.sched::before{width:18px;height:18px;border-width:2px}
 .tl-t.tl-compact .tl-more{font-size: 0.625rem;font-weight:700;color:var(--g7)}
 .tl-t.tl-compact .ev-m{font-size: 0.75rem}
+/* 全体表示を今日開いている時の直近24時間の並び（2026-11-17）: 日付の切れ目（0時）の左に太い線、前日・今日・翌日の始まりの列に小さく「前日」「今日」「翌日」 */
+.tl-t.tl-compact th.hr-top:has(>.hr-mid),.tl-t.tl-compact td.tl-mid{border-left:2px solid #455a64}
+.tl-t.tl-compact .hr-dlbl{display:block;font-size:0.5625rem;font-weight:700;line-height:1.1;white-space:nowrap}
 .hx-sec{margin:0 0 10px;border:1px solid var(--g2);border-radius:10px;padding:6px 10px;background:#fff}
 .hx-sec>summary{cursor:pointer;font-weight:700;font-size: 0.875rem;color:var(--g9);min-height:36px;display:flex;align-items:center}
 .sc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:6px}
@@ -1067,7 +1070,7 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
   #sc-tl .tl-nm > span:first-child{margin-right:6px}
   #sc-tl .tl-nm{padding-top:3px;padding-bottom:3px}
   #sc-tl .tl-c,#sc-tl .tl-t.tl-compact .tl-c{height:32px}
-  #sc-tl .tl-t.tl-compact{width:100%}   /* 全体表示（0〜23時）は表を画面の幅いっぱいに広げ、時刻のコマを広くする */
+  #sc-tl .tl-t.tl-compact{width:100%}   /* 全体表示（24列・今日は直近24時間）は表を画面の幅いっぱいに広げ、時刻のコマを広くする */
   #sc-tl .tl-t:not(.tl-compact) .tl-c.sched::before{width:32px;height:32px}   /* 全体表示の丸（18px）は今のまま */
 }
 /* 指で触る端末（タブレット）では、上の詰め方のうち押すボタンだけ 44px に戻す（押し間違いを防ぐ・2026-11-09 本人指示）。
@@ -1439,7 +1442,7 @@ html.night [style*="color:#bf360c"]{color:#ffab91 !important}
     </div>
     <button class="bn bs bsm rf-sp" id="tlRefresh">🔄 更新</button>
     <!-- 今日の表示中だけ出す（renderTL が切り替える）: 現在時刻の位置へ横スクロール／予定の未記録の件数 -->
-    <button class="bn bs bsm" id="tlCompactBtn" aria-pressed="false" title="0時〜23時を1画面で見る／30分ごとに詳しく見る">🗺 全体</button>
+    <button class="bn bs bsm" id="tlCompactBtn" aria-pressed="false" title="1画面で見渡す（今日は直近24時間・ほかの日は0時〜23時）／30分ごとに詳しく見る">🗺 全体</button>
     <button class="bn bs bsm" id="tlNowBtn" style="display:none" title="現在時刻の位置へ移動" aria-label="現在時刻の位置へ移動">今</button>
     <span id="tlOvdSum" role="status" style="display:none;font-size: 0.75rem;font-weight:700;white-space:nowrap"></span>
     <label style="font-size: 0.6875rem;color:var(--g6);margin-left:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="show-nontarget">対象外も表示</label>
@@ -6594,7 +6597,9 @@ function tlOvdForRes(re,date,nowMin){
 function _tlNowMin(){var n=new Date();return n.getHours()*60+n.getMinutes()}
 /* 上部の要約（今日の表示中のみ）。件数は超過した予定の数。最終取得は差分同期の基準時刻から出す
    （基準はサーバーの読み取り開始時刻からのりしろ SYNC_OVERLAP_MS を引いた値なので、足し戻して表示する） */
-function tlOvdSummary(isToday,n){
+/* hid＝全体表示の直近24時間の並びで、表の左から外れた今日の早い時間の超過の数（2026-11-17 反証レビュー）。
+   件数 n は今までどおり今日1日分を数え、外れた分は「表の外」と書き添える（見落とさないため） */
+function tlOvdSummary(isToday,n,hid){
   var el=$('tlOvdSum'),nb=$('tlNowBtn');
   if(nb)nb.style.display=isToday?'':'none';
   if(!el)return;
@@ -6604,7 +6609,7 @@ function tlOvdSummary(isToday,n){
     if(ts>0){var d=new Date(ts+SYNC_OVERLAP_MS);last='（最終取得 '+(d.getHours()<10?'0':'')+d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes()+'）'}
     else last='（最終取得 —）';
   }
-  el.textContent=(n>0?'⚠️ 予定を過ぎて未記録 '+n+'件':'予定の未記録なし')+last;
+  el.textContent=(n>0?'⚠️ 予定を過ぎて未記録 '+n+'件'+(hid>0?'（うち'+hid+'件は表の左の外・🔍詳しくで見られます）':''):'予定の未記録なし')+last;
   el.style.color=n>0?'#c62828':'var(--g6)';
   el.style.display='';
 }
@@ -6617,7 +6622,9 @@ function tlNowPlace(){
   var tbl=box.querySelector('table.tl-t');
   if(date!==today()||!tbl){if(ln&&ln.parentNode)ln.parentNode.removeChild(ln);return}
   var n=new Date();
-  var th=tbl.querySelectorAll('thead th.hr-top')[n.getHours()];
+  /* 全体表示の直近24時間の並び（data-roll＝最初の列の時）では、今の時の列はいつも左から17列目 */
+  var rs=parseInt(tbl.getAttribute('data-roll'),10);if(isNaN(rs))rs=0;
+  var th=tbl.querySelectorAll('thead th.hr-top')[n.getHours()-rs];
   if(!th){if(ln&&ln.parentNode)ln.parentNode.removeChild(ln);return}
   var left,w=th.offsetWidth;
   if(th.offsetParent===box)left=th.offsetLeft;
@@ -6642,13 +6649,13 @@ function tlScrollToNow(){
      scroll イベントで scrollLeft を書き戻し、動き始めの数pxで止まる（ヘッドレス Chrome で実測） */
   box.scrollLeft=Math.max(0,Math.round(ln.offsetLeft-nmW-vis*2/3));
 }
-/* 時系列を開いた時に、今日の30分の表示なら現在時刻の縦線を右から約1/3へ送る（「全体」の24列は1画面に入るので送らない・
+/* 時系列を開いた時に、今日なら現在時刻の縦線を右から約1/3へ送る（「全体」も直近24時間の並びで同じ位置・横に送れない幅では送らない・
    デイの表示も今日は同じ位置・2026-11-17 本人指示「デイの表示も右から1/3にして」。今日以外のデイは hbDcScrollDay の 8:30）。画面の幅いっぱいの見せ方（CSS）が描画の後に効く端末でも位置がずれないよう、
    次の描画の時にもう一度だけ合わせる */
 function tlOpenScrollNow(){
-  if(tlCompact||!$('tlDate')||$('tlDate').value!==today())return false;
+  if(!$('tlDate')||$('tlDate').value!==today())return false;
   tlScrollToNow();
-  try{requestAnimationFrame(function(){if($('sc-tl')&&$('sc-tl').classList.contains('on')&&!tlCompact&&$('tlDate').value===today())tlScrollToNow()})}catch(e){}
+  try{requestAnimationFrame(function(){if($('sc-tl')&&$('sc-tl').classList.contains('on')&&$('tlDate').value===today())tlScrollToNow()})}catch(e){}
   return true;
 }
 /* 表を描き直さずに「未」・件数・縦線だけを更新する（60秒ごと）。
@@ -6659,15 +6666,17 @@ function tlOvdRefresh(){
   var date=$('tlDate').value||today();
   var isToday=(date===today());
   var tb=box.querySelector('table.tl-t tbody');
-  var nowM=_tlNowMin(),n=0;
+  var nowM=_tlNowMin(),n=0,hid=0;
+  var _rt=box.querySelector('table.tl-t'),rs=_rt?parseInt(_rt.getAttribute('data-roll'),10):NaN;   // 全体表示の直近24時間の並びの最初の列の時
   if(tb)Array.prototype.forEach.call(tb.rows,function(tr){
     var nm=tr.querySelector('.tl-nm-link');
     var rid=nm?parseInt(nm.dataset.hist):NaN;
     var re=isNaN(rid)?null:D.residents.find(function(x){return x.id===rid});
     var set={};
-    if(isToday&&re)tlOvdForRes(re,date,nowM).forEach(function(o){set[Math.floor(o.min/30)]=1;n++});
+    if(isToday&&re)tlOvdForRes(re,date,nowM).forEach(function(o){set[Math.floor(o.min/30)]=1;n++;if(!isNaN(rs)&&Math.floor(o.min/60)<rs)hid++});
     $$('td.tl-c',tr).forEach(function(td){
       if(td.dataset.adm)return;   // 入院のコマには「未」を付けない（描画と同じ扱い）
+      if(td.dataset.date)return;  // 全体表示の直近24時間の並びの前日・翌日の列にも付けない（描画と同じ扱い・2026-11-17）
       var s=parseInt(String(td.dataset.slot||'').split('-')[1]);
       // 全体表示のセルは1時間分（:00 と :30 の2枠）。data-slot は代表の枠なので、時台の2枠で判定する（2026-10-16 レビュー指摘）
       var hh=(td.dataset.hour!=null&&td.dataset.hour!=='')?parseInt(td.dataset.hour):NaN;
@@ -6677,7 +6686,7 @@ function tlOvdRefresh(){
       else{td.classList.remove('ovd');var l=td.querySelector('.ovd-lbl');if(l)td.removeChild(l)}
     });
   });
-  tlOvdSummary(isToday,n);
+  tlOvdSummary(isToday,n,hid);
   tlNowPlace();
   // 「要注意だけ」の時は、表に居ない人が新しく予定を過ぎたら描き直して加える（2026-10-16 レビュー指摘）
   if(onlyAttn&&isToday&&tb){
@@ -6712,6 +6721,10 @@ function _tlTick(){
       if((box&&box.querySelector('.ovd,.tl-now'))||(sum&&sum.style.display!=='none'))tlOvdRefresh();
       return;
     }
+    /* 全体表示の直近24時間の並びは、時が変わったら並びを1列ずらして描き直す（線をいつも右から約1/3に置くため） */
+    var _tb=$('tlBox')?$('tlBox').querySelector('table.tl-t'):null;
+    if(_tb){var _rs=tlRollStart(tlCompact,date,today(),new Date().getHours(),_tlNoRoll),_cur=_tb.getAttribute('data-roll');
+      if(String(_rs)!==String(_cur)){tlRenderKeepScroll();return}}
     tlOvdRefresh();
     /* 記録の取得はここから外した（2026-10-06）。下の _syncPollTick が画面に関係なく受け持つ。
        ここに置いていた間は、時系列画面を開いている端末しか記録を取りに行かなかった。 */
@@ -6721,6 +6734,19 @@ function setupTlTick(){
   if(_tlTickBound)return;                          // 二重登録しない（タイマーは1本）
   _tlTickBound=true;
   setInterval(_tlTick,TL_TICK_MS);
+}
+var _tlPrintBound=false;
+function setupTlPrint(){
+  if(_tlPrintBound)return;
+  _tlPrintBound=true;
+  /* 印刷の間は全体表示も今までどおり0〜23時で描く（紙は変えない・2026-11-17）。終わったら直近24時間の並びへ戻す */
+  /* 終わりの知らせ（afterprint）が来ない端末に備え、2分たったらタイマーでも戻す（帳票の印刷と同じ備え・2026-11-17 反証レビュー） */
+  var _tlPrT=null;
+  var _tlPrOn=function(){var t=$('tlBox')?$('tlBox').querySelector('table.tl-t[data-roll]'):null;if(t&&!_tlNoRoll){_tlNoRoll=true;renderTL();clearTimeout(_tlPrT);_tlPrT=setTimeout(function(){_tlPrOff()},120000)}};
+  var _tlPrOff=function(){clearTimeout(_tlPrT);if(_tlNoRoll){_tlNoRoll=false;tlRenderKeepScroll()}};
+  window.addEventListener('beforeprint',_tlPrOn);
+  window.addEventListener('afterprint',_tlPrOff);
+  try{var _mq=window.matchMedia('print');var _mqf=function(e){if(e.matches)_tlPrOn();else _tlPrOff()};if(_mq.addEventListener)_mq.addEventListener('change',_mqf);else if(_mq.addListener)_mq.addListener(_mqf)}catch(e){}
 }
 /* ════════ 記録の追い読み（2026-10-06・画面に依存しない） ════════
    なぜ: それまで記録の取得（syncFromAPI）が自動で走るのは時系列画面を開いている間だけで、
@@ -7004,18 +7030,43 @@ function renderNetLog(){
    セルは30分の2枠をまとめたもの。押すと従来どおり詳細（記録あり）か予定の入力（記録なし・その時の :00 枠）を開く */
 var TL_COMPACT_KEY='hbcr_tl_compact';
 var tlCompact=(function(){try{return localStorage.getItem(TL_COMPACT_KEY)==='1'}catch(e){return false}})();
+/* 全体表示（24列）を今日開いている時の並び（2026-11-17 本人指示「全体表示でも赤線を右から1/3にして」・代表者の決定「直近24時間に変える」）。
+   今の時の16時間前〜8時間後の24列にし、現在時刻の線をいつも左から17列目（見えている範囲の右から約1/3）に置く。
+   日付をまたぐ列には前日・翌日の記録と予定をそのまま出す（押すとその日の記録・予定を開く）。
+   戻り値は最初の列の時（今日の0時を0として -16〜7）。30分の表示・今日以外の日付・印刷の間は null＝今までどおり0〜23時 */
+var TL_ROLL_BEFORE=16;
+var _tlNoRoll=false;   // 印刷の間だけ true（紙は今までどおり0〜23時）
+function tlRollStart(compact,date,todayStr,nowH,noRoll){
+  if(!compact||noRoll||date!==todayStr)return null;
+  return nowH-TL_ROLL_BEFORE;
+}
+/* 24列の中身: 列ごとの日付（d）・時（h 0〜23）・前日-1／その日0／翌日1（off）。start が null なら base の0〜23時 */
+function tlRollCols(base,start){
+  var s0=(start==null)?0:start,a=[];
+  for(var k=0;k<24;k++){var H=s0+k,off=H<0?-1:(H>=24?1:0);a.push({d:off?_tlAddDay(base,off):base,h:((H%24)+24)%24,off:off})}
+  return a;
+}
+function _tlAddDay(ymd,n){var d=new Date(ymd+'T00:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+/* 全体表示の見出しの中身（日付の切れ目の印・前日／今日／翌日の札（その日の始まりの列だけ）・時） */
+function tlHdLab(cols,k){
+  var c=cols[k],lab='';
+  if(c.h===0&&k>0)lab+='<span class="hr-mid" title="'+escapeHtmlText(fmtMD(c.d))+'"></span>';
+  if(k===0?c.off:cols[k-1].off!==c.off)lab+='<span class="hr-dlbl">'+(c.off<0?'前日':c.off>0?'翌日':'今日')+'</span>';
+  return lab+c.h;
+}
 function renderTL(){const date=$('tlDate').value||today();
   // デイの表示の間はデイの方だけ・五十音（hbDcKeep・hbDcOrder は施設の端末では素通し＝今までと同じ対象・並び）
   const res=hbDcOrder(D.residents.filter(function(r){return isUserRes(r)&&r.active!==false&&r.hidden!==true&&r.name&&hbListTarget(r)&&(!onlyAttn||isAttnRes(r,date))&&hbDcKeep(r)}).sort(function(a,b){return(a.room||'').localeCompare(b.room||'','ja')}));
   if(_dc)hbDcRenderBar();
   // 予定の超過表示は「今日」を見ているときだけ（過去日・未来日には出さない）
-  var tlIsToday=(date===today()),tlNowM=_tlNowMin(),tlOvdN=0;
+  var tlIsToday=(date===today()),tlNowM=_tlNowMin(),tlOvdN=0,tlOvdHid=0;
+  var tlRs=tlRollStart(tlCompact,date,today(),new Date().getHours(),_tlNoRoll),tlCols=tlRollCols(date,tlRs);
   // ヘッダー行: 時刻（0〜23）を各2列（:00, :30）
   let h1='<th rowspan="2" style="min-width:'+(tlCompact?84:96)+'px;position:sticky;left:0;z-index:2;background:#e8eaed">入居者</th>';
   let h2='';
   if($('tlCompactBtn')){$('tlCompactBtn').textContent=tlCompact?'🔍 詳しく':'🗺 全体';$('tlCompactBtn').setAttribute('aria-pressed',tlCompact?'true':'false')}
   for(let h=0;h<24;h++){
-    if(tlCompact){h1+='<th rowspan="2" class="hr-top">'+h+'</th>';continue}
+    if(tlCompact){h1+='<th rowspan="2" class="hr-top">'+tlHdLab(tlCols,h)+'</th>';continue}
     h1+='<th colspan="2" class="hr-top" style="min-width:64px">'+h+'時</th>';
     h2+='<th class="hr-sub">:00</th><th class="hr-sub">:30</th>'}
   // データ行
@@ -7026,7 +7077,7 @@ function renderTL(){const date=$('tlDate').value||today();
       const slot=h*2+(m>=30?1:0);if(!bk[slot])bk[slot]=[];bk[slot].push(r)});
     var schSet=schedSet(re);
     var ovdSet={};
-    if(tlIsToday)tlOvdForRes(re,date,tlNowM).forEach(function(o){ovdSet[Math.floor(o.min/30)]=1;tlOvdN++});
+    if(tlIsToday)tlOvdForRes(re,date,tlNowM).forEach(function(o){ovdSet[Math.floor(o.min/30)]=1;tlOvdN++;if(tlRs!=null&&Math.floor(o.min/60)<tlRs)tlOvdHid++});
     // 🏥 入院イベント取得（赤地/青地マーカー＆灰色化用）
     var hospEvents=getHospEventsOnDate(re,date);
     // 各イベントが入るスロット番号を計算
@@ -7041,23 +7092,29 @@ function renderTL(){const date=$('tlDate').value||today();
     var reIdA=escapeHtmlText(re.id);
     let cells='';
     if(tlCompact){
-      for(let h=0;h<24;h++){
-        var a=h*2,b=a+1;
-        if((hospBySlot[a]&&hospBySlot[a].type==='admission')||(hospBySlot[b]&&hospBySlot[b].type==='admission')){
-          cells+='<td class="tl-c has" data-adm="1" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.625rem;text-align:center;padding:1px">入院</td>';continue;
+      /* 直近24時間の並び（tlRollCols）では、前日・翌日の列はその日の記録・入院・押した時の日付（data-date）を使い、「未」は付けない */
+      var bkBy={},hospBy={};bkBy[date]=bk;hospBy[date]=hospBySlot;
+      var bkOf=function(d){if(!bkBy[d]){var o={};recsByResDate(re.id,d).forEach(function(r){var p=String(r.time||'').split(':'),hh=parseInt(p[0]),mm=parseInt(p[1]||0),sl=hh*2+(mm>=30?1:0);if(!o[sl])o[sl]=[];o[sl].push(r)});bkBy[d]=o}return bkBy[d]};
+      var hospOf=function(d){if(!hospBy[d]){var o={};getHospEventsOnDate(re,d).forEach(function(ev){var p=ev.time.split(':'),hh=parseInt(p[0],10)||0,mm=parseInt(p[1],10)||0;o[hh*2+(mm>=30?1:0)]=ev});hospBy[d]=o}return hospBy[d]};
+      for(let k=0;k<24;k++){
+        var cc=tlCols[k],h=cc.h,cd=cc.d,a=h*2,b=a+1,hb=hospOf(cd),bkc=bkOf(cd);
+        var cDt=cc.off?' data-date="'+escapeHtmlText(cd)+'"':'',cMid=(h===0&&k>0)?' tl-mid':'',cTt=(cc.off<0?'前日 ':cc.off>0?'翌日 ':'');
+        if((hb[a]&&hb[a].type==='admission')||(hb[b]&&hb[b].type==='admission')){
+          cells+='<td class="tl-c has'+cMid+'" data-adm="1" data-slot="'+reIdA+'-'+a+'"'+cDt+' data-hour="'+h+'" style="background:#c62828;color:#fff;font-weight:700;font-size: 0.625rem;text-align:center;padding:1px">入院</td>';continue;
         }
-        if(isSlotInHospPeriod(re,date,a)&&isSlotInHospPeriod(re,date,b)){
-          cells+='<td class="tl-c" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" style="background:#757575;color:#bdbdbd;pointer-events:none"></td>';continue;
+        if(isSlotInHospPeriod(re,cd,a)&&isSlotInHospPeriod(re,cd,b)){
+          cells+='<td class="tl-c'+cMid+'" data-slot="'+reIdA+'-'+a+'"'+cDt+' data-hour="'+h+'" style="background:#757575;color:#bdbdbd;pointer-events:none"></td>';continue;
         }
-        var hr=(bk[a]||[]).concat(bk[b]||[]);
+        var hr=(bkc[a]||[]).concat(bkc[b]||[]);
         var cSch=(schSet[a]||schSet[b])?' sched':'';
-        var cOvd=(ovdSet[a]||ovdSet[b])?' ovd':'',cOvdL=(ovdSet[a]||ovdSet[b])?'<span class="ovd-lbl">未</span>':'';
+        var oOn=!cc.off&&(ovdSet[a]||ovdSet[b]);
+        var cOvd=oOn?' ovd':'',cOvdL=oOn?'<span class="ovd-lbl">未</span>':'';
         // 予定が :30 だけの時はその枠で開く（印と、押して開く予定を合わせる・2026-10-16 レビュー指摘）
         var openSlot=(!schSet[a]&&schSet[b])?b:a;
-        if(!hr.length){cells+='<td class="tl-c'+cSch+cOvd+'" data-slot="'+reIdA+'-'+openSlot+'" data-hour="'+h+'" title="'+h+'時台">'+cOvdL+'</td>';continue}
+        if(!hr.length){cells+='<td class="tl-c'+cSch+cOvd+cMid+'" data-slot="'+reIdA+'-'+openSlot+'"'+cDt+' data-hour="'+h+'" title="'+cTt+h+'時台">'+cOvdL+'</td>';continue}
         var mk=hr.slice(0,3).map(function(r){return tlMarks(r)}).join('');
         if(hr.length>3)mk+='<span class="tl-more">+'+(hr.length-3)+'</span>';
-        cells+='<td class="tl-c has'+cSch+cOvd+'" data-slot="'+reIdA+'-'+a+'" data-hour="'+h+'" title="'+h+'時台 '+hr.length+'件">'+mk+cOvdL+'</td>';
+        cells+='<td class="tl-c has'+cSch+cOvd+cMid+'" data-slot="'+reIdA+'-'+a+'"'+cDt+' data-hour="'+h+'" title="'+cTt+h+'時台 '+hr.length+'件">'+mk+cOvdL+'</td>';
       }
     }else
     for(let s=0;s<48;s++){const recs=bk[s]||[];
@@ -7131,9 +7188,9 @@ function renderTL(){const date=$('tlDate').value||today();
     return'<tr><td class="'+nmCls+'"'+nmCellStyle+'>'+nmContent+'</td>'+cells+'</tr>'}).join('');
   var tlEmpty=(!res.length&&onlyAttn)?'<tr><td colspan="99" class="attn-empty">✅ いま要注意の方はいません（「要注意だけ」を外すと全員を表示します）</td></tr>':'';
   if(!res.length&&!onlyAttn&&hbDcOn())tlEmpty='<tr><td colspan="99" class="attn-empty">'+escapeHtmlText(DC_EMPTY_MSG)+'</td></tr>';
-  $('tlBox').innerHTML='<table class="tl-t'+(tlCompact?' tl-compact':'')+'"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+tlEmpty+'</tbody></table>';
+  $('tlBox').innerHTML='<table class="tl-t'+(tlCompact?' tl-compact':'')+'"'+(tlRs!=null?' data-roll="'+tlRs+'"':'')+'><thead><tr>'+h1+'</tr><tr>'+h2+'</tr></thead><tbody>'+rows+tlEmpty+'</tbody></table>';
   setupTopScroll();
-  tlOvdSummary(tlIsToday,tlOvdN);
+  tlOvdSummary(tlIsToday,tlOvdN,tlOvdHid);
   tlFitHeight();
   tlNowPlace();
   // セル/名前/5日ボタンのクリックは「イベント委譲」で処理する（tlBox へ一度だけ登録）。
@@ -7151,7 +7208,7 @@ function renderTL(){const date=$('tlDate').value||today();
       var td=t.closest('.tl-c');
       if(!td||!_tlBox.contains(td)||!td.dataset.slot)return;
       var parts=td.dataset.slot.split('-');var rid=parseInt(parts[0]);var slot=parseInt(parts[1]);
-      var d=$('tlDate').value||today();
+      var d=td.dataset.date||$('tlDate').value||today();   // 直近24時間の並びの前日・翌日の列は、その列の日付（data-date）
       var hourMode=td.dataset.hour!=null&&td.dataset.hour!=='';   // 全体表示のセル＝1時間分（30分の2枠）
       if(td.classList.contains('has')){
         var dr=recsByResDate(rid,d);
@@ -7160,7 +7217,7 @@ function renderTL(){const date=$('tlDate').value||today();
         if(matching.length===1)showDet(matching[0].id);
         else if(matching.length>1)showDetMulti(matching);
       }else{
-        openSchedCellModal(rid,slot);
+        openSchedCellModal(rid,slot,td.dataset.date?{date:td.dataset.date}:undefined);
       }
     });
   }}
@@ -10580,7 +10637,7 @@ function _initRest(){
     tlCompact=!tlCompact;
     try{localStorage.setItem(TL_COMPACT_KEY,tlCompact?'1':'0')}catch(e){}
     renderTL();
-    if(!tlCompact&&$('tlDate')&&$('tlDate').value===today())tlScrollToNow();
+    if($('tlDate')&&$('tlDate').value===today())tlScrollToNow();   // 全体表示も今日は線を右から約1/3へ（2026-11-17）
   });
   $$('.show-nontarget').forEach(function(cb){cb.addEventListener('change',function(){
     showNonTargets=this.checked;
@@ -11240,6 +11297,7 @@ function _initRest(){
   if(typeof setupMasterRosterPoll==='function')setupMasterRosterPoll();
   /* 時系列の表示更新（60秒・超過の再判定と現在時刻線）。条件は tick 側で判定する */
   if(typeof setupTlTick==='function')setupTlTick();
+  if(typeof setupTlPrint==='function')setupTlPrint();
   /* 記録の追い読み（画面に依存しない・5分ごと＋画面に戻った時）。apiUrl 未設定でも起動してよい＝
      tick 側で未接続を判定するため、後からURLを保存した端末も再読み込み無しで効き始める */
   if(typeof setupSyncPoll==='function')setupSyncPoll();
