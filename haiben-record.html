@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-yk9qtyZ36nmRnJRAHlSiKweocak3TSeEF0DQTWUiQ8U='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
+<meta http-equiv="Content-Security-Policy" data-su-csp content="default-src 'self'; script-src 'self' 'sha256-/gtCkDDOiK7Bz4fRwvc19xHe+gp7Krqp8dafmx2vjh8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://jhbernqawjrzqwrmqrih.supabase.co wss://jhbernqawjrzqwrmqrih.supabase.co; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; worker-src 'self' blob:">
 <!-- 機微情報を含むためキャッシュ無効 -->
 <meta http-equiv="Cache-Control" content="no-store">
 <!-- 検索エンジンに載せない（公開URLだが業務用ツールのため） -->
@@ -5855,7 +5855,7 @@ function showSc(name){$$('.scr').forEach(s=>s.classList.remove('on'));$$('.bnav 
   $('sc-'+name).classList.add('on');const nb=document.querySelector('.bnav button[data-sc="'+name+'"]');if(nb)nb.classList.add('on');
   if(name==='input'){setNow();buildResSel()}
   if(name==='board'){if($('bdDate')&&!$('bdDate').value)$('bdDate').value=today();updateDayNavHi('bdDayNav',$('bdDate').value);renderBoard()}
-  if(name==='tl'){if($('tlDate')&&!$('tlDate').value)$('tlDate').value=today();updateDayNavHi('tlDayNav',$('tlDate').value);renderTL();if(hbDcOn())hbDcScrollDay()}
+  if(name==='tl'){if($('tlDate')&&!$('tlDate').value)$('tlDate').value=today();updateDayNavHi('tlDayNav',$('tlDate').value);renderTL();if(hbDcOn())hbDcScrollDay();else tlOpenScrollNow()}
   if(name==='cfg')renderCfg();
   if(name==='staff'){
     // 開いた瞬間に最新データから D.staffs を再構築（同期直後・別端末からの初回起動でも即反映）
@@ -6628,7 +6628,9 @@ function tlNowPlace(){
   ln.style.top=tbl.offsetTop+'px';
   ln.style.height=tbl.offsetHeight+'px';
 }
-/* 「今」ボタン: 縦線が見えている範囲（氏名列を除く）の左から約1/3 に来るよう横スクロールする */
+/* 「今」ボタン・時系列を開いた時: 縦線が見えている範囲（氏名列を除く）の右から約1/3（左から2/3）に来るよう横スクロールする
+   （2026-11-17 本人指示「現時刻の赤線が画面の右から1/3程度の位置に必ずくるように」）。
+   線の左側に過ぎた時間を多く見せ、右側にこの後の予定を少し残す */
 function tlScrollToNow(){
   var box=$('tlBox');if(!box)return;
   tlNowPlace();
@@ -6638,7 +6640,15 @@ function tlScrollToNow(){
   var vis=Math.max(0,box.clientWidth-nmW);
   /* 即時に動かす。smooth にすると上部の同期スクロールバー（setupTopScrollFor）が
      scroll イベントで scrollLeft を書き戻し、動き始めの数pxで止まる（ヘッドレス Chrome で実測） */
-  box.scrollLeft=Math.max(0,Math.round(ln.offsetLeft-nmW-vis/3));
+  box.scrollLeft=Math.max(0,Math.round(ln.offsetLeft-nmW-vis*2/3));
+}
+/* 時系列を開いた時に、今日の30分の表示なら現在時刻の縦線を右から約1/3へ送る（「全体」の24列は1画面に入るので送らない・
+   デイの表示は hbDcScrollDay の 8:30 のまま）。画面の幅いっぱいの見せ方（CSS）が描画の後に効く端末でも位置がずれないよう、
+   次の描画の時にもう一度だけ合わせる */
+function tlOpenScrollNow(){
+  if(tlCompact||!$('tlDate')||$('tlDate').value!==today())return;
+  tlScrollToNow();
+  try{requestAnimationFrame(function(){if($('sc-tl')&&$('sc-tl').classList.contains('on')&&!tlCompact&&$('tlDate').value===today())tlScrollToNow()})}catch(e){}
 }
 /* 表を描き直さずに「未」・件数・縦線だけを更新する（60秒ごと）。
    renderTL は innerHTML を差し替えるため、毎分呼ぶとタップ中のコマやスクロールの慣性が途切れる。
