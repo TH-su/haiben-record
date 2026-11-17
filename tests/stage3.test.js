@@ -122,6 +122,39 @@ head('4. 時系列の全体表示・実装の作法');
   ok(/\$\$\('\.bnav button\[data-sc\]'\)/.test(SRC),'下部ナビの画面切替は data-sc のあるボタンだけ（夜間の切替で画面が変わらない）');
 })();
 
+head('5. 全体表示の直近24時間の並び（2026-11-17 本人指示・代表者の決定「直近24時間に変える」）');
+(function(){
+  const sb={escapeHtmlText:s=>String(s),fmtMD:d=>d};vm.createContext(sb);
+  vm.runInContext(['var TL_ROLL_BEFORE=16;',X.fn('tlRollStart'),X.fn('tlRollCols'),X.fn('_tlAddDay'),X.fn('tlHdLab')].join('\n'),sb);
+  const T='2026-03-01';
+  ok(sb.tlRollStart(false,T,T,18,false)===null,'30分の表示では並べ替えない');
+  ok(sb.tlRollStart(true,'2026-02-28',T,18,false)===null,'今日以外の日付は0〜23時のまま');
+  ok(sb.tlRollStart(true,T,T,18,true)===null,'印刷の間は0〜23時のまま');
+  [0,5,15,16,18,23].forEach(function(H){
+    const st=sb.tlRollStart(true,T,T,H,false),c=sb.tlRollCols(T,st);
+    const k=c.findIndex(function(x){return x.d===T&&x.h===H});
+    const cont=c.every(function(x,i){if(!i)return true;const p=c[i-1];return (p.h+1)%24===x.h&&(x.h===0?x.d!==p.d:x.d===p.d)});
+    ok(c.length===24&&k===16&&cont,H+'時: 今の時は左から17列目・24列が1時間ずつ続き、日付は0時で変わる',{k:k,first:c[0],last:c[23]});
+  });
+  const c0=sb.tlRollCols(T,sb.tlRollStart(true,T,T,0,false));
+  ok(c0[0].d==='2026-02-28'&&c0[0].h===8&&c0[0].off===-1&&c0[23].d===T&&c0[23].h===7,'0時: 前日8時〜今日7時（月末をまたいでも前日の日付）',[c0[0],c0[23]]);
+  const c23=sb.tlRollCols(T,sb.tlRollStart(true,T,T,23,false));
+  ok(c23[0].d===T&&c23[0].h===7&&c23[23].d==='2026-03-02'&&c23[23].h===6&&c23[23].off===1,'23時: 今日7時〜翌日6時',[c23[0],c23[23]]);
+  const c18=sb.tlRollCols(T,null);
+  ok(c18.every(function(x,i){return x.d===T&&x.h===i&&x.off===0}),'並べ替えない時は今までどおり今日の0〜23時');
+  ok(/class="hr-mid"/.test(sb.tlHdLab(c23,17))&&/翌日/.test(sb.tlHdLab(c23,17))&&!/翌日|前日|hr-mid/.test(sb.tlHdLab(c23,16)),'日付の切れ目の列にだけ切れ目の印と「翌日」の札を付ける');
+  ok(/前日/.test(sb.tlHdLab(c0,0))&&!/前日/.test(sb.tlHdLab(c0,1))&&!/hr-mid/.test(sb.tlHdLab(c0,0)),'前日の列の始まりにだけ「前日」の札（左端に切れ目の印は付けない）');
+  ok(/今日/.test(sb.tlHdLab(c0,16))&&/hr-mid/.test(sb.tlHdLab(c0,16))&&!/今日/.test(sb.tlHdLab(c23,0))&&!/今日|前日|翌日/.test(sb.tlHdLab(c18,0)),'前日の後の今日の0時にだけ「今日」の札（今日から始まる並び・並べ替えない時は札なし）');
+  const fn=X.fn('renderTL'),rf=X.fn('tlOvdRefresh'),np=X.fn('tlNowPlace');
+  ok(/var oOn=!cc\.off&&/.test(fn)&&/if\(td\.dataset\.date\)return;/.test(rf),'前日・翌日の列には描画でも1分ごとの更新でも「未」を付けない');
+  ok(/isSlotInHospPeriod\(re,cd,a\)/.test(fn)&&/getHospEventsOnDate\(re,d\)/.test(fn)&&/recsByResDate\(re\.id,d\)/.test(fn),'前日・翌日の列はその日の記録と入院で描く');
+  ok(/td\.dataset\.date\|\|\$\('tlDate'\)/.test(fn)&&/openSchedCellModal\(rid,slot,td\.dataset\.date\?\{date:td\.dataset\.date\}/.test(fn),'押した時は、その列の日付の記録・予定を開く');
+  ok(/data-roll/.test(np)&&/n\.getHours\(\)-rs/.test(np),'現在時刻の線は描いた並び（data-roll）から列を決める');
+  ok(/Math\.floor\(o\.min\/60\)<tlRs\)tlOvdHid\+\+/.test(fn)&&/Math\.floor\(o\.min\/60\)<rs\)hid\+\+/.test(rf)&&/tlOvdSummary\(isToday,n,hid\)/.test(rf),'表の左から外れた今日の超過は件数に残し、外れた数を数える（反証レビュー）');
+  const sm=X.fn('tlOvdSummary');
+  ok(/表の左の外/.test(sm)&&/'⚠️ 予定を過ぎて未記録 '\+n\+'件'/.test(sm),'要約は今日1日分の件数のまま、外れた分を書き添える');
+})();
+
 console.log('\n══════════════════════════════════');
 console.log('  ✅ '+pass+' 件  /  ❌ '+fail+' 件');
 console.log('══════════════════════════════════');
