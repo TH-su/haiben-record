@@ -276,7 +276,7 @@ head('8 書かない・戻り先・つなぎ込み');
   ok(!!m && new URL(m[1], 'https://th-su.github.io/haiben-record/haiben-record.html').href === 'https://th-su.github.io/care-log/#/record/daycare', '〔デイ せせらぎへ戻る〕は同じタブで care-log のデイの画面（公開の URL に解いて確かめる）', m && m[1]);
   ok(/<button type="button" id="dcOff">施設の表示に戻す<\/button>/.test(HTML), '〔施設の表示に戻す〕がある');
   ok(/hbDcKeep\(re\)&&tlOvdForRes/.test(X.fn('tlOvdRefresh')), '1分ごとの更新も同じ対象で判定する（要注意だけの時に毎分描き直さない）');
-  ok(/if\(hbDcOn\(\)\)hbDcScrollDay\(\)/.test(X.fn('showSc')) && /tlCompact\)return/.test(X.fn('hbDcScrollDay')) && /hr-top'\)\[8\]/.test(X.fn('hbDcScrollDay')), '時系列を開くと 8:30 の位置へ送る（全体表示は送らない）');
+  ok(/if\(!tlOpenScrollNow\(\)&&hbDcOn\(\)\)hbDcScrollDay\(\)/.test(X.fn('showSc')) && /tlCompact\)return/.test(X.fn('hbDcScrollDay')) && /hr-top'\)\[8\]/.test(X.fn('hbDcScrollDay')), '時系列を開くと、今日は現在時刻の線を右から約1/3へ・今日以外のデイは 8:30 の位置へ送る（全体表示は送らない・2026-11-17 本人指示）');
   const init = X.fn('_initRest');
   ok(init.indexOf('_dcFromUrl=hbDcInit()') >= 0 && init.indexOf('_dcFromUrl=hbDcInit()') < init.indexOf('buildResSel()') && init.indexOf('restoreSc()') < init.indexOf("showSc('tl')") && init.indexOf("showSc('tl')") < init.indexOf('hbApplyMasterIdParam()'), '起動の順: デイの判定 → 最初の描画 → 画面の復元 → ?view=daycare なら時系列 → ?masterId=');
   ok(/\$\('dcBar'\)\]\.concat/.test(X.fn('_fitScrollBox')) && /if\(dc&&dc\.offsetParent\)\{/.test(X.fn('layoutStickyTops')) && /if\(dcFit\)t\+=dc\.offsetHeight/.test(X.fn('layoutStickyTops')), '貼り付く位置と表の高さの計算に帯を足す（出ていない時は数えない）');
